@@ -1,7 +1,7 @@
 package config
 
 import (
-	"log"
+	"fmt"
 
 	"github.com/spf13/viper"
 )
@@ -31,26 +31,28 @@ type ServerConfiguration struct {
 	Mode   string
 }
 
-// SetupDB initialize configuration
-func Setup(configPath string) {
+// Setup configuration
+func Setup(configPath string) error {
 	var configuration *Configuration
 
 	viper.SetConfigFile(configPath)
 	viper.SetConfigType("yaml")
 
 	if err := viper.ReadInConfig(); err != nil {
-		log.Fatalf("Error reading config file, %s", err)
+		return fmt.Errorf("error reading config file: %w", err)
 	}
 
 	err := viper.Unmarshal(&configuration)
 	if err != nil {
-		log.Fatalf("Unable to decode into struct, %v", err)
+		return fmt.Errorf("unable to decode into struct: %w", err)
 	}
 
 	Config = configuration
+
+	return nil
 }
 
-// GetConfig helps you to get configuration data
+// Get configuration data
 func GetConfig() *Configuration {
 	return Config
 }
