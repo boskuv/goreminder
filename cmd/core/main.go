@@ -1,19 +1,32 @@
 package main
 
 import (
+	"os"
+
 	"github.com/boskuv/goreminder/pkg/args"
 	"github.com/boskuv/goreminder/pkg/config"
+	"github.com/boskuv/goreminder/pkg/logger"
+	"github.com/rs/zerolog"
 )
 
 func main() {
-	// Parse command-line arguments
+	// parse command-line arguments
 	parsedArgs := args.ParseArgs()
 
-	// Setup configuration
+	// setup configuration
 	config.Setup(parsedArgs.ConfigPath)
 
-	// Инициализация логгера
-	//log := logger.New(cfg)
+	// determine minimum logging level based on flag input
+	var minlvl zerolog.Level
+	minlvl, _ = zerolog.ParseLevel("debug") // TODO: from cfg
+	//if err != nil {
+	//return errs.E(op, err)
+	//}
+
+	// setup logger with appropriate defaults
+	logger := logger.New(os.Stdout, minlvl, true)
+
+	logger.Info().Msg("Graceful startup")
 
 	// // Инициализация базы данных
 	// db, err := repository.NewDB(cfg)
