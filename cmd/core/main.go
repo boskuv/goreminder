@@ -4,12 +4,21 @@ import (
 	"log"
 	"os"
 
+	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog"
+	swaggerFiles "github.com/swaggo/files" // Swagger embedded files
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	"github.com/boskuv/goreminder/docs"
+	_ "github.com/boskuv/goreminder/docs" // Import generated Swagger docs
+	"github.com/boskuv/goreminder/internal/api/handlers"
+	_ "github.com/boskuv/goreminder/internal/api/handlers"
+	"github.com/boskuv/goreminder/internal/api/routes"
 	"github.com/boskuv/goreminder/internal/repository"
 	"github.com/boskuv/goreminder/internal/service"
 	"github.com/boskuv/goreminder/pkg/args"
 	"github.com/boskuv/goreminder/pkg/config"
 	"github.com/boskuv/goreminder/pkg/logger"
-	"github.com/rs/zerolog"
 )
 
 func main() {
@@ -55,16 +64,37 @@ func main() {
 	taskRepo := repository.NewTaskRepository(db)
 	userRepo := repository.NewUserRepository(db)
 
-	service.NewTaskService(*taskRepo, *userRepo) // pointers?
-	// userService := service.NewUserService(userRepo)
+	taskService := service.NewTaskService(*taskRepo, *userRepo) // pointers?
+	userService := service.NewUserService(*userRepo)
 
-	// // Настройка маршрутов
-	// r := mux.NewRouter()
-	// api.SetupRoutes(r, taskService, userService)
+	// Initialize handlers
+	taskHandler := handlers.NewTaskHandler(taskService)
+	userHandler := handlers.NewUserHandler(userService)
 
-	// // Запуск сервера
-	// log.Info("Запуск Core Service на порту:", cfg.Port)
-	// if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
-	// 	log.Fatal("Ошибка запуска сервера:", err)
-	// }
+	// Setup Swagger info
+	docs.SwaggerInfo.Title = "Task Management API"
+	docs.SwaggerInfo.Description = "API documentation for the Task Management system"
+	docs.SwaggerInfo.Version = "1.0"
+	docs.SwaggerInfo.Host = "localhost:8080" // TODO: remove hardcode
+	docs.SwaggerInfo.Schemes = []string{"http"}
+
+	// Setup router
+	router := gin.Default()
+
+	// Register Swagger handler
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	// Register application routes
+	routes.RegisterRoutes(router, taskHandler, userHandler)
+
+	// Start server
+	port := cfg.Server.Port
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("Starting server on port %s", port)
+	if err := router.Run(":" + port); err != nil {
+		log.Fatalf("Failed to run server: %v", err)
+	}
+
 }
