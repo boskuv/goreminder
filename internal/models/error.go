@@ -1,4 +1,3 @@
-// internal/models/error.go
 package models
 
 // APIError represents an error returned to the API client
