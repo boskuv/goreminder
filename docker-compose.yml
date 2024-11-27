@@ -9,11 +9,23 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: task_manager
     ports:
-      - "5432:5432" # Expose PostgreSQL on port 5432
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: unless-stopped
+  pgbouncer:
+    image: edoburu/pgbouncer
+    environment:
+      POSTGRESQL_HOST: postgres
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_USERNAME: postgres
+      POSTGRESQL_PASSWORD: password
+      POOL_MODE: transaction
+    ports:
+      - "6432:6432" # PgBouncer listens here
+    depends_on:
+      - postgres
 
 volumes:
   postgres_data:

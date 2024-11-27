@@ -2,32 +2,43 @@
 package repository
 
 import (
-	"database/sql"
 	"fmt"
+	"time"
 
-	_ "github.com/lib/pq" // PostgreSQL driver
+	_ "github.com/jackc/pgx/v5/stdlib" // Import PGX driver for sqlx
+	"github.com/jmoiron/sqlx"
 )
 
 type DBConfig struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	Name     string
-	SSLMode  string
+	Host         string
+	Port         string
+	User         string
+	Password     string
+	DbName       string
+	SSLMode      string
+	MaxOpenConns int
+	MaxIdleConns int
+	MaxLifetime  int
 }
 
-// NewDB initializes and returns a database connection
-func NewDB(cfg *DBConfig) (*sql.DB, error) {
+// NewDB initializes and returns a sqlx.DB instance
+func NewDB(cfg *DBConfig) (*sqlx.DB, error) {
+	// Build the connection string
 	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Name, cfg.SSLMode,
+		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.DbName, cfg.SSLMode,
 	)
 
-	db, err := sql.Open("postgres", dsn)
+	// Initialize the connection
+	db, err := sqlx.Open("pgx", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database connection: %w", err)
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
+
+	// Configure connection pool
+	db.SetMaxOpenConns(cfg.MaxOpenConns)
+	db.SetMaxIdleConns(cfg.MaxIdleConns)
+	db.SetConnMaxLifetime(time.Duration(cfg.MaxLifetime) * time.Second)
 
 	// Test the connection
 	if err := db.Ping(); err != nil {
