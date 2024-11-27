@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/boskuv/goreminder/internal/repository"
+	"github.com/boskuv/goreminder/internal/service"
 	"github.com/boskuv/goreminder/pkg/args"
 	"github.com/boskuv/goreminder/pkg/config"
 	"github.com/boskuv/goreminder/pkg/logger"
@@ -41,7 +42,7 @@ func main() {
 		Port:     cfg.Database.Port,
 		User:     cfg.Database.Username,
 		Password: cfg.Database.Password,
-		Name:     cfg.Database.Dbname,
+		DbName:   cfg.Database.Dbname,
 		SSLMode:  "disable", // For local development
 	}
 
@@ -54,43 +55,7 @@ func main() {
 	taskRepo := repository.NewTaskRepository(db)
 	userRepo := repository.NewUserRepository(db)
 
-	// testing repos
-
-	// 1. ensure the user exists
-	user := &repository.User{
-		Name:         "John Doe",
-		Email:        "johndoe@example.com",
-		PasswordHash: "hashed_password",
-	}
-
-	userID, err := userRepo.CreateUser(user)
-	if err != nil {
-		log.Fatal("Ошибка при создании пользователя:", err)
-	}
-
-	// 2. create task
-	task := &repository.Task{
-		Title:       "Learn Go",
-		Description: "Read and practice Go programming",
-		UserID:      userID,
-		DueDate:     "2024-11-01",
-		Status:      "pending",
-	}
-
-	taskID, err := taskRepo.CreateTask(task)
-	if err != nil {
-		log.Fatal("Ошибка при создании задачи:", err)
-	}
-	log.Printf("Задача создана с ID: %d\n", taskID)
-
-	// 3. fetch task
-	fetchedTask, err := taskRepo.GetTaskByID(taskID)
-	if err != nil {
-		log.Fatal("Ошибка при получении задачи:", err)
-	}
-	log.Printf("Полученная задача: %+v\n", fetchedTask)
-
-	// taskService := service.NewTaskService(taskRepo)
+	service.NewTaskService(*taskRepo, *userRepo) // pointers?
 	// userService := service.NewUserService(userRepo)
 
 	// // Настройка маршрутов
