@@ -86,6 +86,7 @@ func main() {
 
 	// Register application routes
 	routes.RegisterRoutes(router, taskHandler, userHandler)
+	routes.RegisterSystemRoutes(router, docs.SwaggerInfo.Version)
 
 	// Start server
 	port := cfg.Server.Port

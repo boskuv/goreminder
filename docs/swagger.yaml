@@ -17,19 +17,11 @@ definitions:
       id:
         type: integer
       status:
-        enum:
-        - pending
-        - completed
         type: string
       title:
         type: string
       user_id:
         type: integer
-    required:
-    - due_date
-    - status
-    - title
-    - user_id
     type: object
   models.User:
     properties:
@@ -138,4 +130,43 @@ paths:
       summary: Create a new user
       tags:
       - Users
+  /docs:
+    get:
+      description: Access the API documentation
+      produces:
+      - text/html
+      responses: {}
+      summary: Swagger API documentation
+      tags:
+      - System
+  /healthcheck:
+    get:
+      description: Checks if the application is running and healthy
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Check application health
+      tags:
+      - System
+  /version:
+    get:
+      description: Returns the current version of the application
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get application version
+      tags:
+      - System
 swagger: "2.0"

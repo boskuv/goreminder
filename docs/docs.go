@@ -153,6 +153,65 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/docs": {
+            "get": {
+                "description": "Access the API documentation",
+                "produces": [
+                    "text/html"
+                ],
+                "tags": [
+                    "System"
+                ],
+                "summary": "Swagger API documentation",
+                "responses": {}
+            }
+        },
+        "/healthcheck": {
+            "get": {
+                "description": "Checks if the application is running and healthy",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System"
+                ],
+                "summary": "Check application health",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/version": {
+            "get": {
+                "description": "Returns the current version of the application",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System"
+                ],
+                "summary": "Get application version",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -169,12 +228,6 @@ const docTemplate = `{
         },
         "models.Task": {
             "type": "object",
-            "required": [
-                "due_date",
-                "status",
-                "title",
-                "user_id"
-            ],
             "properties": {
                 "created_at": {
                     "type": "string"
@@ -189,11 +242,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "status": {
-                    "type": "string",
-                    "enum": [
-                        "pending",
-                        "completed"
-                    ]
+                    "type": "string"
                 },
                 "title": {
                     "type": "string"
