@@ -47,12 +47,15 @@ func main() {
 
 	// Инициализация базы данных
 	dbConfig := &repository.DBConfig{
-		Host:     cfg.Database.Host,
-		Port:     cfg.Database.Port,
-		User:     cfg.Database.Username,
-		Password: cfg.Database.Password,
-		DbName:   cfg.Database.Dbname,
-		SSLMode:  "disable", // For local development
+		Host:         cfg.Database.Host,
+		Port:         cfg.Database.Port,
+		User:         cfg.Database.Username,
+		Password:     cfg.Database.Password,
+		DbName:       cfg.Database.Dbname,
+		SSLMode:      "disable", // For local development
+		MaxOpenConns: cfg.Database.MaxOpenConns,
+		MaxIdleConns: cfg.Database.MaxIdleConns,
+		MaxLifetime:  cfg.Database.MaxLifetime,
 	}
 
 	db, err := repository.NewDB(dbConfig)
