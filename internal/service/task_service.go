@@ -57,3 +57,15 @@ func (s *TaskService) GetTask(taskID int64) (*models.Task, error) {
 	}
 	return task, nil
 }
+
+// GetUserTasks retrieves tasks by user ID
+func (s *TaskService) GetUserTasks(userID int64) ([]*models.Task, error) {
+	tasks, err := s.TaskRepo.GetTasksByUserID(userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch task: %w", err)
+	}
+	if tasks == nil {
+		return nil, fmt.Errorf("tasks for user ID %d do not exist", userID)
+	}
+	return tasks, nil
+}

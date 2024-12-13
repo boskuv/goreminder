@@ -72,3 +72,28 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 
 	c.JSON(http.StatusOK, task)
 }
+
+// @Summary Get all user's tasks by userID
+// @Description Retrieves all tasks by userID
+// @Tags Tasks
+// @Produce json
+// @Param id path int true "User ID"
+// @Success 200 {object} []models.Task
+// @Failure 400 {object} models.APIError
+// @Failure 500 {object} models.APIError
+// @Router /api/v1/users/{userId}/tasks [get]
+func (h *TaskHandler) GetUserTasks(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid user ID", http.StatusBadRequest))
+		return
+	}
+
+	tasks, err := h.TaskService.TaskRepo.GetTasksByUserID(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		return
+	}
+
+	c.JSON(http.StatusOK, tasks)
+}

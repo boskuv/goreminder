@@ -59,3 +59,23 @@ func (r *TaskRepository) GetTaskByID(id int64) (*models.Task, error) {
 
 	return &task, nil
 }
+
+// TODO: POINTERS?
+// GetTasksByUserID retrieves a task by user ID
+func (r *TaskRepository) GetTasksByUserID(userID int64) ([]*models.Task, error) {
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "due_date", "status", "created_at").
+		From("tasks").
+		Where(squirrel.Eq{"user_id": userID}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var tasks []*models.Task
+	err = r.db.Get(tasks, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch tasks: %w", err)
+	}
+
+	return tasks, nil
+}
