@@ -130,6 +130,35 @@ paths:
       summary: Create a new user
       tags:
       - Users
+  /api/v1/users/{user_id}/tasks:
+    get:
+      description: Retrieves all tasks by userID
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Task'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Get all user's tasks by userID
+      tags:
+      - Tasks
   /docs:
     get:
       description: Access the API documentation
