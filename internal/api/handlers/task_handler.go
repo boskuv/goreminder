@@ -77,11 +77,11 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 // @Description Retrieves all tasks by userID
 // @Tags Tasks
 // @Produce json
-// @Param id path int true "User ID"
+// @Param user_id path int true "User ID"
 // @Success 200 {object} []models.Task
 // @Failure 400 {object} models.APIError
 // @Failure 500 {object} models.APIError
-// @Router /api/v1/users/{userId}/tasks [get]
+// @Router /api/v1/users/{user_id}/tasks [get]
 func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
 	if err != nil {
@@ -89,7 +89,7 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		return
 	}
 
-	tasks, err := h.TaskService.TaskRepo.GetTasksByUserID(userID)
+	tasks, err := h.TaskService.GetUserTasks(userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
 		return

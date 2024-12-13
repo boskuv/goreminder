@@ -60,7 +60,6 @@ func (r *TaskRepository) GetTaskByID(id int64) (*models.Task, error) {
 	return &task, nil
 }
 
-// TODO: POINTERS?
 // GetTasksByUserID retrieves a task by user ID
 func (r *TaskRepository) GetTasksByUserID(userID int64) ([]*models.Task, error) {
 	query, args, err := r.sb.Select("id", "title", "description", "user_id", "due_date", "status", "created_at").
@@ -72,7 +71,7 @@ func (r *TaskRepository) GetTasksByUserID(userID int64) ([]*models.Task, error) 
 	}
 
 	var tasks []*models.Task
-	err = r.db.Get(tasks, query, args...)
+	err = r.db.Select(&tasks, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch tasks: %w", err)
 	}
