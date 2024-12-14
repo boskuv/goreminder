@@ -6,6 +6,7 @@ import (
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 )
 
@@ -36,14 +37,14 @@ func NewUserHandler(logger zerolog.Logger, userService *service.UserService) *Us
 func (h *UserHandler) CreateUser(c *gin.Context) {
 	var user models.User
 	if err := c.ShouldBindJSON(&user); err != nil {
-		h.Logger.Error().Err(err).Msg("")
+		h.Logger.Error().Stack().Err(errors.Wrap(err, "invalid request payload")).Msg("Error while processing request with user struct parameter")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 		return
 	}
 
 	createdUser, err := h.userService.CreateUser(&user)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("")
+		h.Logger.Error().Stack().Err(err).Msg("Error while creating user")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 		return
 	}

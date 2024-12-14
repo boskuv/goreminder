@@ -1,11 +1,11 @@
 package service
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/repository"
+	"github.com/pkg/errors"
 )
 
 // TaskService defines methods for task-related business logic
@@ -27,20 +27,21 @@ func (s *TaskService) CreateTask(task *models.Task) (int64, error) {
 	// Check if the user exists
 	user, err := s.UserRepo.GetUserByID(task.UserID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to verify user: %w", err)
+		return 0, err
 	}
+
 	if user == nil {
-		return 0, fmt.Errorf("user with ID %d does not exist", task.UserID)
+		return 0, errors.WithStack(errors.Errorf("user with ID %d does not exist", task.UserID))
 	}
 
 	// Set default values
 	task.Status = "pending"
-	task.CreatedAt = time.Now()
+	task.CreatedAt = time.Now() // TODO: time format
 
 	// Save the task
 	taskID, err := s.TaskRepo.CreateTask(task)
 	if err != nil {
-		return 0, fmt.Errorf("failed to create task: %w", err)
+		return 0, err
 	}
 
 	return taskID, nil
@@ -50,11 +51,9 @@ func (s *TaskService) CreateTask(task *models.Task) (int64, error) {
 func (s *TaskService) GetTask(taskID int64) (*models.Task, error) {
 	task, err := s.TaskRepo.GetTaskByID(taskID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch task: %w", err)
+		return nil, err
 	}
-	if task == nil {
-		return nil, fmt.Errorf("task with ID %d does not exist", taskID)
-	}
+
 	return task, nil
 }
 
@@ -62,10 +61,11 @@ func (s *TaskService) GetTask(taskID int64) (*models.Task, error) {
 func (s *TaskService) GetUserTasks(userID int64) ([]*models.Task, error) {
 	tasks, err := s.TaskRepo.GetTasksByUserID(userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch task: %w", err)
+		return nil, err
 	}
 	if tasks == nil {
-		return nil, fmt.Errorf("tasks for user ID %d do not exist", userID)
+		return nil, errors.WithStack(errors.Errorf("tasks for user ID %d do not exist", userID))
 	}
+
 	return tasks, nil
 }

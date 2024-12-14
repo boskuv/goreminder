@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
 	"github.com/boskuv/goreminder/internal/models"
@@ -38,14 +39,14 @@ func NewTaskHandler(logger zerolog.Logger, taskService *service.TaskService) *Ta
 func (h *TaskHandler) CreateTask(c *gin.Context) {
 	var task models.Task
 	if err := c.ShouldBindJSON(&task); err != nil {
-		h.Logger.Error().Err(err).Msg("")
+		h.Logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("Error while processing request with task struct parameter")
 		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
 		return
 	}
 
 	taskID, err := h.TaskService.CreateTask(&task)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("")
+		h.Logger.Error().Stack().Err(err).Msg("Error while creating task")
 		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
 		return
 	}
@@ -65,14 +66,14 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 func (h *TaskHandler) GetTask(c *gin.Context) {
 	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		h.Logger.Error().Err(err).Msg("Failed to parse taskID")
+		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("Error while processing request with id parameter")
 		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid task ID", http.StatusBadRequest))
 		return
 	}
 
 	task, err := h.TaskService.GetTask(taskID)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("")
+		h.Logger.Error().Stack().Err(err).Msg("Error while getting task by its id")
 		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
 		return
 	}
@@ -92,14 +93,14 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
 	if err != nil {
-		h.Logger.Error().Err(err).Msg("Failed to parse userID")
+		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("Error while processing request with userID parameter")
 		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid user ID", http.StatusBadRequest))
 		return
 	}
 
 	tasks, err := h.TaskService.GetUserTasks(userID)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("")
+		h.Logger.Error().Stack().Err(err).Msg("Error while getting tasks by userID parameter")
 		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
 		return
 	}

@@ -1,10 +1,9 @@
 package repository
 
 import (
-	"fmt"
-
 	"github.com/Masterminds/squirrel"
 	"github.com/jmoiron/sqlx"
+	"github.com/pkg/errors"
 
 	"github.com/boskuv/goreminder/internal/models"
 )
@@ -29,13 +28,13 @@ func (r *UserRepository) CreateUser(user *models.User) (int64, error) {
 		Suffix("RETURNING id").
 		ToSql()
 	if err != nil {
-		return 0, fmt.Errorf("failed to build query: %w", err)
+		return 0, errors.Wrap(err, "failed to build query")
 	}
 
 	var id int64
 	err = r.db.QueryRow(query, args...).Scan(&id)
 	if err != nil {
-		return 0, fmt.Errorf("failed to insert user: %w", err)
+		return 0, errors.Wrap(err, "failed to insert user")
 	}
 
 	return id, nil
@@ -48,13 +47,13 @@ func (r *UserRepository) GetUserByID(id int64) (*models.User, error) {
 		Where(squirrel.Eq{"id": id}).
 		ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, errors.Wrap(err, "failed to build query")
 	}
 
 	var user models.User
 	err = r.db.Get(&user, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch user: %w", err)
+		return nil, errors.Wrap(err, "failed to fetch user")
 	}
 
 	return &user, nil

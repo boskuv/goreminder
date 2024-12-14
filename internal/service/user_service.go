@@ -1,10 +1,10 @@
 package service
 
 import (
-	"errors"
-
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/repository"
+
+	"github.com/pkg/errors"
 )
 
 // UserService handles user-related business logic.
@@ -21,7 +21,7 @@ func NewUserService(userRepo repository.UserRepository) *UserService {
 func (s *UserService) CreateUser(user *models.User) (int64, error) {
 	// Perform some validation before creating the user
 	if user.Name == "" || user.Email == "" || user.PasswordHash == "" {
-		return 0, errors.New("user data is incomplete")
+		return 0, errors.WithStack(errors.New("user data is incomplete"))
 	}
 
 	// Call the repository to insert the user into the database

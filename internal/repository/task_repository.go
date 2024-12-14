@@ -1,10 +1,9 @@
 package repository
 
 import (
-	"fmt"
-
 	"github.com/Masterminds/squirrel"
 	"github.com/jmoiron/sqlx"
+	"github.com/pkg/errors"
 
 	"github.com/boskuv/goreminder/internal/models"
 )
@@ -29,13 +28,13 @@ func (r *TaskRepository) CreateTask(task *models.Task) (int64, error) {
 		Suffix("RETURNING id").
 		ToSql()
 	if err != nil {
-		return 0, fmt.Errorf("failed to build query: %w", err)
+		return 0, errors.Wrap(err, "failed to build query")
 	}
 
 	var id int64
 	err = r.db.QueryRow(query, args...).Scan(&id)
 	if err != nil {
-		return 0, fmt.Errorf("failed to insert task: %w", err)
+		return 0, errors.Wrap(err, "failed to insert task")
 	}
 
 	return id, nil
@@ -48,13 +47,13 @@ func (r *TaskRepository) GetTaskByID(id int64) (*models.Task, error) {
 		Where(squirrel.Eq{"id": id}).
 		ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, errors.Wrap(err, "failed to build query")
 	}
 
 	var task models.Task
 	err = r.db.Get(&task, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch task: %w", err)
+		return nil, errors.Wrap(err, "failed to fetch task")
 	}
 
 	return &task, nil
@@ -67,13 +66,13 @@ func (r *TaskRepository) GetTasksByUserID(userID int64) ([]*models.Task, error) 
 		Where(squirrel.Eq{"user_id": userID}).
 		ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, errors.Wrap(err, "failed to build query")
 	}
 
 	var tasks []*models.Task
 	err = r.db.Select(&tasks, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch tasks: %w", err)
+		return nil, errors.Wrap(err, "failed to fetch tasks")
 	}
 
 	return tasks, nil
