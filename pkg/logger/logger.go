@@ -5,6 +5,7 @@ package logger
 
 import (
 	"io"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/pkgerrors"
@@ -14,6 +15,9 @@ import (
 // with an initial minimum accepted level and timestamp (if true)
 // for a given io.Writer.
 func New(w io.Writer, lvl zerolog.Level, withTimestamp bool) zerolog.Logger {
+	// Set global time format to RFC3339
+	zerolog.TimeFieldFormat = time.RFC3339
+
 	// logger is initialized with the writer and level passed in.
 	// All logs will be written at the given level (unless raised
 	// using zerolog.SetGlobalLevel)
