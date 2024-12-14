@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -38,9 +37,10 @@ func main() {
 	//}
 
 	// setup logger with appropriate defaults
-	logger := logger.New(os.Stdout, minlvl, true)
+	log := logger.New(os.Stdout, minlvl, true)
+	logger.LogErrorStackViaPkgErrors(true)
 
-	logger.Info().Msg("Graceful startup")
+	log.Info().Msg("Graceful startup")
 
 	// Инициализация Prometheus метрик
 	// metrics.InitMetrics()
@@ -60,19 +60,21 @@ func main() {
 
 	db, err := repository.NewDB(dbConfig)
 	if err != nil {
-		log.Fatal("Ошибка при подключении к БД:", err)
+		log.Fatal().Stack().Err(err).Msg("Ошибка при подключении к БД")
 	}
 
-	// setup repositories
+	// Setup repositories
 	taskRepo := repository.NewTaskRepository(db)
 	userRepo := repository.NewUserRepository(db)
 
-	taskService := service.NewTaskService(*taskRepo, *userRepo) // pointers?
+	// TODO: pointers?
+	// Setup services
+	taskService := service.NewTaskService(*taskRepo, *userRepo)
 	userService := service.NewUserService(*userRepo)
 
 	// Initialize handlers
-	taskHandler := handlers.NewTaskHandler(taskService)
-	userHandler := handlers.NewUserHandler(userService)
+	taskHandler := handlers.NewTaskHandler(log, taskService)
+	userHandler := handlers.NewUserHandler(log, userService)
 
 	// Setup Swagger info
 	docs.SwaggerInfo.Title = "Task Management API"
@@ -98,7 +100,7 @@ func main() {
 	}
 	log.Printf("Starting server on port %s", port)
 	if err := router.Run(":" + port); err != nil {
-		log.Fatalf("Failed to run server: %v", err)
+		log.Fatal().Err(err).Msg("Failed to run server")
 	}
 
 }
