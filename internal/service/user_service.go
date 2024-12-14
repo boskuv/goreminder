@@ -32,3 +32,13 @@ func (s *UserService) CreateUser(user *models.User) (int64, error) {
 
 	return userID, nil
 }
+
+// GetUser retrieves a user by its ID
+func (s *UserService) GetUser(userID int64) (*models.User, error) {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}

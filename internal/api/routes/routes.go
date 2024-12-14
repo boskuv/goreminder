@@ -13,10 +13,10 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 		// Task routes
 		api.POST("/tasks", taskHandler.CreateTask)
 		api.GET("/tasks/:id", taskHandler.GetTask)
-
 		api.GET("/users/:user_id/tasks", taskHandler.GetUserTasks)
 
 		// User routes
 		api.POST("/users", userHandler.CreateUser)
+		api.GET("/users/:user_id", userHandler.GetUser)
 	}
 }

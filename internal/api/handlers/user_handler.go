@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/service"
@@ -50,4 +51,31 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, createdUser)
+}
+
+// @Summary Get user by userID
+// @Description Retrieves user by userID
+// @Tags Users
+// @Produce json
+// @Param user_id path int true "User ID"
+// @Success 200 {object} models.User
+// @Failure 400 {object} models.APIError
+// @Failure 500 {object} models.APIError
+// @Router /api/v1/users/{user_id} [get]
+func (h *UserHandler) GetUser(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	if err != nil {
+		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("Error while processing request with userID parameter")
+		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid user ID", http.StatusBadRequest))
+		return
+	}
+
+	user, err := h.userService.GetUser(userID)
+	if err != nil {
+		h.Logger.Error().Stack().Err(err).Msg("Error while getting user by userID parameter")
+		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
 }
