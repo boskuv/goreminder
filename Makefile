@@ -1,47 +1,60 @@
-setup:
-	go get -u github.com/swaggo/swag/cmd/swag
-	go install github.com/swaggo/swag/cmd/swag@latest
-	swag init -g ./cmd/server/main.go -o ./docs
-	go get -u github.com/swaggo/gin-swagger
-	go get -u github.com/swaggo/files
+# Project variables
+APP_NAME=goreminder
+DOCKER_COMPOSE=docker-compose.yml
+CONFIG_FILENAME=config.yaml
+CONFIG_FILEPATH=cmd/core/$(CONFIG_FILENAME)
+BUILD_DIR=bin
+BINARY=bin/$(APP_NAME)
 
-build-docker:
-	docker compose build --no-cache
+# Go variables
+GO=go
+GOFLAGS=-mod=vendor
+GOTEST_FLAGS=-cover -v
+MAIN=cmd/core/main.go
 
-run-local:
-	docker start dockerPostgres
-	docker start dockerRedis
-	docker start dockerMongo
-	export REDIS_HOST=localhost
-	export POSTGRES_DB=go_app_dev
-	export POSTGRES_USER=docker
-	export POSTGRES_PASSWORD=password
-	export POSTGRES_PORT=5435
-	export JWT_SECRET_KEY=ObL89O3nOSSEj6tbdHako0cXtPErzBUfq8l8o/3KD9g=INSECURE
-	export API_SECRET_KEY=cJGZ8L1sDcPezjOy1zacPJZxzZxrPObm2Ggs1U0V+fE=INSECURE
-	export POSTGRES_HOST=localhost
-	go run cmd/server/main.go
+# Docker variables
+DOCKER=docker
+COMPOSE=docker-compose
+POSTGRES_CONTAINER=postgres_container
+PG_PORT=5432
 
-up:
-	docker compose up
+.PHONY: all build run test swagger docker-up docker-down clean
 
-down:
-	docker compose down
+# Default target
+all: build
 
-restart:
-	docker compose restart
-
+# Build the Go application
 build:
-	go build -v ./...
+	@echo "Building the binary..."
+	$(GO) build -o $(BINARY) $(MAIN)
+	@echo "Copying the configuration file..."
+	cp $(CONFIG_FILEPATH) $(BUILD_DIR)/
 
+# Run the application locally
+run: build
+	./$(BINARY) --configpath $(BUILD_DIR)/$(CONFIG_FILENAME)
+
+# Run tests with coverage
 test:
-	go test -v ./... -race -cover
+	$(GO) test ./... $(GOTEST_FLAGS)
 
+# Generate Swagger documentation
+swagger:
+	swag init ---dir ./cmd/core,./internal/api/handlers,./internal/models --output=./docs
+
+# Start Docker containers
+docker-up:
+	$(COMPOSE) -f $(DOCKER_COMPOSE) up -d
+
+# Stop Docker containers
+docker-down:
+	$(COMPOSE) -f $(DOCKER_COMPOSE) down
+
+# Check database connectivity
+db-check:
+	$(DOCKER) exec $(POSTGRES_CONTAINER) pg_isready -U postgres -h localhost -p $(PG_PORT)
+
+# Clean the build output
 clean:
-	docker stop go-rest-api-template
-	docker stop dockerPostgres
-	docker rm go-rest-api-template
-	docker rm dockerPostgres
-	docker rm dockerRedis
-	docker image rm golang-rest-api-template-backend
-	rm -rf .dbdata
+	rm -rf $(BINARY)
+	rm -rf ./bin
