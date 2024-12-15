@@ -69,3 +69,34 @@ func (s *TaskService) GetUserTasks(userID int64) ([]*models.Task, error) {
 
 	return tasks, nil
 }
+
+// UpdateTask retrieves an existing task by its ID and updates it
+func (s *TaskService) UpdateTask(taskID int64, updateRequest *models.TaskUpdateRequest) (*models.Task, error) {
+	// Check if the task exists
+	task, err := s.TaskRepo.GetTaskByID(taskID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update the task fields (partial update)
+	if updateRequest.Title != nil {
+		task.Title = *updateRequest.Title
+	}
+	if updateRequest.Description != nil {
+		task.Description = *updateRequest.Description
+	}
+	if updateRequest.Status != nil {
+		task.Status = *updateRequest.Status
+	}
+	if updateRequest.DueDate != nil {
+		task.DueDate = *updateRequest.DueDate
+	}
+
+	// Save the updated task
+	err = s.TaskRepo.UpdateTask(task)
+	if err != nil {
+		return nil, err
+	}
+
+	return task, nil
+}

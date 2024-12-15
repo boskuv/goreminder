@@ -77,3 +77,24 @@ func (r *TaskRepository) GetTasksByUserID(userID int64) ([]*models.Task, error) 
 
 	return tasks, nil
 }
+
+// UpdateTask updates an existing task
+func (r *TaskRepository) UpdateTask(task *models.Task) error {
+	query, args, err := r.sb.Update("tasks").
+		Set("title", task.Title).
+		Set("description", task.Description).
+		Set("status", task.Status).
+		Set("due_date", task.DueDate).
+		Where(squirrel.Eq{"id": task.ID}).
+		ToSql()
+	if err != nil {
+		return errors.Wrap(err, "failed to build query")
+	}
+
+	_, err = r.db.Exec(query, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to execute update query")
+	}
+
+	return nil
+}

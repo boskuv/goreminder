@@ -23,6 +23,17 @@ definitions:
       user_id:
         type: integer
     type: object
+  models.TaskUpdateRequest:
+    properties:
+      description:
+        type: string
+      due_date:
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+    type: object
   models.User:
     properties:
       createdAt:
@@ -96,6 +107,44 @@ paths:
           schema:
             $ref: '#/definitions/models.APIError'
       summary: Get task by ID
+      tags:
+      - Tasks
+    put:
+      consumes:
+      - application/json
+      description: Updates a task by its ID
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Task update details
+        in: body
+        name: task
+        required: true
+        schema:
+          $ref: '#/definitions/models.TaskUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Task'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Update a task
       tags:
       - Tasks
   /api/v1/users:

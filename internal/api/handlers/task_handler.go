@@ -46,7 +46,7 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 
 	taskID, err := h.TaskService.CreateTask(&task)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("Error while creating task")
+		h.Logger.Error().Stack().Err(err).Msg("Error while creating a task")
 		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
 		return
 	}
@@ -73,7 +73,7 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 
 	task, err := h.TaskService.GetTask(taskID)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("Error while getting task by its id")
+		h.Logger.Error().Stack().Err(err).Msg("Error while getting a task by its id")
 		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
 		return
 	}
@@ -106,4 +106,41 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, tasks)
+}
+
+// @Summary Update a task
+// @Description Updates a task by its ID
+// @Tags Tasks
+// @Accept json
+// @Produce json
+// @Param id path int true "Task ID"
+// @Param task body models.TaskUpdateRequest true "Task update details"
+// @Success 200 {object} models.Task
+// @Failure 400 {object} models.APIError
+// @Failure 404 {object} models.APIError
+// @Failure 500 {object} models.APIError
+// @Router /api/v1/tasks/{id} [put]
+func (h *TaskHandler) UpdateTask(c *gin.Context) {
+	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse taskID")).Msg("Error while processing request with taskID parameter")
+		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid task ID", http.StatusBadRequest))
+		return
+	}
+
+	var taskUpdateRequest models.TaskUpdateRequest
+	if err := c.ShouldBindJSON(&taskUpdateRequest); err != nil {
+		h.Logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("Error while processing request with taskUpdateRequest struct parameter")
+		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
+		return
+	}
+
+	updatedTask, err := h.TaskService.UpdateTask(taskID, &taskUpdateRequest)
+	if err != nil {
+		h.Logger.Error().Stack().Err(err).Msg("Error while updating a task")
+		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		return
+	}
+
+	c.JSON(http.StatusOK, updatedTask)
 }
