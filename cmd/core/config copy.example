@@ -1,0 +1,13 @@
+database:
+  driver: "postgres"      # Database driver
+  dbname: "task_manager"  # Database name
+  username: "postgres"    # Database username
+  password: "password"    # Database password
+  host: "localhost"       # Host where the database is running
+  port: "5432"            # Database port
+  maxLifetime: 30         # Maximum connection lifetime (seconds)
+  maxOpenConns: 100       # Maximum open connections
+  maxIdleConns: 10        # Maximum idle connections
+
+server:
+  port: 8080

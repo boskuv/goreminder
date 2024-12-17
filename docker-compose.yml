@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres_container
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: task_manager
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+  pgbouncer:
+    image: edoburu/pgbouncer
+    environment:
+      DB_HOST: "postgres"          
+      DB_PORT: "5432"
+      DB_USER: "postgres"
+      DB_PASSWORD: "password"
+      DB_NAME: "task_manager"
+      POOL_MODE: transaction
+    ports:
+      - "6432:6432"
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
