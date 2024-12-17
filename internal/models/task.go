@@ -11,4 +11,5 @@ type Task struct {
 	DueDate     time.Time `db:"due_date" json:"due_date"`
 	Status      string    `db:"status" json:"status"`
 	CreatedAt   time.Time `db:"created_at" json:"created_at"`
+	DeletedAt   time.Time `db:"deleted_at" json:"deleted_at"`
 }
