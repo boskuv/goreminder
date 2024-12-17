@@ -1,0 +1,15 @@
+linters:
+  enable:
+    - revive
+    - errcheck
+    - staticcheck
+
+run:
+  tests: true
+  bless: false
+  timeout: 2m
+
+issues:
+  exclude-rules:
+    - path: docs\.go
+      text: "don't check swagger docs"

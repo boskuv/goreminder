@@ -18,11 +18,15 @@ COMPOSE=docker-compose
 POSTGRES_CONTAINER=postgres_container
 PG_PORT=5432
 
-.PHONY: all build run test swagger docker-up docker-down clean
+.PHONY: all lint build run test swagger docker-up docker-down clean
 
 # Default target
 all: build
 
+# Run golangci-lint
+lint:
+	@golangci-lint run ./...
+	
 # Build the Go application
 build:
 	@echo "Building the binary..."
