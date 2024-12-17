@@ -26,7 +26,7 @@ all: build
 # Run golangci-lint
 lint:
 	@golangci-lint run ./...
-	
+
 # Build the Go application
 build:
 	@echo "Building the binary..."
@@ -44,7 +44,7 @@ test:
 
 # Generate Swagger documentation
 swagger:
-	swag init ---dir ./cmd/core,./internal/api/handlers,./internal/models --output=./docs
+	swag init --dir ./cmd/core,./internal/api/handlers,./internal/models --output ./docs
 
 # Start Docker containers
 docker-up:
