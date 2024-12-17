@@ -25,7 +25,11 @@ func main() {
 	parsedArgs := args.ParseArgs()
 
 	// setup configuration
-	config.Setup(parsedArgs.ConfigPath)
+	err := config.Setup(parsedArgs.ConfigPath)
+
+	if err != nil {
+		panic("Unable to setup configuration")
+	}
 
 	cfg := config.GetConfig()
 
