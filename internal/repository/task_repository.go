@@ -23,8 +23,8 @@ func NewTaskRepository(db *sqlx.DB) *TaskRepository {
 // CreateTask inserts a new task into the database
 func (r *TaskRepository) CreateTask(task *models.Task) (int64, error) {
 	query, args, err := r.sb.Insert("tasks").
-		Columns("title", "description", "user_id", "due_date", "status").
-		Values(task.Title, task.Description, task.UserID, task.DueDate, task.Status).
+		Columns("title", "description", "user_id", "due_date", "status", "deleted_at").
+		Values(task.Title, task.Description, task.UserID, task.DueDate, task.Status, nil).
 		Suffix("RETURNING id").
 		ToSql()
 	if err != nil {
@@ -42,8 +42,9 @@ func (r *TaskRepository) CreateTask(task *models.Task) (int64, error) {
 
 // GetTaskByID retrieves a task by its ID
 func (r *TaskRepository) GetTaskByID(id int64) (*models.Task, error) {
-	query, args, err := r.sb.Select("id", "title", "description", "user_id", "due_date", "status", "created_at").
+	query, args, err := r.sb.Select("title", "description", "user_id", "due_date", "status", "created_at").
 		From("tasks").
+		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": id}).
 		ToSql()
 	if err != nil {
@@ -61,8 +62,9 @@ func (r *TaskRepository) GetTaskByID(id int64) (*models.Task, error) {
 
 // GetTasksByUserID retrieves a task by user ID
 func (r *TaskRepository) GetTasksByUserID(userID int64) ([]*models.Task, error) {
-	query, args, err := r.sb.Select("id", "title", "description", "user_id", "due_date", "status", "created_at").
+	query, args, err := r.sb.Select("title", "description", "user_id", "due_date", "status", "created_at").
 		From("tasks").
+		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"user_id": userID}).
 		ToSql()
 	if err != nil {
@@ -85,6 +87,7 @@ func (r *TaskRepository) UpdateTask(task *models.Task) error {
 		Set("description", task.Description).
 		Set("status", task.Status).
 		Set("due_date", task.DueDate).
+		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": task.ID}).
 		ToSql()
 	if err != nil {
