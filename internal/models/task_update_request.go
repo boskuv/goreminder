@@ -7,5 +7,5 @@ type TaskUpdateRequest struct {
 	Title       *string    `json:"title,omitempty"`
 	Description *string    `json:"description,omitempty"`
 	Status      *string    `json:"status,omitempty"`
-	DueDate     *time.Time `json:"due_date,omitempty"`
+	DueDate     *time.Time `json:"due_date,omitempty" example:"2024-12-01T00:00:00Z"`
 }

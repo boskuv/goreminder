@@ -10,14 +10,11 @@ definitions:
     properties:
       created_at:
         type: string
-      deleted_at:
-        type: string
       description:
         type: string
       due_date:
+        example: "2024-12-01T00:00:00Z"
         type: string
-      id:
-        type: integer
       status:
         type: string
       title:
@@ -30,6 +27,7 @@ definitions:
       description:
         type: string
       due_date:
+        example: "2024-12-01T00:00:00Z"
         type: string
       status:
         type: string

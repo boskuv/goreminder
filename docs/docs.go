@@ -374,17 +374,12 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
-                "deleted_at": {
-                    "type": "string"
-                },
                 "description": {
                     "type": "string"
                 },
                 "due_date": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
+                    "type": "string",
+                    "example": "2024-12-01T00:00:00Z"
                 },
                 "status": {
                     "type": "string"
@@ -404,7 +399,8 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "due_date": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "2024-12-01T00:00:00Z"
                 },
                 "status": {
                     "type": "string"
