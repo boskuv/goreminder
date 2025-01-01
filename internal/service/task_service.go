@@ -100,3 +100,18 @@ func (s *TaskService) UpdateTask(taskID int64, updateRequest *models.TaskUpdateR
 
 	return task, nil
 }
+
+// DeleteTask deletes a task by its ID (soft delete)
+func (s *TaskService) DeleteTask(taskID int64) error {
+	_, err := s.TaskRepo.GetTaskByID(taskID)
+	if err != nil {
+		return err
+	}
+
+	err = s.TaskRepo.DeleteTask(taskID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

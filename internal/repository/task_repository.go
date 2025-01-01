@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"github.com/Masterminds/squirrel"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
@@ -89,6 +91,25 @@ func (r *TaskRepository) UpdateTask(task *models.Task) error {
 		Set("due_date", task.DueDate).
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": task.ID}).
+		ToSql()
+	if err != nil {
+		return errors.Wrap(err, "failed to build query")
+	}
+
+	_, err = r.db.Exec(query, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to execute update query")
+	}
+
+	return nil
+}
+
+// DeleteTask updates a field 'deleted_at' of an existing task (soft delete)
+func (r *TaskRepository) DeleteTask(id int64) error {
+	query, args, err := r.sb.Update("tasks").
+		Set("deleted_at", time.Now().UTC()).
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"id": id}).
 		ToSql()
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")

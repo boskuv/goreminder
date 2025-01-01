@@ -144,3 +144,33 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 
 	c.JSON(http.StatusOK, updatedTask)
 }
+
+// @Summary Soft delete a task
+// @Description Marks a task as deleted by its ID (soft delete)
+// @Tags Tasks
+// @Accept json
+// @Produce json
+// @Param id path int true "Task ID"
+// @Success 204 {object} models.APIError
+// @Failure 400 {object} models.APIError
+// @Failure 404 {object} models.APIError
+// @Failure 500 {object} models.APIError
+// @Router /api/v1/tasks/{id} [delete]
+func (h *TaskHandler) DeleteTask(c *gin.Context) {
+	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse taskID")).Msg("Error while processing request with taskID parameter")
+		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid task ID", http.StatusBadRequest))
+		return
+	}
+
+	err = h.TaskService.DeleteTask(taskID)
+	if err != nil {
+
+		h.Logger.Error().Stack().Err(err).Msg("Error while deleting a task")
+		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		return
+	}
+
+	c.Status(http.StatusNoContent) // 204 No Content status for successful deletion
+}

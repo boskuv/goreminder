@@ -83,6 +83,38 @@ paths:
       tags:
       - Tasks
   /api/v1/tasks/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Marks a task as deleted by its ID (soft delete)
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Soft delete a task
+      tags:
+      - Tasks
     get:
       description: Retrieves a task by its ID
       parameters:
