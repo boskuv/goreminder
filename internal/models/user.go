@@ -8,4 +8,5 @@ type User struct {
 	Email        string    `db:"email"`
 	PasswordHash string    `db:"password_hash"`
 	CreatedAt    time.Time `db:"created_at"`
+	DeletedAt    time.Time `db:"deleted_at" json:"-"`
 }
