@@ -44,6 +44,7 @@ func (r *UserRepository) CreateUser(user *models.User) (int64, error) {
 func (r *UserRepository) GetUserByID(id int64) (*models.User, error) {
 	query, args, err := r.sb.Select("id", "name", "email", "password_hash", "created_at").
 		From("users").
+		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": id}).
 		ToSql()
 	if err != nil {
