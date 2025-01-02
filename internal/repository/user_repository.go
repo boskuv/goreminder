@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"github.com/Masterminds/squirrel"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
@@ -58,4 +60,23 @@ func (r *UserRepository) GetUserByID(id int64) (*models.User, error) {
 	}
 
 	return &user, nil
+}
+
+// DeleteUser updates a field 'deleted_at' of an existing user (soft delete)
+func (r *UserRepository) DeleteUser(id int64) error {
+	query, args, err := r.sb.Update("users").
+		Set("deleted_at", time.Now().UTC()).
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return errors.Wrap(err, "failed to build query")
+	}
+
+	_, err = r.db.Exec(query, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to execute update query")
+	}
+
+	return nil
 }

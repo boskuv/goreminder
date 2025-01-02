@@ -42,3 +42,18 @@ func (s *UserService) GetUser(userID int64) (*models.User, error) {
 
 	return user, nil
 }
+
+// DeleteUser deletes a user by its ID (soft delete)
+func (s *UserService) DeleteUser(userID int64) error {
+	_, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return err
+	}
+
+	err = s.userRepo.DeleteUser(userID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

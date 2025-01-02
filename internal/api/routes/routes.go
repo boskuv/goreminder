@@ -20,5 +20,6 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 		// User routes
 		api.POST("/users", userHandler.CreateUser)
 		api.GET("/users/:user_id", userHandler.GetUser)
+		api.DELETE("/users/:user_id", userHandler.DeleteUser)
 	}
 }

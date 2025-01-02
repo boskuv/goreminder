@@ -212,6 +212,38 @@ paths:
       tags:
       - Users
   /api/v1/users/{user_id}:
+    delete:
+      consumes:
+      - application/json
+      description: Marks a user as deleted by its ID (soft delete)
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Soft delete a user
+      tags:
+      - Users
     get:
       description: Retrieves user by userID
       parameters:
