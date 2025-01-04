@@ -89,7 +89,6 @@ curl -X POST http://localhost:8080/api/v1/users \
 -H "Content-Type: application/json" \
 -d '{
   "email": "john.doe@example.com",
-  "id": 1,
   "name": "John Doe",
   "passwordHash": "password123"
 }'
@@ -97,6 +96,48 @@ curl -X POST http://localhost:8080/api/v1/users \
 ### Fetch a Task
 ```bash
 curl http://localhost:8080/api/v1/tasks/1
+```
+### Fetch a User
+```bash
+curl http://localhost:8080/api/v1/users/1
+```
+### Fetch all tasks of a User
+```bash
+curl -X 'GET' \
+  'http://localhost:8080/api/v1/users/1/tasks' \
+  -H 'accept: application/json'
+```
+### Update a task's description (choose any field)
+```bash
+curl -X 'PUT' \
+  'http://localhost:8080/api/v1/tasks/1' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "description": "test"
+}'
+```
+### Update a user's email (choose any field)
+```bash
+curl -X 'PUT' \
+  'http://localhost:8080/api/v1/users/1' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "email": "test@test.com"
+}'
+```
+### Delete a task
+```bash
+curl -X 'DELETE' \
+  'http://localhost:8080/api/v1/tasks/1' \
+  -H 'accept: application/json'
+```
+### Delete a user
+```bash
+curl -X 'DELETE' \
+  'http://localhost:8080/api/v1/users/1' \
+  -H 'accept: application/json'
 ```
 
 ## Contributions
