@@ -10,14 +10,11 @@ definitions:
     properties:
       created_at:
         type: string
-      deleted_at:
-        type: string
       description:
         type: string
       due_date:
+        example: "2024-12-01T00:00:00Z"
         type: string
-      id:
-        type: integer
       status:
         type: string
       title:
@@ -30,6 +27,7 @@ definitions:
       description:
         type: string
       due_date:
+        example: "2024-12-01T00:00:00Z"
         type: string
       status:
         type: string
@@ -47,6 +45,15 @@ definitions:
       name:
         type: string
       passwordHash:
+        type: string
+    type: object
+  models.UserUpdateRequest:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+      password_hash:
         type: string
     type: object
 info:
@@ -85,6 +92,38 @@ paths:
       tags:
       - Tasks
   /api/v1/tasks/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Marks a task as deleted by its ID (soft delete)
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Soft delete a task
+      tags:
+      - Tasks
     get:
       description: Retrieves a task by its ID
       parameters:
@@ -182,6 +221,38 @@ paths:
       tags:
       - Users
   /api/v1/users/{user_id}:
+    delete:
+      consumes:
+      - application/json
+      description: Marks a user as deleted by its ID (soft delete)
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Soft delete a user
+      tags:
+      - Users
     get:
       description: Retrieves user by userID
       parameters:
@@ -206,6 +277,44 @@ paths:
           schema:
             $ref: '#/definitions/models.APIError'
       summary: Get user by userID
+      tags:
+      - Users
+    put:
+      consumes:
+      - application/json
+      description: Updates a user by its ID
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      - description: User update details
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/models.UserUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Update a user
       tags:
       - Users
   /api/v1/users/{user_id}/tasks:

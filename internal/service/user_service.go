@@ -42,3 +42,46 @@ func (s *UserService) GetUser(userID int64) (*models.User, error) {
 
 	return user, nil
 }
+
+// UpdateUser retrieves an existing user by its ID and updates it
+func (s *UserService) UpdateUser(userID int64, updateRequest *models.UserUpdateRequest) (*models.User, error) {
+	// Check if the task exists
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update the task fields (partial update)
+	if updateRequest.Name != nil {
+		user.Name = *updateRequest.Name
+	}
+	if updateRequest.Email != nil {
+		user.Email = *updateRequest.Email
+	}
+	if updateRequest.PasswordHash != nil {
+		user.PasswordHash = *updateRequest.PasswordHash
+	}
+
+	// Save the updated task
+	err = s.userRepo.UpdateUser(user)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+// DeleteUser deletes a user by its ID (soft delete)
+func (s *UserService) DeleteUser(userID int64) error {
+	_, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return err
+	}
+
+	err = s.userRepo.DeleteUser(userID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

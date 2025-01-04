@@ -19,6 +19,7 @@
 - `make` for providing commands
 - `golangci-lint` for code linting
 - `goose` for database migrations
+- `swag` for generating swagger docs
 
 ## Project Structure
 ```
