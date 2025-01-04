@@ -103,4 +103,4 @@ curl http://localhost:8080/api/v1/tasks/1
 Feel free to open issues or pull requests to improve this project. Contributions are welcome!
 
 ## License
-TODO: This project is licensed under the MIT License.
+This project is licensed under the MIT License.
