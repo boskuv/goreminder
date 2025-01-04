@@ -26,16 +26,16 @@
 .
 ├── cmd                  main applications of the project
 │   └── core             the API server application
-├── docs
+├── docs                 generated Swagger documentation
 ├── internal             private application and library code
-│   ├── api
-│   ├── models
-│   ├── repository
-│   ├── service
+│   ├── api              API routes, handlers, and middleware
+│   ├── models           data structures and models for domain logic
+│   ├── repository       interacting with the database
+│   ├── service          business logic and orchestrates data flow between the repository layer and handlers
 ├── migrations           database migrations
 ├── pkg                  public library code
-│   ├── args
-│   ├── config
+│   ├── args             command-line argument parsing
+│   ├── config           application configuration
 │   ├── logger           structured and context-aware logger
 ├── scripts              public library code
 └── tests                test data scripts
