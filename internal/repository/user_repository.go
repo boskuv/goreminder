@@ -62,6 +62,27 @@ func (r *UserRepository) GetUserByID(id int64) (*models.User, error) {
 	return &user, nil
 }
 
+// UpdateUser updates an existing user
+func (r *UserRepository) UpdateUser(user *models.User) error {
+	query, args, err := r.sb.Update("users").
+		Set("name", user.Name).
+		Set("email", user.Email).
+		Set("password_hash", user.PasswordHash).
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"id": user.ID}).
+		ToSql()
+	if err != nil {
+		return errors.Wrap(err, "failed to build query")
+	}
+
+	_, err = r.db.Exec(query, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to execute update query")
+	}
+
+	return nil
+}
+
 // DeleteUser updates a field 'deleted_at' of an existing user (soft delete)
 func (r *UserRepository) DeleteUser(id int64) error {
 	query, args, err := r.sb.Update("users").

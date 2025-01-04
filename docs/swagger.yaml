@@ -47,6 +47,15 @@ definitions:
       passwordHash:
         type: string
     type: object
+  models.UserUpdateRequest:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+      password_hash:
+        type: string
+    type: object
 info:
   contact: {}
 paths:
@@ -268,6 +277,44 @@ paths:
           schema:
             $ref: '#/definitions/models.APIError'
       summary: Get user by userID
+      tags:
+      - Users
+    put:
+      consumes:
+      - application/json
+      description: Updates a user by its ID
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      - description: User update details
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/models.UserUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Update a user
       tags:
       - Users
   /api/v1/users/{user_id}/tasks:
