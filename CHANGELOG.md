@@ -22,5 +22,4 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 
 <!-- links -->
-[Unreleased]: 
 [0.2.0-rc.1]: https://github.com/boskuv/goreminder/compare/0.1.0-rc.1...0.2.0-rc.1
