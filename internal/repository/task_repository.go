@@ -25,8 +25,8 @@ func NewTaskRepository(db *sqlx.DB) *TaskRepository {
 // CreateTask inserts a new task into the database
 func (r *TaskRepository) CreateTask(task *models.Task) (int64, error) {
 	query, args, err := r.sb.Insert("tasks").
-		Columns("title", "description", "user_id", "due_date", "status", "deleted_at").
-		Values(task.Title, task.Description, task.UserID, task.DueDate, task.Status, nil).
+		Columns("title", "description", "user_id", "messenger_related_user_id", "due_date", "status", "deleted_at").
+		Values(task.Title, task.Description, task.UserID, task.MessengerRelatedUserID, task.DueDate, task.Status, nil).
 		Suffix("RETURNING id").
 		ToSql()
 	if err != nil {
