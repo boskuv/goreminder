@@ -6,6 +6,13 @@ definitions:
       message:
         type: string
     type: object
+  models.Messenger:
+    properties:
+      created_at:
+        type: string
+      name:
+        type: string
+    type: object
   models.Task:
     properties:
       created_at:
@@ -40,8 +47,6 @@ definitions:
         type: string
       email:
         type: string
-      id:
-        type: integer
       name:
         type: string
       passwordHash:
@@ -59,6 +64,38 @@ definitions:
 info:
   contact: {}
 paths:
+  /api/v1/messengers:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new messenger type
+      parameters:
+      - description: Messenger to create
+        in: body
+        name: messenger
+        required: true
+        schema:
+          $ref: '#/definitions/models.Messenger'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: integer
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Create a new messenger type
+      tags:
+      - Messengers
   /api/v1/tasks:
     post:
       consumes:

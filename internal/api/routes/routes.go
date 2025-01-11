@@ -7,7 +7,7 @@ import (
 )
 
 // RegisterRoutes registers all API routes
-func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userHandler *handlers.UserHandler) {
+func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userHandler *handlers.UserHandler, messengerHandler *handlers.MessengerHandler) {
 	api := router.Group("/api/v1")
 	{
 		// Task routes
@@ -22,5 +22,8 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 		api.GET("/users/:user_id", userHandler.GetUser)
 		api.PUT("/users/:user_id", userHandler.UpdateUser)
 		api.DELETE("/users/:user_id", userHandler.DeleteUser)
+
+		// Messenger routes
+		api.POST("/messengers", messengerHandler.CreateMessenger)
 	}
 }

@@ -70,15 +70,18 @@ func main() {
 	// Setup repositories
 	taskRepo := repository.NewTaskRepository(db)
 	userRepo := repository.NewUserRepository(db)
+	messengerRepo := repository.NewMessengerRepository(db)
 
 	// TODO: pointers?
 	// Setup services
 	taskService := service.NewTaskService(*taskRepo, *userRepo)
 	userService := service.NewUserService(*userRepo)
+	messengerService := service.NewMessengerService(*messengerRepo)
 
 	// Initialize handlers
 	taskHandler := handlers.NewTaskHandler(log, taskService)
 	userHandler := handlers.NewUserHandler(log, userService)
+	messengerHandler := handlers.NewMessengerHandler(log, messengerService)
 
 	// Setup Swagger info
 	docs.SwaggerInfo.Title = "Task Management API"
@@ -94,7 +97,7 @@ func main() {
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Register application routes
-	routes.RegisterRoutes(router, taskHandler, userHandler)
+	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler)
 	routes.RegisterSystemRoutes(router, docs.SwaggerInfo.Version)
 
 	// Start server
