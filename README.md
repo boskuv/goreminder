@@ -20,6 +20,8 @@
 - `golangci-lint` for code linting
 - `goose` for database migrations
 - `swag` for generating swagger docs
+- `mockery` for generating mocks
+
 
 ## Project Structure
 ```
