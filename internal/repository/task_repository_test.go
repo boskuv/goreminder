@@ -1,4 +1,4 @@
-package repository
+package repository_test
 
 import (
 	"testing"
@@ -8,6 +8,8 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/boskuv/goreminder/internal/repository"
 )
 
 func TestGetTaskByID(t *testing.T) {
@@ -17,7 +19,7 @@ func TestGetTaskByID(t *testing.T) {
 
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 
-	taskRepo := NewTaskRepository(sqlxDB)
+	taskRepo := repository.NewTaskRepository(sqlxDB)
 
 	// Setup mock expectations
 	dueDate := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
