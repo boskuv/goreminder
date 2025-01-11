@@ -22,6 +22,8 @@ definitions:
       due_date:
         example: "2024-12-01T00:00:00Z"
         type: string
+      messenger_related_user_id:
+        type: integer
       status:
         type: string
       title:

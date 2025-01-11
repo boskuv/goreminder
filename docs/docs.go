@@ -594,6 +594,9 @@ const docTemplate = `{
                     "type": "string",
                     "example": "2024-12-01T00:00:00Z"
                 },
+                "messenger_related_user_id": {
+                    "type": "integer"
+                },
                 "status": {
                     "type": "string"
                 },
