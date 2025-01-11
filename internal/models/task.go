@@ -4,12 +4,13 @@ import "time"
 
 // Task represents the domain model for a task
 type Task struct {
-	ID          int64     `db:"id" json:"-"`
-	Title       string    `db:"title" json:"title"`
-	Description string    `db:"description" json:"description"`
-	UserID      int64     `db:"user_id" json:"user_id"`
-	DueDate     time.Time `db:"due_date" json:"due_date" example:"2024-12-01T00:00:00Z"`
-	Status      string    `db:"status" json:"status"`
-	CreatedAt   time.Time `db:"created_at" json:"created_at"`
-	DeletedAt   time.Time `db:"deleted_at" json:"-"`
+	ID                     int64     `db:"id" json:"-"` // TODO: db?
+	Title                  string    `db:"title" json:"title"`
+	Description            string    `db:"description" json:"description"`
+	UserID                 int64     `db:"user_id" json:"user_id"`
+	MessengerRelatedUserID *int      `db:"messenger_related_user_id" json:"messenger_related_user_id,omitempty"`
+	DueDate                time.Time `db:"due_date" json:"due_date" example:"2024-12-01T00:00:00Z"`
+	Status                 string    `db:"status" json:"status"`
+	CreatedAt              time.Time `db:"created_at" json:"created_at"`
+	DeletedAt              time.Time `db:"deleted_at" json:"-"`
 }
