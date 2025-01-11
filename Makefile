@@ -42,6 +42,11 @@ run: build
 test:
 	$(GO) test ./... $(GOTEST_FLAGS)
 
+# Show coverage
+coverage:
+	go test ./... -coverprofile=coverage.out
+	go tool cover -html=coverage.out
+
 # Generate Swagger documentation
 swagger:
 	swag init --dir ./cmd/core,./internal/api/handlers,./internal/models --output ./docs
