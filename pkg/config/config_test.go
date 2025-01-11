@@ -77,5 +77,5 @@ func TestSetup_InvalidFormat(t *testing.T) {
 	// Call Setup with the invalid config file
 	err = config.Setup(tempFile.Name())
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unable to decode into struct")
+	assert.Contains(t, err.Error(), "unmarshal errors")
 }
