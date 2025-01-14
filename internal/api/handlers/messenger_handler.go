@@ -52,3 +52,31 @@ func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{"messenger_id": messengerID})
 }
+
+// @Summary Сreate a new messenger-related user
+// @Description Сreates a new messenger-related user
+// @Tags Messengers
+// @Accept json
+// @Produce json
+// @Param messenger body models.MessengerRelatedUser true "MessengerRelatedUser to create"
+// @Success 201 {object} map[string]int64
+// @Failure 400 {object} models.APIError
+// @Failure 500 {object} models.APIError
+// @Router /api/v1/messengerRelatedUsers [post]
+func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
+	var messengerRelatedUser models.MessengerRelatedUser
+	if err := c.ShouldBindJSON(&messengerRelatedUser); err != nil {
+		h.Logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("Error while processing request with messenger-related user struct parameter")
+		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
+		return
+	}
+
+	messengerRelatedUserID, err := h.MessengerService.CreateMessengerRelatedUser(&messengerRelatedUser)
+	if err != nil {
+		h.Logger.Error().Stack().Err(err).Msg("Error while creating a messenger-related user")
+		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"messenger_related_user_id": messengerRelatedUserID})
+}

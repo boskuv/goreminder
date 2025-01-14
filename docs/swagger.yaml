@@ -13,6 +13,19 @@ definitions:
       name:
         type: string
     type: object
+  models.MessengerRelatedUser:
+    properties:
+      chat_id:
+        type: string
+      created_at:
+        type: string
+      messenger_id:
+        type: integer
+      updated_at:
+        type: string
+      user_id:
+        type: integer
+    type: object
   models.Task:
     properties:
       created_at:
@@ -66,6 +79,38 @@ definitions:
 info:
   contact: {}
 paths:
+  /api/v1/messengerRelatedUsers:
+    post:
+      consumes:
+      - application/json
+      description: Сreates a new messenger-related user
+      parameters:
+      - description: MessengerRelatedUser to create
+        in: body
+        name: messenger
+        required: true
+        schema:
+          $ref: '#/definitions/models.MessengerRelatedUser'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: integer
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Сreate a new messenger-related user
+      tags:
+      - Messengers
   /api/v1/messengers:
     post:
       consumes:

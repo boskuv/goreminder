@@ -39,3 +39,23 @@ func (r *MessengerRepository) CreateMessenger(messenger *models.Messenger) (int6
 
 	return id, nil
 }
+
+// CreateMessengerRelatedUser inserts a new messenger-related user into the database
+func (r *MessengerRepository) CreateMessengerRelatedUser(messengerRelatedUser *models.MessengerRelatedUser) (int64, error) {
+	query, args, err := r.sb.Insert("user_messengers").
+		Columns("chat_id", "messenger_id", "user_id").
+		Values(messengerRelatedUser.ChatID, messengerRelatedUser.MessengerID, messengerRelatedUser.UserID).
+		Suffix("RETURNING id").
+		ToSql()
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to build query")
+	}
+
+	var id int64
+	err = r.db.QueryRow(query, args...).Scan(&id)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to insert user_messenger")
+	}
+
+	return id, nil
+}

@@ -25,5 +25,6 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 
 		// Messenger routes
 		api.POST("/messengers", messengerHandler.CreateMessenger)
+		api.POST("/messengerRelatedUsers", messengerHandler.CreateMessenger)
 	}
 }
