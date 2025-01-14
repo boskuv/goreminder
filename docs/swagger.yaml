@@ -6,6 +6,26 @@ definitions:
       message:
         type: string
     type: object
+  models.Messenger:
+    properties:
+      created_at:
+        type: string
+      name:
+        type: string
+    type: object
+  models.MessengerRelatedUser:
+    properties:
+      chat_id:
+        type: string
+      created_at:
+        type: string
+      messenger_id:
+        type: integer
+      updated_at:
+        type: string
+      user_id:
+        type: integer
+    type: object
   models.Task:
     properties:
       created_at:
@@ -15,6 +35,8 @@ definitions:
       due_date:
         example: "2024-12-01T00:00:00Z"
         type: string
+      messenger_related_user_id:
+        type: integer
       status:
         type: string
       title:
@@ -40,8 +62,6 @@ definitions:
         type: string
       email:
         type: string
-      id:
-        type: integer
       name:
         type: string
       passwordHash:
@@ -59,6 +79,131 @@ definitions:
 info:
   contact: {}
 paths:
+  /api/v1/messengerRelatedUsers:
+    get:
+      description: Retrieves a messenger-related user by chatID, userID and messengerID
+      parameters:
+      - description: Chat ID
+        in: query
+        name: chat_id
+        required: true
+        type: string
+      - description: User ID
+        in: query
+        name: user_id
+        type: integer
+      - description: Messenger ID
+        in: query
+        name: messenger_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessengerRelatedUser'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Get messenger-related user by chatID, userID and messengerID
+      tags:
+      - Messengers
+    post:
+      consumes:
+      - application/json
+      description: Сreates a new messenger-related user
+      parameters:
+      - description: MessengerRelatedUser to create
+        in: body
+        name: messenger
+        required: true
+        schema:
+          $ref: '#/definitions/models.MessengerRelatedUser'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: integer
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Сreate a new messenger-related user
+      tags:
+      - Messengers
+  /api/v1/messengers:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new messenger type
+      parameters:
+      - description: Messenger to create
+        in: body
+        name: messenger
+        required: true
+        schema:
+          $ref: '#/definitions/models.Messenger'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: integer
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Create a new messenger type
+      tags:
+      - Messengers
+  /api/v1/messengers/{messenger_id}:
+    get:
+      description: Retrieves a messenger by its ID
+      parameters:
+      - description: Messenger ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Messenger'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Get messenger by ID
+      tags:
+      - Messengers
   /api/v1/tasks:
     post:
       consumes:
