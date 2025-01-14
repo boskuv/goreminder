@@ -78,3 +78,24 @@ func (r *MessengerRepository) CreateMessengerRelatedUser(messengerRelatedUser *m
 
 	return id, nil
 }
+
+// GetMessengerRelatedUser retrieves a messenger-related user by chatID, userID and messengerID
+func (r *MessengerRepository) GetMessengerRelatedUser(chatID string, userID *int64, messengerID *int64) (*models.MessengerRelatedUser, error) {
+	query, args, err := r.sb.Select("user_id", "messenger_id", "chat_id", "created_at", "updated_at").
+		From("user_messengers").
+		Where(squirrel.Eq{"chat_id": chatID}).
+		Where(squirrel.Eq{"user_id": userID}).
+		Where(squirrel.Eq{"messenger_id": messengerID}).
+		ToSql()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to build query")
+	}
+
+	var messengerRelatedUser models.MessengerRelatedUser
+	err = r.db.Get(&messengerRelatedUser, query, args...)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to fetch messenger-related user")
+	}
+
+	return &messengerRelatedUser, nil
+}

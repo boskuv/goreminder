@@ -59,3 +59,13 @@ func (s *MessengerService) CreateMessengerRelatedUser(messengerRelatedUser *mode
 
 	return messengerRelatedUserID, nil
 }
+
+// GetMessengerRelatedUser retrieves a messenger-related user by chatID, userID and messengerIDs
+func (s *MessengerService) GetMessengerRelatedUser(chatID string, userID *int64, messengerID *int64) (*models.MessengerRelatedUser, error) {
+	messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUser(chatID, userID, messengerID)
+	if err != nil {
+		return nil, err
+	}
+
+	return messengerRelatedUser, nil
+}

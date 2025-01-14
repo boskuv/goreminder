@@ -108,3 +108,43 @@ func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{"messenger_related_user_id": messengerRelatedUserID})
 }
+
+// @Summary Get messenger-related user by chatID, userID and messengerID
+// @Description Retrieves a messenger-related user by chatID, userID and messengerID
+// @Tags Messengers
+// @Produce json
+// @Param chat_id query string true "Chat ID"
+// @Param user_id query int false "User ID"
+// @Param messenger_id query int false "Messenger ID"
+// @Success 200 {object} models.MessengerRelatedUser
+// @Failure 400 {object} models.APIError
+// @Failure 500 {object} models.APIError
+// @Router /api/v1/messengerRelatedUsers [get]
+func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
+	chatID := c.Query("chat_id")
+
+	userIDQuery, err := strconv.ParseInt(c.Query("user_id"), 10, 64)
+	if err != nil {
+		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("Error while processing request with id parameter")
+		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid user ID", http.StatusBadRequest))
+		return
+	}
+	userID := &userIDQuery
+
+	messengerIDQuery, err := strconv.ParseInt(c.Query("messenger_id"), 10, 64)
+	if err != nil {
+		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse messengerID")).Msg("Error while processing request with id parameter")
+		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid messenger ID", http.StatusBadRequest))
+		return
+	}
+	messengerID := &messengerIDQuery
+
+	messengerRelatedUser, err := h.MessengerService.GetMessengerRelatedUser(chatID, userID, messengerID)
+	if err != nil {
+		h.Logger.Error().Stack().Err(err).Msg("Error while getting a messenger-related user")
+		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		return
+	}
+
+	c.JSON(http.StatusOK, messengerRelatedUser)
+}

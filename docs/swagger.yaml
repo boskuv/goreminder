@@ -80,6 +80,40 @@ info:
   contact: {}
 paths:
   /api/v1/messengerRelatedUsers:
+    get:
+      description: Retrieves a messenger-related user by chatID, userID and messengerID
+      parameters:
+      - description: Chat ID
+        in: query
+        name: chat_id
+        required: true
+        type: string
+      - description: User ID
+        in: query
+        name: user_id
+        type: integer
+      - description: Messenger ID
+        in: query
+        name: messenger_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessengerRelatedUser'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Get messenger-related user by chatID, userID and messengerID
+      tags:
+      - Messengers
     post:
       consumes:
       - application/json
