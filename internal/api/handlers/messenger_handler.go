@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
@@ -51,6 +52,33 @@ func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"messenger_id": messengerID})
+}
+
+// @Summary Get messenger by ID
+// @Description Retrieves a messenger by its ID
+// @Tags Messengers
+// @Produce json
+// @Param id path int true "Messenger ID"
+// @Success 200 {object} models.Messenger
+// @Failure 400 {object} models.APIError
+// @Failure 500 {object} models.APIError
+// @Router /api/v1/messengers/{messenger_id} [get]
+func (h *MessengerHandler) GetMessenger(c *gin.Context) {
+	messengerID, err := strconv.ParseInt(c.Param("messenger_id"), 10, 64)
+	if err != nil {
+		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse messengerID")).Msg("Error while processing request with id parameter")
+		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid messenger ID", http.StatusBadRequest))
+		return
+	}
+
+	messenger, err := h.MessengerService.GetMessenger(messengerID)
+	if err != nil {
+		h.Logger.Error().Stack().Err(err).Msg("Error while getting a messenger by its id")
+		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		return
+	}
+
+	c.JSON(http.StatusOK, messenger)
 }
 
 // @Summary Сreate a new messenger-related user

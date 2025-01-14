@@ -40,6 +40,25 @@ func (r *MessengerRepository) CreateMessenger(messenger *models.Messenger) (int6
 	return id, nil
 }
 
+// GetMessengerByID retrieves a messenger by its ID
+func (r *MessengerRepository) GetMessengerByID(id int64) (*models.Messenger, error) {
+	query, args, err := r.sb.Select("name", "created_at").
+		From("messengers").
+		Where(squirrel.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to build query")
+	}
+
+	var messenger models.Messenger
+	err = r.db.Get(&messenger, query, args...)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to fetch messenger")
+	}
+
+	return &messenger, nil
+}
+
 // CreateMessengerRelatedUser inserts a new messenger-related user into the database
 func (r *MessengerRepository) CreateMessengerRelatedUser(messengerRelatedUser *models.MessengerRelatedUser) (int64, error) {
 	query, args, err := r.sb.Insert("user_messengers").

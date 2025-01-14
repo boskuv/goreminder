@@ -33,6 +33,16 @@ func (s *MessengerService) CreateMessenger(messenger *models.Messenger) (int64, 
 	return messengerID, nil
 }
 
+// GetMessenger retrieves a messenger by its ID
+func (s *MessengerService) GetMessenger(messengerID int64) (*models.Messenger, error) {
+	messenger, err := s.messengerRepo.GetMessengerByID(messengerID)
+	if err != nil {
+		return nil, err
+	}
+
+	return messenger, nil
+}
+
 // CreateMessengerRelatedUser creates a new messenger-related user in the system
 func (s *MessengerService) CreateMessengerRelatedUser(messengerRelatedUser *models.MessengerRelatedUser) (int64, error) {
 	// Perform some validation before creating the messenger

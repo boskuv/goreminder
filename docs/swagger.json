@@ -102,6 +102,47 @@
                 }
             }
         },
+        "/api/v1/messengers/{messenger_id}": {
+            "get": {
+                "description": "Retrieves a messenger by its ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Messengers"
+                ],
+                "summary": "Get messenger by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Messenger ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Messenger"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.APIError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.APIError"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/tasks": {
             "post": {
                 "description": "Creates a new task and associates it with a user",

@@ -143,6 +143,33 @@ paths:
       summary: Create a new messenger type
       tags:
       - Messengers
+  /api/v1/messengers/{messenger_id}:
+    get:
+      description: Retrieves a messenger by its ID
+      parameters:
+      - description: Messenger ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Messenger'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Get messenger by ID
+      tags:
+      - Messengers
   /api/v1/tasks:
     post:
       consumes:

@@ -12,7 +12,7 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 	{
 		// Task routes
 		api.POST("/tasks", taskHandler.CreateTask)
-		api.GET("/tasks/:id", taskHandler.GetTask)
+		api.GET("/tasks/:id", taskHandler.GetTask) // TODO: task_id
 		api.GET("/users/:user_id/tasks", taskHandler.GetUserTasks)
 		api.PUT("/tasks/:id", taskHandler.UpdateTask)
 		api.DELETE("/tasks/:id", taskHandler.DeleteTask)
@@ -25,6 +25,7 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 
 		// Messenger routes
 		api.POST("/messengers", messengerHandler.CreateMessenger)
+		api.GET("/messengers/:messenger_id", messengerHandler.GetMessenger)
 		api.POST("/messengerRelatedUsers", messengerHandler.CreateMessenger)
 	}
 }
