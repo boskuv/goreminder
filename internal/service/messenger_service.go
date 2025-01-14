@@ -36,6 +36,7 @@ func (s *MessengerService) CreateMessenger(messenger *models.Messenger) (int64, 
 // CreateMessengerRelatedUser creates a new messenger-related user in the system
 func (s *MessengerService) CreateMessengerRelatedUser(messengerRelatedUser *models.MessengerRelatedUser) (int64, error) {
 	// Perform some validation before creating the messenger
+	// TODO: check if UserID and MessengerID exist
 	if messengerRelatedUser.ChatID == "" && messengerRelatedUser.UserID == nil && messengerRelatedUser.MessengerID == nil {
 		return 0, errors.WithStack(errors.New("messenger_user data is incomplete"))
 	}
