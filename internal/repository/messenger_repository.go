@@ -59,6 +59,25 @@ func (r *MessengerRepository) GetMessengerByID(id int64) (*models.Messenger, err
 	return &messenger, nil
 }
 
+// GetMessengerIDByName retrieves a messenger ID by its name
+func (r *MessengerRepository) GetMessengerIDByName(messengerName string) (int64, error) {
+	query, args, err := r.sb.Select("id").
+		From("messengers").
+		Where(squirrel.Eq{"name": messengerName}).
+		ToSql()
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to build query")
+	}
+
+	var messengerID int64
+	err = r.db.Get(&messengerID, query, args...)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to fetch messenger_id")
+	}
+
+	return messengerID, nil
+}
+
 // CreateMessengerRelatedUser inserts a new messenger-related user into the database
 func (r *MessengerRepository) CreateMessengerRelatedUser(messengerRelatedUser *models.MessengerRelatedUser) (int64, error) {
 	query, args, err := r.sb.Insert("user_messengers").

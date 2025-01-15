@@ -164,6 +164,50 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/messengers/by-name/{messenger_name}": {
+            "get": {
+                "description": "Retrieves a messenger ID by its name",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Messengers"
+                ],
+                "summary": "Get messenger ID by name",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Messenger name",
+                        "name": "messenger_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "integer"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.APIError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.APIError"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/messengers/{messenger_id}": {
             "get": {
                 "description": "Retrieves a messenger by its ID",
@@ -795,6 +839,9 @@ const docTemplate = `{
                 },
                 "email": {
                     "type": "string"
+                },
+                "id": {
+                    "type": "integer"
                 },
                 "name": {
                     "type": "string"

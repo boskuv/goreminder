@@ -43,6 +43,16 @@ func (s *MessengerService) GetMessenger(messengerID int64) (*models.Messenger, e
 	return messenger, nil
 }
 
+// GetMessengerIDByName retrieves a messenger ID by its name
+func (s *MessengerService) GetMessengerIDByName(messengerName string) (int64, error) {
+	messengerID, err := s.messengerRepo.GetMessengerIDByName(messengerName)
+	if err != nil {
+		return 0, err
+	}
+
+	return messengerID, nil
+}
+
 // CreateMessengerRelatedUser creates a new messenger-related user in the system
 func (s *MessengerService) CreateMessengerRelatedUser(messengerRelatedUser *models.MessengerRelatedUser) (int64, error) {
 	// Perform some validation before creating the messenger
