@@ -81,8 +81,8 @@ func (r *MessengerRepository) GetMessengerIDByName(messengerName string) (int64,
 // CreateMessengerRelatedUser inserts a new messenger-related user into the database
 func (r *MessengerRepository) CreateMessengerRelatedUser(messengerRelatedUser *models.MessengerRelatedUser) (int64, error) {
 	query, args, err := r.sb.Insert("user_messengers").
-		Columns("chat_id", "messenger_id", "user_id").
-		Values(messengerRelatedUser.ChatID, messengerRelatedUser.MessengerID, messengerRelatedUser.UserID).
+		Columns("chat_id", "messenger_id", "messenger_user_id", "user_id").
+		Values(messengerRelatedUser.ChatID, messengerRelatedUser.MessengerID, messengerRelatedUser.MessengerUserID, messengerRelatedUser.UserID).
 		Suffix("RETURNING id").
 		ToSql()
 	if err != nil {
@@ -100,7 +100,7 @@ func (r *MessengerRepository) CreateMessengerRelatedUser(messengerRelatedUser *m
 
 // GetMessengerRelatedUser retrieves a messenger-related user by chatID, userID and messengerID
 func (r *MessengerRepository) GetMessengerRelatedUser(chatID string, userID *int64, messengerID *int64) (*models.MessengerRelatedUser, error) {
-	query, args, err := r.sb.Select("user_id", "messenger_id", "chat_id", "created_at", "updated_at").
+	query, args, err := r.sb.Select("user_id", "messenger_id", "messenger_user_id", "chat_id", "created_at", "updated_at").
 		From("user_messengers").
 		Where(squirrel.Eq{"chat_id": chatID}).
 		Where(squirrel.Eq{"user_id": userID}).
@@ -117,4 +117,23 @@ func (r *MessengerRepository) GetMessengerRelatedUser(chatID string, userID *int
 	}
 
 	return &messengerRelatedUser, nil
+}
+
+// GetUserID retrieves a userID user by messengerUserID
+func (r *MessengerRepository) GetUserID(messengerUserID string) (int64, error) {
+	query, args, err := r.sb.Select("user_id").
+		From("user_messengers").
+		Where(squirrel.Eq{"messenger_user_id": messengerUserID}).
+		ToSql()
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to build query")
+	}
+
+	var userID int64
+	err = r.db.Get(&userID, query, args...)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to fetch user_id")
+	}
+
+	return userID, nil
 }

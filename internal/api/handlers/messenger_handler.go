@@ -170,3 +170,27 @@ func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 
 	c.JSON(http.StatusOK, messengerRelatedUser)
 }
+
+// GetUserID retrieves a userID user by messengerUserID
+
+// @Summary Get an userID by messengerUserID
+// @Description Retrieves an userID by messengerUserID
+// @Tags Messengers
+// @Produce json
+// @Param messenger_user_id path string true "Messenger UserID"
+// @Success 200 {object} map[string]int64
+// @Failure 400 {object} models.APIError
+// @Failure 500 {object} models.APIError
+// @Router /api/v1/messengerRelatedUsers/{messenger_user_id}/user [get]
+func (h *MessengerHandler) GetUserID(c *gin.Context) {
+	messengerUserID := c.Param("messenger_user_id")
+
+	userID, err := h.MessengerService.GetUserID(messengerUserID)
+	if err != nil {
+		h.Logger.Error().Stack().Err(err).Msg("Error while getting a userID")
+		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		return
+	}
+
+	c.JSON(http.StatusOK, userID)
+}

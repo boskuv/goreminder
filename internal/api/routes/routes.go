@@ -29,5 +29,6 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 		api.GET("/messengers/by-name/:messenger_name", messengerHandler.GetMessengerIDByName)
 		api.POST("/messengerRelatedUsers", messengerHandler.CreateMessengerRelatedUser)
 		api.GET("/messengerRelatedUsers", messengerHandler.GetMessengerRelatedUser)
+		api.GET("/messengerRelatedUsers/:messenger_user_id/user", messengerHandler.GetUserID)
 	}
 }

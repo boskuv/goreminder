@@ -21,6 +21,8 @@ definitions:
         type: string
       messenger_id:
         type: integer
+      messenger_user_id:
+        type: string
       updated_at:
         type: string
       user_id:
@@ -145,6 +147,35 @@ paths:
           schema:
             $ref: '#/definitions/models.APIError'
       summary: Сreate a new messenger-related user
+      tags:
+      - Messengers
+  /api/v1/messengerRelatedUsers/{messenger_user_id}/user:
+    get:
+      description: Retrieves an userID by messengerUserID
+      parameters:
+      - description: Messenger UserID
+        in: path
+        name: messenger_user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: integer
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Get an userID by messengerUserID
       tags:
       - Messengers
   /api/v1/messengers:
