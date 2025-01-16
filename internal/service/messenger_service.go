@@ -43,11 +43,21 @@ func (s *MessengerService) GetMessenger(messengerID int64) (*models.Messenger, e
 	return messenger, nil
 }
 
+// GetMessengerIDByName retrieves a messenger ID by its name
+func (s *MessengerService) GetMessengerIDByName(messengerName string) (int64, error) {
+	messengerID, err := s.messengerRepo.GetMessengerIDByName(messengerName)
+	if err != nil {
+		return 0, err
+	}
+
+	return messengerID, nil
+}
+
 // CreateMessengerRelatedUser creates a new messenger-related user in the system
 func (s *MessengerService) CreateMessengerRelatedUser(messengerRelatedUser *models.MessengerRelatedUser) (int64, error) {
 	// Perform some validation before creating the messenger
 	// TODO: check if UserID and MessengerID exist
-	if messengerRelatedUser.ChatID == "" && messengerRelatedUser.UserID == nil && messengerRelatedUser.MessengerID == nil {
+	if messengerRelatedUser.MessengerUserID == "" && messengerRelatedUser.UserID == nil && messengerRelatedUser.MessengerID == nil {
 		return 0, errors.WithStack(errors.New("messenger_user data is incomplete"))
 	}
 
@@ -68,4 +78,14 @@ func (s *MessengerService) GetMessengerRelatedUser(chatID string, userID *int64,
 	}
 
 	return messengerRelatedUser, nil
+}
+
+// GetUserID retrieves a userID user by messengerUserID
+func (s *MessengerService) GetUserID(messengerUserID string) (int64, error) {
+	userID, err := s.messengerRepo.GetUserID(messengerUserID)
+	if err != nil {
+		return 0, err
+	}
+
+	return userID, nil
 }

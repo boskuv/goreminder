@@ -115,6 +115,50 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/messengerRelatedUsers/{messenger_user_id}/user": {
+            "get": {
+                "description": "Retrieves an userID by messengerUserID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Messengers"
+                ],
+                "summary": "Get an userID by messengerUserID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Messenger UserID",
+                        "name": "messenger_user_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "integer"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.APIError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.APIError"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/messengers": {
             "post": {
                 "description": "Creates a new messenger type",
@@ -142,6 +186,50 @@ const docTemplate = `{
                 "responses": {
                     "201": {
                         "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "integer"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.APIError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.APIError"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/messengers/by-name/{messenger_name}": {
+            "get": {
+                "description": "Retrieves a messenger ID by its name",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Messengers"
+                ],
+                "summary": "Get messenger ID by name",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Messenger name",
+                        "name": "messenger_name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -734,6 +822,9 @@ const docTemplate = `{
                 "messenger_id": {
                     "type": "integer"
                 },
+                "messenger_user_id": {
+                    "type": "string"
+                },
                 "updated_at": {
                     "type": "string"
                 },
@@ -795,6 +886,9 @@ const docTemplate = `{
                 },
                 "email": {
                     "type": "string"
+                },
+                "id": {
+                    "type": "integer"
                 },
                 "name": {
                     "type": "string"
