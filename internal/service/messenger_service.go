@@ -57,7 +57,7 @@ func (s *MessengerService) GetMessengerIDByName(messengerName string) (int64, er
 func (s *MessengerService) CreateMessengerRelatedUser(messengerRelatedUser *models.MessengerRelatedUser) (int64, error) {
 	// Perform some validation before creating the messenger
 	// TODO: check if UserID and MessengerID exist
-	if messengerRelatedUser.MessengerUserID == "" && messengerRelatedUser.UserID == nil && messengerRelatedUser.MessengerID == nil {
+	if messengerRelatedUser.MessengerUserID == "" && messengerRelatedUser.ChatID == "" && messengerRelatedUser.UserID == nil && messengerRelatedUser.MessengerID == nil {
 		return 0, errors.WithStack(errors.New("messenger_user data is incomplete"))
 	}
 
