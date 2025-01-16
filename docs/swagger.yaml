@@ -85,11 +85,17 @@ info:
 paths:
   /api/v1/messengerRelatedUsers:
     get:
-      description: Retrieves a messenger-related user by chatID, userID and messengerID
+      description: Retrieves a messenger-related user by chatID, messengerUserID,
+        userID and messengerID
       parameters:
       - description: Chat ID
         in: query
         name: chat_id
+        required: true
+        type: string
+      - description: Messenger User ID
+        in: query
+        name: messenger_user_id
         required: true
         type: string
       - description: User ID
@@ -115,7 +121,7 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/models.APIError'
-      summary: Get messenger-related user by chatID, userID and messengerID
+      summary: Get messenger-related user by chatID, messengerUserID, userID and messengerID
       tags:
       - Messengers
     post:

@@ -17,19 +17,26 @@ const docTemplate = `{
     "paths": {
         "/api/v1/messengerRelatedUsers": {
             "get": {
-                "description": "Retrieves a messenger-related user by chatID, userID and messengerID",
+                "description": "Retrieves a messenger-related user by chatID, messengerUserID, userID and messengerID",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Messengers"
                 ],
-                "summary": "Get messenger-related user by chatID, userID and messengerID",
+                "summary": "Get messenger-related user by chatID, messengerUserID, userID and messengerID",
                 "parameters": [
                     {
                         "type": "string",
                         "description": "Chat ID",
                         "name": "chat_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Messenger User ID",
+                        "name": "messenger_user_id",
                         "in": "query",
                         "required": true
                     },
