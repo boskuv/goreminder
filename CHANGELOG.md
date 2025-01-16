@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0-rc.1] - 2025-01-16
+### Added
+- sample test for getting task by id
+- entities: messenger, messengerRelatedUser
+- endpoints and dependent on it services/repositories: CreateMessenger, GetMessenger, GetMessengerIDByName, CreateMessengerRelatedUser, GetMessengerRelatedUser, GetUserID (using messengerUserID)
+
 
 ## [0.2.0-rc.1] - 2025-01-05
 ### Changed
@@ -23,3 +29,4 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 <!-- links -->
 [0.2.0-rc.1]: https://github.com/boskuv/goreminder/compare/0.1.0-rc.1...0.2.0-rc.1
+[0.3.0-rc.1]: https://github.com/boskuv/goreminder/compare/0.2.0-rc.1...0.3.0-rc.1
