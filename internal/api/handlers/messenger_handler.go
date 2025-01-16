@@ -174,9 +174,8 @@ func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 }
 
 // GetUserID retrieves a userID user by messengerUserID
-
-// @Summary Get an userID by messengerUserID
-// @Description Retrieves an userID by messengerUserID
+// @Summary Get a userID by messengerUserID
+// @Description Retrieves a userID by messengerUserID
 // @Tags Messengers
 // @Produce json
 // @Param messenger_user_id path string true "Messenger UserID"
