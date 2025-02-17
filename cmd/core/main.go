@@ -18,6 +18,7 @@ import (
 	"github.com/boskuv/goreminder/pkg/args"
 	"github.com/boskuv/goreminder/pkg/config"
 	"github.com/boskuv/goreminder/pkg/logger"
+	"github.com/boskuv/goreminder/pkg/queue"
 )
 
 func main() {
@@ -46,10 +47,9 @@ func main() {
 
 	log.Info().Msg("Graceful startup")
 
-	// Инициализация Prometheus метрик
 	// metrics.InitMetrics()
 
-	// Инициализация базы данных
+	// DB init
 	dbConfig := &repository.DBConfig{
 		Host:         cfg.Database.Host,
 		Port:         cfg.Database.Port,
@@ -64,8 +64,24 @@ func main() {
 
 	db, err := repository.NewDB(dbConfig)
 	if err != nil {
-		log.Fatal().Stack().Err(err).Msg("Ошибка при подключении к БД")
+		log.Fatal().Stack().Err(err).Msg("Error while connecting to DB")
 	}
+
+	// Producer init
+	producerConfig := &queue.ProducerConfig{
+		Host:      cfg.Producer.Host,
+		Port:      cfg.Producer.Port,
+		User:      cfg.Producer.User,
+		Password:  cfg.Producer.Password,
+		QueueName: cfg.Producer.QueueName,
+		Exchange:  cfg.Producer.Exchange,
+	}
+
+	producer, err := queue.NewProducer(producerConfig)
+	if err != nil {
+		log.Fatal().Stack().Err(err).Msg("Error while connecting to producer")
+	}
+	defer producer.Close()
 
 	// Setup repositories
 	taskRepo := repository.NewTaskRepository(db)
@@ -74,7 +90,7 @@ func main() {
 
 	// TODO: pointers?
 	// Setup services
-	taskService := service.NewTaskService(*taskRepo, *userRepo)
+	taskService := service.NewTaskService(*taskRepo, *userRepo, *messengerRepo, producer)
 	userService := service.NewUserService(*userRepo)
 	messengerService := service.NewMessengerService(*messengerRepo)
 

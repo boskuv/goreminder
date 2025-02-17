@@ -28,6 +28,16 @@ definitions:
       user_id:
         type: integer
     type: object
+  models.ScheduledTask:
+    properties:
+      chat_id:
+        type: string
+      due_date:
+        example: "2024-12-01T00:00:00Z"
+        type: string
+      queue_name:
+        type: string
+    type: object
   models.Task:
     properties:
       created_at:
@@ -157,7 +167,7 @@ paths:
       - Messengers
   /api/v1/messengerRelatedUsers/{messenger_user_id}/user:
     get:
-      description: Retrieves an userID by messengerUserID
+      description: Retrieves a userID by messengerUserID
       parameters:
       - description: Messenger UserID
         in: path
@@ -181,7 +191,7 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/models.APIError'
-      summary: Get an userID by messengerUserID
+      summary: Get a userID by messengerUserID
       tags:
       - Messengers
   /api/v1/messengers:
@@ -399,6 +409,38 @@ paths:
           schema:
             $ref: '#/definitions/models.APIError'
       summary: Update a task
+      tags:
+      - Tasks
+  /api/v1/tasks/schedule:
+    post:
+      consumes:
+      - application/json
+      description: Schedule a task by sending it to queue
+      parameters:
+      - description: Task to schedule
+        in: body
+        name: task
+        required: true
+        schema:
+          $ref: '#/definitions/models.ScheduledTask'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.APIError'
+      summary: Schedule a new task
       tags:
       - Tasks
   /api/v1/users:
