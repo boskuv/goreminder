@@ -11,18 +11,28 @@ var Config *Configuration
 type Configuration struct {
 	Server   ServerConfiguration
 	Database DatabaseConfiguration
+	Producer ProducerConfiguration
 }
 
 type DatabaseConfiguration struct {
 	Driver       string
 	Dbname       string
-	Username     string
+	Username     string // TODO: simplify to User
 	Password     string
 	Host         string
 	Port         string
 	MaxLifetime  int
 	MaxOpenConns int
 	MaxIdleConns int
+}
+
+type ProducerConfiguration struct {
+	Host      string
+	Port      string // TODO: int?
+	User      string
+	Password  string
+	QueueName string
+	Exchange  string
 }
 
 type ServerConfiguration struct {
