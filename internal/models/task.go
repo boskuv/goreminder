@@ -11,6 +11,16 @@ type Task struct {
 	MessengerRelatedUserID *int      `db:"messenger_related_user_id" json:"messenger_related_user_id,omitempty"`
 	DueDate                time.Time `db:"due_date" json:"due_date" example:"2024-12-01T00:00:00Z"`
 	Status                 string    `db:"status" json:"status"`
-	CreatedAt              time.Time `db:"created_at" json:"created_at"`
+	CreatedAt              time.Time `db:"created_at" json:"created_at"` // TODO: json:"-"`
 	DeletedAt              time.Time `db:"deleted_at" json:"-"`
+}
+
+// ScheduledTask represents the domain model for a task to schedule
+type ScheduledTask struct {
+	Action        string `json:"action" example:"add"`
+	ChatID        string `json:"chat_id"`
+	JobName       string `json:"job_name" example:"tasks.example_task"`
+	MessengerName string `json:"messenger_name" example:"telegram"`
+	QueueName     string `json:"queue_name" example:"celery"`
+	TaskID        int64  `json:"task_id"`
 }

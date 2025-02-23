@@ -859,6 +859,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "created_at": {
+                    "description": "TODO: json:\"-\"` + "`" + `",
                     "type": "string"
                 },
                 "name": {
@@ -873,6 +874,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "created_at": {
+                    "description": "TODO: json:\"-\"` + "`" + `",
                     "type": "string"
                 },
                 "messenger_id": {
@@ -882,6 +884,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updated_at": {
+                    "description": "TODO: json:\"-\"` + "`" + `",
                     "type": "string"
                 },
                 "user_id": {
@@ -892,15 +895,27 @@ const docTemplate = `{
         "models.ScheduledTask": {
             "type": "object",
             "properties": {
+                "action": {
+                    "type": "string",
+                    "example": "add"
+                },
                 "chat_id": {
                     "type": "string"
                 },
-                "due_date": {
+                "job_name": {
                     "type": "string",
-                    "example": "2024-12-01T00:00:00Z"
+                    "example": "tasks.example_task"
+                },
+                "messenger_name": {
+                    "type": "string",
+                    "example": "telegram"
                 },
                 "queue_name": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "celery"
+                },
+                "task_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -908,6 +923,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "created_at": {
+                    "description": "TODO: json:\"-\"` + "`" + `",
                     "type": "string"
                 },
                 "description": {
@@ -953,12 +969,14 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "createdAt": {
+                    "description": "TODO: json:\"-\"` + "`" + `",
                     "type": "string"
                 },
                 "email": {
                     "type": "string"
                 },
                 "id": {
+                    "description": "TODO: json:\"-\"` + "`" + `",
                     "type": "integer"
                 },
                 "name": {

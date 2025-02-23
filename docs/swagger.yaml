@@ -9,6 +9,7 @@ definitions:
   models.Messenger:
     properties:
       created_at:
+        description: 'TODO: json:"-"`'
         type: string
       name:
         type: string
@@ -18,29 +19,41 @@ definitions:
       chat_id:
         type: string
       created_at:
+        description: 'TODO: json:"-"`'
         type: string
       messenger_id:
         type: integer
       messenger_user_id:
         type: string
       updated_at:
+        description: 'TODO: json:"-"`'
         type: string
       user_id:
         type: integer
     type: object
   models.ScheduledTask:
     properties:
+      action:
+        example: add
+        type: string
       chat_id:
         type: string
-      due_date:
-        example: "2024-12-01T00:00:00Z"
+      job_name:
+        example: tasks.example_task
+        type: string
+      messenger_name:
+        example: telegram
         type: string
       queue_name:
+        example: celery
         type: string
+      task_id:
+        type: integer
     type: object
   models.Task:
     properties:
       created_at:
+        description: 'TODO: json:"-"`'
         type: string
       description:
         type: string
@@ -71,10 +84,12 @@ definitions:
   models.User:
     properties:
       createdAt:
+        description: 'TODO: json:"-"`'
         type: string
       email:
         type: string
       id:
+        description: 'TODO: json:"-"`'
         type: integer
       name:
         type: string
