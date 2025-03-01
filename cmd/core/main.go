@@ -45,8 +45,6 @@ func main() {
 	log := logger.New(os.Stdout, minlvl, true)
 	logger.LogErrorStackViaPkgErrors(true)
 
-	log.Info().Msg("Graceful startup")
-
 	// metrics.InitMetrics()
 
 	// DB init
@@ -81,7 +79,14 @@ func main() {
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("Error while connecting to producer")
 	}
-	defer producer.Close()
+	defer func() {
+		if err := producer.Close(); err != nil {
+			log.Error().Stack().Err(err).Msg("Failed to close producer")
+		} else {
+			log.Info().Msg("Producer is closed gracefully")
+		}
+	}()
+	// defer producer.Close()
 
 	// Setup repositories
 	taskRepo := repository.NewTaskRepository(db)
@@ -115,6 +120,8 @@ func main() {
 	// Register application routes
 	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler)
 	routes.RegisterSystemRoutes(router, docs.SwaggerInfo.Version)
+
+	log.Info().Msg("Graceful startup")
 
 	// Start server
 	port := cfg.Server.Port
