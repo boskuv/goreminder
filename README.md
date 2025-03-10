@@ -142,6 +142,22 @@ curl -X 'DELETE' \
   -H 'accept: application/json'
 ```
 
+### Schedule
+```bash
+curl -X 'POST' \
+  'http://localhost:8080/api/v1/tasks/schedule' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "action": "add",
+  "chat_id": "string",
+  "job_name": "tasks.example_task",
+  "messenger_name": "telegram",
+  "queue_name": "celery",
+  "task_id": 1
+}'
+```
+
 ## Contributions
 Feel free to open issues or pull requests to improve this project. Contributions are welcome!
 
