@@ -124,14 +124,14 @@ const docTemplate = `{
         },
         "/api/v1/messengerRelatedUsers/{messenger_user_id}/user": {
             "get": {
-                "description": "Retrieves an userID by messengerUserID",
+                "description": "Retrieves a userID by messengerUserID",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Messengers"
                 ],
-                "summary": "Get an userID by messengerUserID",
+                "summary": "Get a userID by messengerUserID",
                 "parameters": [
                     {
                         "type": "string",
@@ -331,6 +331,55 @@ const docTemplate = `{
                             "type": "object",
                             "additionalProperties": {
                                 "type": "integer"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.APIError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.APIError"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/tasks/schedule": {
+            "post": {
+                "description": "Schedule a task by sending it to queue",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tasks"
+                ],
+                "summary": "Schedule a new task",
+                "parameters": [
+                    {
+                        "description": "Task to schedule",
+                        "name": "task",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ScheduledTask"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
                             }
                         }
                     },
@@ -810,6 +859,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "created_at": {
+                    "description": "TODO: json:\"-\"` + "`" + `",
                     "type": "string"
                 },
                 "name": {
@@ -824,6 +874,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "created_at": {
+                    "description": "TODO: json:\"-\"` + "`" + `",
                     "type": "string"
                 },
                 "messenger_id": {
@@ -833,9 +884,37 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updated_at": {
+                    "description": "TODO: json:\"-\"` + "`" + `",
                     "type": "string"
                 },
                 "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.ScheduledTask": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "example": "add"
+                },
+                "chat_id": {
+                    "type": "string"
+                },
+                "job_name": {
+                    "type": "string",
+                    "example": "tasks.example_task"
+                },
+                "messenger_name": {
+                    "type": "string",
+                    "example": "telegram"
+                },
+                "queue_name": {
+                    "type": "string",
+                    "example": "celery"
+                },
+                "task_id": {
                     "type": "integer"
                 }
             }
@@ -844,6 +923,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "created_at": {
+                    "description": "TODO: json:\"-\"` + "`" + `",
                     "type": "string"
                 },
                 "description": {
@@ -889,12 +969,14 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "createdAt": {
+                    "description": "TODO: json:\"-\"` + "`" + `",
                     "type": "string"
                 },
                 "email": {
                     "type": "string"
                 },
                 "id": {
+                    "description": "TODO: json:\"-\"` + "`" + `",
                     "type": "integer"
                 },
                 "name": {

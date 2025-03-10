@@ -14,7 +14,7 @@ import (
 
 // TaskHandler handles task-related HTTP requests
 type TaskHandler struct {
-	Logger      zerolog.Logger
+	Logger      zerolog.Logger // TODO: lowercase
 	TaskService *service.TaskService
 }
 
@@ -173,4 +173,32 @@ func (h *TaskHandler) DeleteTask(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent) // 204 No Content status for successful deletion
+}
+
+// @Summary Schedule a new task
+// @Description Schedule a task by sending it to queue
+// @Tags Tasks
+// @Accept json
+// @Produce json
+// @Param task body models.ScheduledTask true "Task to schedule"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} models.APIError
+// @Failure 500 {object} models.APIError
+// @Router /api/v1/tasks/schedule [post]
+func (h *TaskHandler) ScheduleTask(c *gin.Context) {
+	var scheduledTask models.ScheduledTask
+	if err := c.ShouldBindJSON(&scheduledTask); err != nil {
+		h.Logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("Error while processing request with task struct parameter")
+		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
+		return
+	}
+
+	err := h.TaskService.ScheduleTask(&scheduledTask)
+	if err != nil {
+		h.Logger.Error().Stack().Err(err).Msg("Error while scheduling a task")
+		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Task scheduled successfully"})
 }

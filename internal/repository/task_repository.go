@@ -44,7 +44,7 @@ func (r *TaskRepository) CreateTask(task *models.Task) (int64, error) {
 
 // GetTaskByID retrieves a task by its ID
 func (r *TaskRepository) GetTaskByID(id int64) (*models.Task, error) {
-	query, args, err := r.sb.Select("title", "description", "user_id", "due_date", "status", "created_at").
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "due_date", "status", "created_at").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": id}).

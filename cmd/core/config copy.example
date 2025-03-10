@@ -9,5 +9,13 @@ database:
   maxOpenConns: 100       # Maximum open connections
   maxIdleConns: 10        # Maximum idle connections
 
+producer:
+  user: "guest"    
+  password: "guest"   
+  host: "localhost"       
+  port: "5672"           
+  queueName: "celery"         
+  exchange: "celery"   
+
 server:
   port: 8080
