@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [v0.4.0-rc.1] - 2025-03-10
+### Added
+- Add integration with rabbitmq with retries
+- endpoints and dependent on it services/repositories: ScheduleTask
+
+
 ## [v0.3.0-rc.1] - 2025-01-16
 ### Added
 - sample test for getting task by id
@@ -30,3 +36,4 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 <!-- links -->
 [v0.2.0-rc.1]: https://github.com/boskuv/goreminder/compare/v0.1.0-rc.1...v0.2.0-rc.1
 [v0.3.0-rc.1]: https://github.com/boskuv/goreminder/compare/v0.2.0-rc.1...v0.3.0-rc.1
+[v0.4.0-rc.1]: https://github.com/boskuv/goreminder/compare/v0.3.0-rc.1...v0.4.0-rc.1
