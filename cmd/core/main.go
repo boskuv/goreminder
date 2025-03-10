@@ -12,12 +12,14 @@ import (
 	_ "github.com/boskuv/goreminder/docs" // Import generated Swagger docs
 	"github.com/boskuv/goreminder/internal/api/handlers"
 	_ "github.com/boskuv/goreminder/internal/api/handlers"
+	"github.com/boskuv/goreminder/internal/api/middleware"
 	"github.com/boskuv/goreminder/internal/api/routes"
 	"github.com/boskuv/goreminder/internal/repository"
 	"github.com/boskuv/goreminder/internal/service"
 	"github.com/boskuv/goreminder/pkg/args"
 	"github.com/boskuv/goreminder/pkg/config"
 	"github.com/boskuv/goreminder/pkg/logger"
+	"github.com/boskuv/goreminder/pkg/observability"
 	"github.com/boskuv/goreminder/pkg/queue"
 )
 
@@ -45,7 +47,7 @@ func main() {
 	log := logger.New(os.Stdout, minlvl, true)
 	logger.LogErrorStackViaPkgErrors(true)
 
-	// metrics.InitMetrics()
+	observability.StartMetricsServer()
 
 	// DB init
 	dbConfig := &repository.DBConfig{
@@ -116,6 +118,10 @@ func main() {
 
 	// Register Swagger handler
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	// Add middlewares
+	middleware.InitMetrics()
+	router.Use(middleware.MetricsMiddleware())
 
 	// Register application routes
 	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler)
