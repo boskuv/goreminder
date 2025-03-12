@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -48,6 +49,8 @@ func main() {
 	logger.LogErrorStackViaPkgErrors(true)
 
 	observability.StartMetricsServer()
+	tracer, _ := observability.InitTracer("goreminder-api")
+	defer tracer.Shutdown(context.Background())
 
 	// DB init
 	dbConfig := &repository.DBConfig{
@@ -122,6 +125,7 @@ func main() {
 	// Add middlewares
 	middleware.InitMetrics()
 	router.Use(middleware.MetricsMiddleware())
+	router.Use(middleware.TracingMiddleware("goreminder-api"))
 
 	// Register application routes
 	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler)
