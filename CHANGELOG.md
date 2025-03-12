@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [v0.6.0-rc.1] - 2025-03-12
+### Added
+- Implement tracing
+- Add services to docker-compose: otel-collector, jager
+
 ## [v0.5.0-rc.1] - 2025-03-10
 ### Added
 - Implement prometheus server on port :9191
@@ -43,3 +48,4 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 [v0.3.0-rc.1]: https://github.com/boskuv/goreminder/compare/v0.2.0-rc.1...v0.3.0-rc.1
 [v0.4.0-rc.1]: https://github.com/boskuv/goreminder/compare/v0.3.0-rc.1...v0.4.0-rc.1
 [v0.5.0-rc.1]: https://github.com/boskuv/goreminder/compare/v0.4.0-rc.1...v0.5.0-rc.1
+[v0.6.0-rc.1]: https://github.com/boskuv/goreminder/compare/v0.4.0-rc.1...v0.5.0-rc.1
