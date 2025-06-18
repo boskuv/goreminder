@@ -1,12 +1,14 @@
 package repository
 
 import (
+	"database/sql"
 	"time"
 
 	"github.com/Masterminds/squirrel"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 
+	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
 )
 
@@ -23,14 +25,16 @@ func NewTaskRepository(db *sqlx.DB) *TaskRepository {
 }
 
 // CreateTask inserts a new task into the database
+// default values are preset for: id, created_at, status[pending] (database-level)
+// nil values are preset for: updated_at, deleted_at (database-level)
 func (r *TaskRepository) CreateTask(task *models.Task) (int64, error) {
 	query, args, err := r.sb.Insert("tasks").
-		Columns("title", "description", "user_id", "messenger_related_user_id", "due_date", "status", "deleted_at").
-		Values(task.Title, task.Description, task.UserID, task.MessengerRelatedUserID, task.DueDate, task.Status, nil).
+		Columns("title", "description", "user_id", "messenger_related_user_id", "due_date").          // status, deleted_at
+		Values(task.Title, task.Description, task.UserID, task.MessengerRelatedUserID, task.DueDate). // task.Status,
 		Suffix("RETURNING id").
 		ToSql()
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to build query")
+		return 0, errors.Wrap(err, "failed to build query while creating new task")
 	}
 
 	var id int64
@@ -43,6 +47,7 @@ func (r *TaskRepository) CreateTask(task *models.Task) (int64, error) {
 }
 
 // GetTaskByID retrieves a task by its ID
+// Returns task entity and an error if occurred
 func (r *TaskRepository) GetTaskByID(id int64) (*models.Task, error) {
 	query, args, err := r.sb.Select("id", "title", "description", "user_id", "due_date", "status", "created_at").
 		From("tasks").
@@ -50,19 +55,24 @@ func (r *TaskRepository) GetTaskByID(id int64) (*models.Task, error) {
 		Where(squirrel.Eq{"id": id}).
 		ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, errors.Wrap(err, "failed to build query while getting task by id")
 	}
 
 	var task models.Task
 	err = r.db.Get(&task, query, args...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to fetch task")
+		if err == sql.ErrNoRows {
+			return nil, errors.Wrap(errs.ErrNotFound, "no task found for passed id")
+		}
+
+		return nil, errors.Wrap(err, "failed to get task by id")
 	}
 
 	return &task, nil
 }
 
 // GetTasksByUserID retrieves a task by user ID
+// Returns task entities for passed user ID and an error if occurred
 func (r *TaskRepository) GetTasksByUserID(userID int64) ([]*models.Task, error) {
 	query, args, err := r.sb.Select("title", "description", "user_id", "due_date", "status", "created_at").
 		From("tasks").
@@ -70,41 +80,44 @@ func (r *TaskRepository) GetTasksByUserID(userID int64) ([]*models.Task, error) 
 		Where(squirrel.Eq{"user_id": userID}).
 		ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, errors.Wrap(err, "failed to build query while getting tasks by user id")
 	}
 
 	var tasks []*models.Task
 	err = r.db.Select(&tasks, query, args...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to fetch tasks")
+		return nil, errors.Wrap(err, "failed to get tasks by user id")
 	}
 
 	return tasks, nil
 }
 
-// UpdateTask updates an existing task
+// UpdateTask updates task with not nil fields passed in request
+// It sets the updated_at to the current time
 func (r *TaskRepository) UpdateTask(task *models.Task) error {
 	query, args, err := r.sb.Update("tasks").
 		Set("title", task.Title).
 		Set("description", task.Description).
 		Set("status", task.Status).
 		Set("due_date", task.DueDate).
+		Set("updated_at", time.Now().UTC()).
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": task.ID}).
 		ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return errors.Wrap(err, "failed to build query while updating task")
 	}
 
 	_, err = r.db.Exec(query, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to execute update query")
+		return errors.Wrap(err, "failed to execute update query for task")
 	}
 
 	return nil
 }
 
-// DeleteTask updates a field 'deleted_at' of an existing task (soft delete)
+// DeleteTask soft deletes task by its id
+// It sets the deleted_at timestamp to the current time
 func (r *TaskRepository) DeleteTask(id int64) error {
 	query, args, err := r.sb.Update("tasks").
 		Set("deleted_at", time.Now().UTC()).
@@ -112,12 +125,12 @@ func (r *TaskRepository) DeleteTask(id int64) error {
 		Where(squirrel.Eq{"id": id}).
 		ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return errors.Wrap(err, "failed to build query while soft deleting task")
 	}
 
 	_, err = r.db.Exec(query, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to execute update query")
+		return errors.Wrap(err, "failed to execute soft delete query for task")
 	}
 
 	return nil
