@@ -17,30 +17,48 @@ type DBConfig struct {
 	SSLMode      string
 	MaxOpenConns int
 	MaxIdleConns int
-	MaxLifetime  int
+	MaxLifetime  time.Duration
+	MaxRetries   int
 }
 
 // NewDB initializes and returns a sqlx.DB instance
 func NewDB(cfg *DBConfig) (*sqlx.DB, error) {
-	// Build the connection string
+	var err error
+
+	// build the connection string
 	dsn := fmt.Sprintf(
 		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
 		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.DbName, cfg.SSLMode,
 	)
 
-	// Initialize the connection
+	// initialize the connection
 	db, err := sqlx.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	// Configure connection pool
+	// configure connection pool
 	db.SetMaxOpenConns(cfg.MaxOpenConns)
 	db.SetMaxIdleConns(cfg.MaxIdleConns)
-	db.SetConnMaxLifetime(time.Duration(cfg.MaxLifetime) * time.Second)
+	db.SetConnMaxLifetime(cfg.MaxLifetime)
 
-	// Test the connection
+	// test the connection
 	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	// test the connection with retries
+	for retries := 0; retries < cfg.MaxRetries; retries++ {
+		err = db.Ping()
+
+		if err == nil {
+			break
+		}
+
+		time.Sleep(3 * time.Second)
+	}
+
+	if err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 

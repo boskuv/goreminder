@@ -15,15 +15,16 @@ type Configuration struct {
 }
 
 type DatabaseConfiguration struct {
-	Driver       string
-	Dbname       string
-	Username     string // TODO: simplify to User
-	Password     string
-	Host         string
-	Port         string
-	MaxLifetime  int
-	MaxOpenConns int
-	MaxIdleConns int
+	Driver          string
+	Dbname          string
+	Username        string // TODO: simplify to User
+	Password        string
+	Host            string
+	Port            string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime string //`yaml:"conn_max_lifetime" env:"POSTGRES_CONN_MAX_LIFETIME"`
+	MaxRetries      int    //`yaml:"max_retries" env:"MAX_RETRIES"`
 }
 
 type ProducerConfiguration struct {
