@@ -12,7 +12,7 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 	{
 		// Task routes
 		api.POST("/tasks", taskHandler.CreateTask)
-		api.POST("/tasks/schedule", taskHandler.ScheduleTask)
+		//api.POST("/tasks/schedule", taskHandler.ScheduleTask)
 		api.GET("/tasks/:id", taskHandler.GetTask) // TODO: task_id
 		api.GET("/users/:user_id/tasks", taskHandler.GetUserTasks)
 		api.PUT("/tasks/:id", taskHandler.UpdateTask)

@@ -1,11 +1,11 @@
 package service
 
 import (
-	"time"
-
+	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/repository"
 	"github.com/boskuv/goreminder/pkg/queue"
+
 	"github.com/pkg/errors"
 )
 
@@ -27,63 +27,78 @@ func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.User
 	}
 }
 
-// CreateTask creates a new task
+// CreateTask implements BL of adding new task
 func (s *TaskService) CreateTask(task *models.Task) (int64, error) {
-	// Check if the user exists
-	user, err := s.UserRepo.GetUserByID(task.UserID)
+	// check if user exists
+	_, err := s.UserRepo.GetUserByID(task.UserID)
 	if err != nil {
-		return 0, err
+		if errors.Is(err, errs.ErrNotFound) {
+			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
+		}
+
+		return 0, errors.WithStack(err)
 	}
 
-	if user == nil {
-		return 0, errors.WithStack(errors.Errorf("user with ID %d does not exist", task.UserID))
+	if task.MessengerRelatedUserID != nil {
+
+		// check if messenger related user exists
+		_, err := s.MessengerRepo.GetUserID("")
+		if err != nil {
+			if errors.Is(err, errs.ErrNotFound) {
+				err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
+			}
+
+			return 0, errors.WithStack(err)
+		}
 	}
 
-	// Set default values
-	task.Status = "pending"
-	task.CreatedAt = time.Now() // TODO: time format
-
-	// Save the task
 	taskID, err := s.TaskRepo.CreateTask(task)
 	if err != nil {
-		return 0, err
+		return 0, errors.WithStack(err)
 	}
 
 	return taskID, nil
 }
 
-// GetTask retrieves a task by its ID
+// GetTask implements BL of retrieving existing task by its id
 func (s *TaskService) GetTask(taskID int64) (*models.Task, error) {
 	task, err := s.TaskRepo.GetTaskByID(taskID)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return task, nil
 }
 
-// GetUserTasks retrieves tasks by user ID
+// GetUserTasks implements BL of retrieving existing tasks by user id
 func (s *TaskService) GetUserTasks(userID int64) ([]*models.Task, error) {
+	// check if user exists
+	_, err := s.UserRepo.GetUserByID(userID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
+		}
+
+		return nil, errors.WithStack(err)
+	}
+
 	tasks, err := s.TaskRepo.GetTasksByUserID(userID)
 	if err != nil {
-		return nil, err
-	}
-	if tasks == nil {
-		return nil, errors.WithStack(errors.Errorf("tasks for user ID %d do not exist", userID))
+		return nil, errors.WithStack(err)
 	}
 
 	return tasks, nil
 }
 
-// UpdateTask retrieves an existing task by its ID and updates it
+// UpdateTask implements BL of updating task by id
 func (s *TaskService) UpdateTask(taskID int64, updateRequest *models.TaskUpdateRequest) (*models.Task, error) {
-	// Check if the task exists
+	// check if the task exists
 	task, err := s.TaskRepo.GetTaskByID(taskID)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
-	// Update the task fields (partial update)
+	// update the task fields (partial update)
 	if updateRequest.Title != nil {
 		task.Title = *updateRequest.Title
 	}
@@ -97,67 +112,66 @@ func (s *TaskService) UpdateTask(taskID int64, updateRequest *models.TaskUpdateR
 		task.DueDate = *updateRequest.DueDate
 	}
 
-	// Save the updated task
 	err = s.TaskRepo.UpdateTask(task)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return task, nil
 }
 
-// DeleteTask deletes a task by its ID (soft delete)
+// DeleteTask implements BL of soft deleting task by id
 func (s *TaskService) DeleteTask(taskID int64) error {
 	_, err := s.TaskRepo.GetTaskByID(taskID)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	err = s.TaskRepo.DeleteTask(taskID)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	return nil
 }
 
 // ScheduleTask sends a task to queue for interacting with scheduling service
-func (s *TaskService) ScheduleTask(scheduledTask *models.ScheduledTask) error {
-	// Check if the task exists
-	task, err := s.TaskRepo.GetTaskByID(scheduledTask.TaskID)
-	if err != nil {
-		return err
-	}
+// func (s *TaskService) ScheduleTask(scheduledTask *models.ScheduledTask) error {
+// 	// Check if the task exists
+// 	task, err := s.TaskRepo.GetTaskByID(scheduledTask.TaskID)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	if task == nil {
-		return errors.WithStack(errors.Errorf("task with ID %d does not exist", scheduledTask.TaskID))
-	}
+// 	if task == nil {
+// 		return errors.WithStack(errors.Errorf("task with ID %d does not exist", scheduledTask.TaskID))
+// 	}
 
-	if task.DueDate.IsZero() {
-		return errors.WithStack(errors.Errorf("task with ID %d has no DueDate value: it can't be nil", task.ID))
-	}
+// 	if task.DueDate.IsZero() {
+// 		return errors.WithStack(errors.Errorf("task with ID %d has no DueDate value: it can't be nil", task.ID))
+// 	}
 
-	// messengerID, err := s.MessengerRepo.GetMessengerIDByName(scheduledTask.MessengerName)
-	// if messengerID == 0 { // TODO: nil instead of 0
-	// 	return errors.WithStack(errors.Errorf("messenger with name %s does not exist", scheduledTask.MessengerName))
-	// }
+// 	// messengerID, err := s.MessengerRepo.GetMessengerIDByName(scheduledTask.MessengerName)
+// 	// if messengerID == 0 { // TODO: nil instead of 0
+// 	// 	return errors.WithStack(errors.Errorf("messenger with name %s does not exist", scheduledTask.MessengerName))
+// 	// }
 
-	// s.MessengerRepo.GetMessengerRelatedUser() // TODO: resolve it somehow so that we dont have a need to pass ChatID in scheduledTask
+// 	// s.MessengerRepo.GetMessengerRelatedUser() // TODO: resolve it somehow so that we dont have a need to pass ChatID in scheduledTask
 
-	// Send the task to queue
-	taskQueueMessage := map[string]interface{}{
-		"task": scheduledTask.JobName,
-		"args": []interface{}{scheduledTask.MessengerName, scheduledTask.ChatID, task.ID, task.Title, task.Description, task.DueDate},
-	}
+// 	// Send the task to queue
+// 	taskQueueMessage := map[string]interface{}{
+// 		"task": scheduledTask.JobName,
+// 		"args": []interface{}{scheduledTask.MessengerName, scheduledTask.ChatID, task.ID, task.Title, task.Description, task.DueDate},
+// 	}
 
-	err = s.producer.Publish(taskQueueMessage)
-	if err != nil {
-		// TODO: retry | failed to publish message: Exception (504) Reason: \"channel/connection is not open\"
-		return errors.WithStack(errors.Errorf("can't publish message %v to rabbitmq: %s",
-			taskQueueMessage,
-			err,
-		))
-	}
+// 	err = s.producer.Publish(taskQueueMessage)
+// 	if err != nil {
+// 		// TODO: retry | failed to publish message: Exception (504) Reason: \"channel/connection is not open\"
+// 		return errors.WithStack(errors.Errorf("can't publish message %v to rabbitmq: %s",
+// 			taskQueueMessage,
+// 			err,
+// 		))
+// 	}
 
-	return nil
-}
+// 	return nil
+// }

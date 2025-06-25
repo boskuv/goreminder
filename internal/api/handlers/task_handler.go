@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -8,21 +9,22 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
+	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/service"
 )
 
 // TaskHandler handles task-related HTTP requests
 type TaskHandler struct {
-	Logger      zerolog.Logger // TODO: lowercase
-	TaskService *service.TaskService
+	logger      zerolog.Logger
+	taskService *service.TaskService
 }
 
 // NewTaskHandler creates a new TaskHandler
 func NewTaskHandler(logger zerolog.Logger, taskService *service.TaskService) *TaskHandler {
 	return &TaskHandler{
-		Logger:      logger,
-		TaskService: taskService,
+		logger:      logger,
+		taskService: taskService,
 	}
 }
 
@@ -33,25 +35,33 @@ func NewTaskHandler(logger zerolog.Logger, taskService *service.TaskService) *Ta
 // @Produce json
 // @Param task body models.Task true "Task to create"
 // @Success 201 {object} map[string]int64
-// @Failure 400 {object} models.APIError
-// @Failure 500 {object} models.APIError
+// @Failure 422 {object} map[string]string
+// @Failure 500 {object} map[string]string
 // @Router /api/v1/tasks [post]
 func (h *TaskHandler) CreateTask(c *gin.Context) {
-	var task models.Task
+	var task models.Task // TODO: separate struct
 	if err := c.ShouldBindJSON(&task); err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("Error while processing request with task struct parameter")
-		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
+		// h.logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("error while processing request with task struct parameter")
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	taskID, err := h.TaskService.CreateTask(&task)
+	taskID, err := h.taskService.CreateTask(&task)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("Error while creating a task")
-		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		h.logger.Error().Stack().Err(err).Msg("error while adding new task")
+
+		if errors.Is(err, errs.ErrUnprocessableEntity) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"task_id": taskID})
+	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("task with id `%d` was successfully added", taskID)})
 }
 
 // @Summary Get task by ID
@@ -60,21 +70,29 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Task ID"
 // @Success 200 {object} models.Task
-// @Failure 400 {object} models.APIError
-// @Failure 500 {object} models.APIError
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
 // @Router /api/v1/tasks/{id} [get]
 func (h *TaskHandler) GetTask(c *gin.Context) {
 	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("Error while processing request with id parameter")
-		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid task ID", http.StatusBadRequest))
+		// h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("error while processing request with id parameter")
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	task, err := h.TaskService.GetTask(taskID)
+	task, err := h.taskService.GetTask(taskID)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("Error while getting a task by its id")
-		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		h.logger.Error().Stack().Err(err).Msg("error while getting task by its id")
+
+		if errors.Is(err, errs.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": fmt.Sprintf("task with id `%d` not found", taskID),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -87,21 +105,28 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 // @Produce json
 // @Param user_id path int true "User ID"
 // @Success 200 {object} []models.Task
-// @Failure 400 {object} models.APIError
-// @Failure 500 {object} models.APIError
+// @Failure 422 {object} map[string]string
+// @Failure 500 {object} map[string]string
 // @Router /api/v1/users/{user_id}/tasks [get]
 func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
 	if err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("Error while processing request with userID parameter")
-		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid user ID", http.StatusBadRequest))
+		// h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("error while processing request with userID parameter")
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	tasks, err := h.TaskService.GetUserTasks(userID)
+	tasks, err := h.taskService.GetUserTasks(userID)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("Error while getting tasks by userID parameter")
-		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		// h.logger.Error().Stack().Err(err).Msg("error while getting tasks by userID parameter")
+		if errors.Is(err, errs.ErrUnprocessableEntity) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error": fmt.Sprintf("user with id `%d` not found", userID),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -116,29 +141,43 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 // @Param id path int true "Task ID"
 // @Param task body models.TaskUpdateRequest true "Task update details"
 // @Success 200 {object} models.Task
-// @Failure 400 {object} models.APIError
-// @Failure 404 {object} models.APIError
-// @Failure 500 {object} models.APIError
+// @Failure 404 {object} map[string]string
+// @Failure 422 {object} map[string]string
+// @Failure 500 {object} map[string]string
 // @Router /api/v1/tasks/{id} [put]
 func (h *TaskHandler) UpdateTask(c *gin.Context) {
 	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse taskID")).Msg("Error while processing request with taskID parameter")
-		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid task ID", http.StatusBadRequest))
+		// h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse taskID")).Msg("error while processing request with taskID parameter")
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	var taskUpdateRequest models.TaskUpdateRequest
 	if err := c.ShouldBindJSON(&taskUpdateRequest); err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("Error while processing request with taskUpdateRequest struct parameter")
-		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
+		// h.logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("error while processing request with taskUpdateRequest struct parameter")
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	updatedTask, err := h.TaskService.UpdateTask(taskID, &taskUpdateRequest)
+	updatedTask, err := h.taskService.UpdateTask(taskID, &taskUpdateRequest)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("Error while updating a task")
-		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		h.logger.Error().Stack().Err(err).Msg("error while updating task")
+
+		if errors.Is(err, errs.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": fmt.Sprintf("task with id `%d` not found", taskID),
+			})
+			return
+		}
+		if errors.Is(err, errs.ErrUnprocessableEntity) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -151,54 +190,61 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Task ID"
-// @Success 204 {object} models.APIError
-// @Failure 400 {object} models.APIError
-// @Failure 404 {object} models.APIError
-// @Failure 500 {object} models.APIError
+// @Success 204 {object} nil
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
 // @Router /api/v1/tasks/{id} [delete]
 func (h *TaskHandler) DeleteTask(c *gin.Context) {
 	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse taskID")).Msg("Error while processing request with taskID parameter")
-		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid task ID", http.StatusBadRequest))
+		// TODO: wrap?
+		h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse taskID")).Msg("error while processing request with taskID parameter")
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	err = h.TaskService.DeleteTask(taskID)
+	err = h.taskService.DeleteTask(taskID)
 	if err != nil {
+		h.logger.Error().Stack().Err(err).Msg("error while soft deleting task")
 
-		h.Logger.Error().Stack().Err(err).Msg("Error while deleting a task")
-		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		if errors.Is(err, errs.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": fmt.Sprintf("task with id `%d` not found", taskID),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.Status(http.StatusNoContent) // 204 No Content status for successful deletion
+	c.Status(http.StatusNoContent)
 }
 
-// @Summary Schedule a new task
-// @Description Schedule a task by sending it to queue
-// @Tags Tasks
-// @Accept json
-// @Produce json
-// @Param task body models.ScheduledTask true "Task to schedule"
-// @Success 200 {object} map[string]string
-// @Failure 400 {object} models.APIError
-// @Failure 500 {object} models.APIError
-// @Router /api/v1/tasks/schedule [post]
-func (h *TaskHandler) ScheduleTask(c *gin.Context) {
-	var scheduledTask models.ScheduledTask
-	if err := c.ShouldBindJSON(&scheduledTask); err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("Error while processing request with task struct parameter")
-		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
-		return
-	}
+// // @Summary Schedule a new task
+// // @Description Schedule a task by sending it to queue
+// // @Tags Tasks
+// // @Accept json
+// // @Produce json
+// // @Param task body models.ScheduledTask true "Task to schedule"
+// // @Success 200 {object} map[string]string
+// // @Failure 400 {object} map[string]string
+// // @Failure 500 {object} map[string]string
+// // @Router /api/v1/tasks/schedule [post]
+// func (h *TaskHandler) ScheduleTask(c *gin.Context) {
+// 	var scheduledTask models.ScheduledTask
+// 	if err := c.ShouldBindJSON(&scheduledTask); err != nil {
+// 		h.logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("error while processing request with task struct parameter")
+// 		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
+// 		return
+// 	}
 
-	err := h.TaskService.ScheduleTask(&scheduledTask)
-	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("Error while scheduling a task")
-		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
-		return
-	}
+// 	err := h.taskService.ScheduleTask(&scheduledTask)
+// 	if err != nil {
+// 		h.logger.Error().Stack().Err(err).Msg("error while scheduling a task")
+// 		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+// 		return
+// 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Task scheduled successfully"})
-}
+// 	c.JSON(http.StatusOK, gin.H{"message": "Task scheduled successfully"})
+// }
