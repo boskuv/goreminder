@@ -12,22 +12,30 @@ import (
 	"github.com/boskuv/goreminder/internal/models"
 )
 
-type TaskRepository struct {
+type TaskRepository interface {
+	CreateTask(task *models.Task) (int64, error)
+	GetTaskByID(id int64) (*models.Task, error)
+	GetTasksByUserID(userID int64) ([]*models.Task, error)
+	UpdateTask(task *models.Task) error
+	DeleteTask(id int64) error
+}
+
+type taskRepository struct {
 	db *sqlx.DB
 	sb squirrel.StatementBuilderType
 }
 
-func NewTaskRepository(db *sqlx.DB) *TaskRepository {
-	return &TaskRepository{
+func NewTaskRepository(db *sqlx.DB) TaskRepository {
+	return &taskRepository{
 		db: db,
-		sb: squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar), // Use PostgreSQL dollar placeholders
+		sb: squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar),
 	}
 }
 
 // CreateTask inserts a new task into the database
 // default values are preset for: id, created_at, status[pending] (database-level)
 // nil values are preset for: updated_at, deleted_at (database-level)
-func (r *TaskRepository) CreateTask(task *models.Task) (int64, error) {
+func (r *taskRepository) CreateTask(task *models.Task) (int64, error) {
 	query, args, err := r.sb.Insert("tasks").
 		Columns("title", "description", "user_id", "messenger_related_user_id", "due_date").          // status, deleted_at
 		Values(task.Title, task.Description, task.UserID, task.MessengerRelatedUserID, task.DueDate). // task.Status,
@@ -48,7 +56,7 @@ func (r *TaskRepository) CreateTask(task *models.Task) (int64, error) {
 
 // GetTaskByID retrieves a task by its ID
 // Returns task entity and an error if occurred
-func (r *TaskRepository) GetTaskByID(id int64) (*models.Task, error) {
+func (r *taskRepository) GetTaskByID(id int64) (*models.Task, error) {
 	query, args, err := r.sb.Select("id", "title", "description", "user_id", "due_date", "status", "created_at").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
@@ -73,7 +81,7 @@ func (r *TaskRepository) GetTaskByID(id int64) (*models.Task, error) {
 
 // GetTasksByUserID retrieves a task by user ID
 // Returns task entities for passed user ID and an error if occurred
-func (r *TaskRepository) GetTasksByUserID(userID int64) ([]*models.Task, error) {
+func (r *taskRepository) GetTasksByUserID(userID int64) ([]*models.Task, error) {
 	query, args, err := r.sb.Select("title", "description", "user_id", "due_date", "status", "created_at").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
@@ -94,7 +102,7 @@ func (r *TaskRepository) GetTasksByUserID(userID int64) ([]*models.Task, error) 
 
 // UpdateTask updates task with not nil fields passed in request
 // It sets the updated_at to the current time
-func (r *TaskRepository) UpdateTask(task *models.Task) error {
+func (r *taskRepository) UpdateTask(task *models.Task) error {
 	query, args, err := r.sb.Update("tasks").
 		Set("title", task.Title).
 		Set("description", task.Description).
@@ -118,7 +126,7 @@ func (r *TaskRepository) UpdateTask(task *models.Task) error {
 
 // DeleteTask soft deletes task by its id
 // It sets the deleted_at timestamp to the current time
-func (r *TaskRepository) DeleteTask(id int64) error {
+func (r *taskRepository) DeleteTask(id int64) error {
 	query, args, err := r.sb.Update("tasks").
 		Set("deleted_at", time.Now().UTC()).
 		Where(squirrel.Eq{"deleted_at": nil}).
