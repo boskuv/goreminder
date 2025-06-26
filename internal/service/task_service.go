@@ -11,18 +11,18 @@ import (
 
 // TaskService defines methods for task-related business logic
 type TaskService struct {
-	TaskRepo      repository.TaskRepository // TODO: case
-	UserRepo      repository.UserRepository
-	MessengerRepo repository.MessengerRepository
+	taskRepo      repository.TaskRepository
+	userRepo      repository.UserRepository
+	messengerRepo repository.MessengerRepository
 	producer      *queue.Producer
 }
 
 // NewTaskService creates a new TaskService
 func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, producer *queue.Producer) *TaskService {
 	return &TaskService{
-		TaskRepo:      taskRepo,
-		UserRepo:      userRepo,
-		MessengerRepo: messengerRepo,
+		taskRepo:      taskRepo,
+		userRepo:      userRepo,
+		messengerRepo: messengerRepo,
 		producer:      producer,
 	}
 }
@@ -30,7 +30,7 @@ func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.User
 // CreateTask implements BL of adding new task
 func (s *TaskService) CreateTask(task *models.Task) (int64, error) {
 	// check if user exists
-	_, err := s.UserRepo.GetUserByID(task.UserID)
+	_, err := s.userRepo.GetUserByID(task.UserID)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
@@ -42,7 +42,7 @@ func (s *TaskService) CreateTask(task *models.Task) (int64, error) {
 	if task.MessengerRelatedUserID != nil {
 
 		// check if messenger related user exists
-		_, err := s.MessengerRepo.GetUserID("")
+		_, err := s.messengerRepo.GetUserID("")
 		if err != nil {
 			if errors.Is(err, errs.ErrNotFound) {
 				err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
@@ -52,7 +52,7 @@ func (s *TaskService) CreateTask(task *models.Task) (int64, error) {
 		}
 	}
 
-	taskID, err := s.TaskRepo.CreateTask(task)
+	taskID, err := s.taskRepo.CreateTask(task)
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}
@@ -62,7 +62,7 @@ func (s *TaskService) CreateTask(task *models.Task) (int64, error) {
 
 // GetTask implements BL of retrieving existing task by its id
 func (s *TaskService) GetTask(taskID int64) (*models.Task, error) {
-	task, err := s.TaskRepo.GetTaskByID(taskID)
+	task, err := s.taskRepo.GetTaskByID(taskID)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -73,7 +73,7 @@ func (s *TaskService) GetTask(taskID int64) (*models.Task, error) {
 // GetUserTasks implements BL of retrieving existing tasks by user id
 func (s *TaskService) GetUserTasks(userID int64) ([]*models.Task, error) {
 	// check if user exists
-	_, err := s.UserRepo.GetUserByID(userID)
+	_, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
@@ -82,7 +82,7 @@ func (s *TaskService) GetUserTasks(userID int64) ([]*models.Task, error) {
 		return nil, errors.WithStack(err)
 	}
 
-	tasks, err := s.TaskRepo.GetTasksByUserID(userID)
+	tasks, err := s.taskRepo.GetTasksByUserID(userID)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -93,7 +93,7 @@ func (s *TaskService) GetUserTasks(userID int64) ([]*models.Task, error) {
 // UpdateTask implements BL of updating task by id
 func (s *TaskService) UpdateTask(taskID int64, updateRequest *models.TaskUpdateRequest) (*models.Task, error) {
 	// check if the task exists
-	task, err := s.TaskRepo.GetTaskByID(taskID)
+	task, err := s.taskRepo.GetTaskByID(taskID)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -112,7 +112,7 @@ func (s *TaskService) UpdateTask(taskID int64, updateRequest *models.TaskUpdateR
 		task.DueDate = *updateRequest.DueDate
 	}
 
-	err = s.TaskRepo.UpdateTask(task)
+	err = s.taskRepo.UpdateTask(task)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -122,12 +122,12 @@ func (s *TaskService) UpdateTask(taskID int64, updateRequest *models.TaskUpdateR
 
 // DeleteTask implements BL of soft deleting task by id
 func (s *TaskService) DeleteTask(taskID int64) error {
-	_, err := s.TaskRepo.GetTaskByID(taskID)
+	_, err := s.taskRepo.GetTaskByID(taskID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	err = s.TaskRepo.DeleteTask(taskID)
+	err = s.taskRepo.DeleteTask(taskID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -138,7 +138,7 @@ func (s *TaskService) DeleteTask(taskID int64) error {
 // ScheduleTask sends a task to queue for interacting with scheduling service
 // func (s *TaskService) ScheduleTask(scheduledTask *models.ScheduledTask) error {
 // 	// Check if the task exists
-// 	task, err := s.TaskRepo.GetTaskByID(scheduledTask.TaskID)
+// 	task, err := s.taskRepo.GetTaskByID(scheduledTask.TaskID)
 // 	if err != nil {
 // 		return err
 // 	}
@@ -151,12 +151,12 @@ func (s *TaskService) DeleteTask(taskID int64) error {
 // 		return errors.WithStack(errors.Errorf("task with ID %d has no DueDate value: it can't be nil", task.ID))
 // 	}
 
-// 	// messengerID, err := s.MessengerRepo.GetMessengerIDByName(scheduledTask.MessengerName)
+// 	// messengerID, err := s.messengerRepo.GetMessengerIDByName(scheduledTask.MessengerName)
 // 	// if messengerID == 0 { // TODO: nil instead of 0
 // 	// 	return errors.WithStack(errors.Errorf("messenger with name %s does not exist", scheduledTask.MessengerName))
 // 	// }
 
-// 	// s.MessengerRepo.GetMessengerRelatedUser() // TODO: resolve it somehow so that we dont have a need to pass ChatID in scheduledTask
+// 	// s.messengerRepo.GetMessengerRelatedUser() // TODO: resolve it somehow so that we dont have a need to pass ChatID in scheduledTask
 
 // 	// Send the task to queue
 // 	taskQueueMessage := map[string]interface{}{
