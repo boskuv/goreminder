@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
+	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/service"
 	"github.com/gin-gonic/gin"
@@ -11,46 +13,47 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// UserHandler handles user-related HTTP requests
 type UserHandler struct {
-	Logger      zerolog.Logger
+	logger      zerolog.Logger
 	userService *service.UserService
 }
 
+// NewUserHandler creates a new UserHandler
 func NewUserHandler(logger zerolog.Logger, userService *service.UserService) *UserHandler {
 	return &UserHandler{
-		Logger:      logger,
+		logger:      logger,
 		userService: userService,
 	}
 }
 
-// CreateUser handles creating a new user
 // @Summary Create a new user
 // @Description Creates a new user in the system
 // @Tags Users
 // @Accept json
 // @Produce json
-// @Param user body models.User true "User data"
+// @Param user body models.User true "User to create"
 // @Success 201 {object} map[string]int64
-// @Failure 400 {object} models.APIError
-// @Failure 500 {object} models.APIError
-// @Example { "id": 1, "name": "John Doe", "email": "john.doe@example.com", "password": "password123", "created_at": "2024-11-27T10:00:00Z" }
+// @Failure 500 {object} map[string]string
 // @Router /api/v1/users [post]
 func (h *UserHandler) CreateUser(c *gin.Context) {
 	var user models.User
 	if err := c.ShouldBindJSON(&user); err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "invalid request payload")).Msg("Error while processing request with user struct parameter")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		// h.logger.Error().Stack().Err(errors.Wrap(err, "invalid request payload")).Msg("Error while processing request with user struct parameter")
+		// c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	createdUser, err := h.userService.CreateUser(&user)
+	userID, err := h.userService.CreateUser(&user)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("Error while creating user")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+		h.logger.Error().Stack().Err(err).Msg("error while adding new user")
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusCreated, createdUser)
+	c.JSON(http.StatusCreated, userID)
 }
 
 // @Summary Get user by userID
@@ -59,21 +62,30 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 // @Produce json
 // @Param user_id path int true "User ID"
 // @Success 200 {object} models.User
-// @Failure 400 {object} models.APIError
-// @Failure 500 {object} models.APIError
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
 // @Router /api/v1/users/{user_id} [get]
 func (h *UserHandler) GetUser(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
 	if err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("Error while processing request with userID parameter")
-		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid user ID", http.StatusBadRequest))
+		// h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("Error while processing request with userID parameter")
+		// c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid user ID", http.StatusBadRequest))
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	user, err := h.userService.GetUser(userID)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("Error while getting user by userID parameter")
-		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		h.logger.Error().Stack().Err(err).Msg("error while getting user by its id")
+
+		if errors.Is(err, errs.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": fmt.Sprintf("user with id `%d` not found", userID),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -81,37 +93,52 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 }
 
 // @Summary Update a user
-// @Description Updates a user by its ID
+// @Description Updates a user by ID
 // @Tags Users
 // @Accept json
 // @Produce json
 // @Param user_id path int true "User ID"
 // @Param user body models.UserUpdateRequest true "User update details"
 // @Success 200 {object} models.User
-// @Failure 400 {object} models.APIError
-// @Failure 404 {object} models.APIError
-// @Failure 500 {object} models.APIError
+// @Failure 404 {object} map[string]string
+// @Failure 422 {object} map[string]string
+// @Failure 500 {object} map[string]string
 // @Router /api/v1/users/{user_id} [put]
 func (h *UserHandler) UpdateUser(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
 	if err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("Error while processing request with userID parameter")
-		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid user ID", http.StatusBadRequest))
+		// h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("Error while processing request with userID parameter")
+		// c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid user ID", http.StatusBadRequest))
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	var userUpdateRequest models.UserUpdateRequest
 	if err := c.ShouldBindJSON(&userUpdateRequest); err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("Error while processing request with userUpdateRequest struct parameter")
-		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
+		// h.logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("Error while processing request with userUpdateRequest struct parameter")
+		// c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	updatedUser, err := h.userService.UpdateUser(userID, &userUpdateRequest)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("Error while updating a user")
-		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
-		return
+		h.logger.Error().Stack().Err(err).Msg("error while updating user")
+
+		if errors.Is(err, errs.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": fmt.Sprintf("user with id `%d` not found", userID),
+			})
+			return
+		}
+		if errors.Is(err, errs.ErrUnprocessableEntity) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
 
 	c.JSON(http.StatusOK, updatedUser)
@@ -123,26 +150,33 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param user_id path int true "User ID"
-// @Success 204 {object} models.APIError
-// @Failure 400 {object} models.APIError
-// @Failure 404 {object} models.APIError
-// @Failure 500 {object} models.APIError
+// @Success 204 {object} nil
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
 // @Router /api/v1/users/{user_id} [delete]
 func (h *UserHandler) DeleteUser(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
 	if err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("Error while processing request with userID parameter")
-		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid user ID", http.StatusBadRequest))
+		// TODO: wrap?
+		h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("Error while processing request with userID parameter")
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	err = h.userService.DeleteUser(userID)
 	if err != nil {
+		h.logger.Error().Stack().Err(err).Msg("error while soft deleting user")
 
-		h.Logger.Error().Stack().Err(err).Msg("Error while deleting a user")
-		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		if errors.Is(err, errs.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": fmt.Sprintf("user with id `%d` not found", userID),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.Status(http.StatusNoContent) // 204 No Content status for successful deletion
+	c.Status(http.StatusNoContent)
 }
