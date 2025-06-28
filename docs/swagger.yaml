@@ -1,15 +1,7 @@
 definitions:
-  models.APIError:
-    properties:
-      code:
-        type: integer
-      message:
-        type: string
-    type: object
   models.Messenger:
     properties:
       created_at:
-        description: 'TODO: json:"-"`'
         type: string
       name:
         type: string
@@ -19,35 +11,14 @@ definitions:
       chat_id:
         type: string
       created_at:
-        description: 'TODO: json:"-"`'
         type: string
       messenger_id:
         type: integer
       messenger_user_id:
         type: string
       updated_at:
-        description: 'TODO: json:"-"`'
         type: string
       user_id:
-        type: integer
-    type: object
-  models.ScheduledTask:
-    properties:
-      action:
-        example: add
-        type: string
-      chat_id:
-        type: string
-      job_name:
-        example: tasks.example_task
-        type: string
-      messenger_name:
-        example: telegram
-        type: string
-      queue_name:
-        example: celery
-        type: string
-      task_id:
         type: integer
     type: object
   models.Task:
@@ -84,13 +55,9 @@ definitions:
   models.User:
     properties:
       createdAt:
-        description: 'TODO: json:"-"`'
         type: string
       email:
         type: string
-      id:
-        description: 'TODO: json:"-"`'
-        type: integer
       name:
         type: string
       passwordHash:
@@ -138,14 +105,24 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.MessengerRelatedUser'
-        "400":
-          description: Bad Request
+        "404":
+          description: Not Found
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
       summary: Get messenger-related user by chatID, messengerUserID, userID and messengerID
       tags:
       - Messengers
@@ -169,14 +146,18 @@ paths:
             additionalProperties:
               type: integer
             type: object
-        "400":
-          description: Bad Request
+        "422":
+          description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
       summary: Сreate a new messenger-related user
       tags:
       - Messengers
@@ -198,14 +179,18 @@ paths:
             additionalProperties:
               type: integer
             type: object
-        "400":
-          description: Bad Request
+        "404":
+          description: Not Found
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
       summary: Get a userID by messengerUserID
       tags:
       - Messengers
@@ -230,14 +215,12 @@ paths:
             additionalProperties:
               type: integer
             type: object
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/models.APIError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
       summary: Create a new messenger type
       tags:
       - Messengers
@@ -257,14 +240,18 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.Messenger'
-        "400":
-          description: Bad Request
+        "404":
+          description: Not Found
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
       summary: Get messenger by ID
       tags:
       - Messengers
@@ -283,17 +270,19 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties:
-              type: integer
-            type: object
-        "400":
-          description: Bad Request
+            $ref: '#/definitions/models.Messenger'
+        "404":
+          description: Not Found
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
       summary: Get messenger ID by name
       tags:
       - Messengers
@@ -318,14 +307,18 @@ paths:
             additionalProperties:
               type: integer
             type: object
-        "400":
-          description: Bad Request
+        "422":
+          description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
       summary: Create a new task
       tags:
       - Tasks
@@ -345,20 +338,18 @@ paths:
       responses:
         "204":
           description: No Content
-          schema:
-            $ref: '#/definitions/models.APIError'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/models.APIError'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
       summary: Soft delete a task
       tags:
       - Tasks
@@ -377,14 +368,18 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.Task'
-        "400":
-          description: Bad Request
+        "404":
+          description: Not Found
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
       summary: Get task by ID
       tags:
       - Tasks
@@ -411,51 +406,25 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.Task'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/models.APIError'
         "404":
           description: Not Found
-          schema:
-            $ref: '#/definitions/models.APIError'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/models.APIError'
-      summary: Update a task
-      tags:
-      - Tasks
-  /api/v1/tasks/schedule:
-    post:
-      consumes:
-      - application/json
-      description: Schedule a task by sending it to queue
-      parameters:
-      - description: Task to schedule
-        in: body
-        name: task
-        required: true
-        schema:
-          $ref: '#/definitions/models.ScheduledTask'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
           schema:
             additionalProperties:
               type: string
             type: object
-        "400":
-          description: Bad Request
+        "422":
+          description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.APIError'
-      summary: Schedule a new task
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update a task
       tags:
       - Tasks
   /api/v1/users:
@@ -464,7 +433,7 @@ paths:
       - application/json
       description: Creates a new user in the system
       parameters:
-      - description: User data
+      - description: User to create
         in: body
         name: user
         required: true
@@ -479,14 +448,12 @@ paths:
             additionalProperties:
               type: integer
             type: object
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/models.APIError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
       summary: Create a new user
       tags:
       - Users
@@ -506,20 +473,18 @@ paths:
       responses:
         "204":
           description: No Content
-          schema:
-            $ref: '#/definitions/models.APIError'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/models.APIError'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
       summary: Soft delete a user
       tags:
       - Users
@@ -538,21 +503,25 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.User'
-        "400":
-          description: Bad Request
+        "404":
+          description: Not Found
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
       summary: Get user by userID
       tags:
       - Users
     put:
       consumes:
       - application/json
-      description: Updates a user by its ID
+      description: Updates a user by ID
       parameters:
       - description: User ID
         in: path
@@ -572,18 +541,24 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.User'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/models.APIError'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
       summary: Update a user
       tags:
       - Users
@@ -605,14 +580,18 @@ paths:
             items:
               $ref: '#/definitions/models.Task'
             type: array
-        "400":
-          description: Bad Request
+        "422":
+          description: Unprocessable Entity
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/models.APIError'
+            additionalProperties:
+              type: string
+            type: object
       summary: Get all user's tasks by userID
       tags:
       - Tasks
