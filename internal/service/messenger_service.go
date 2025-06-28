@@ -1,90 +1,133 @@
 package service
 
 import (
+	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/repository"
 
 	"github.com/pkg/errors"
 )
 
-// MessengerService handles messenger-related business logic
+// MessengerService defines methods for messenger-related business logic
 type MessengerService struct {
 	messengerRepo repository.MessengerRepository
+	userRepo      repository.UserRepository
 }
 
 // NewMessengerService creates a new instance of MessengerService
-func NewMessengerService(messengerRepo repository.MessengerRepository) *MessengerService {
-	return &MessengerService{messengerRepo: messengerRepo}
+func NewMessengerService(messengerRepo repository.MessengerRepository, userRepo repository.UserRepository) *MessengerService {
+	return &MessengerService{messengerRepo: messengerRepo, userRepo: userRepo}
 }
 
-// CreateMessenger creates a new messenger in the system
+// CreateMessenger implements BL of adding new messenger
 func (s *MessengerService) CreateMessenger(messenger *models.Messenger) (int64, error) {
-	// Perform some validation before creating the messenger
+	// perform some validation before creating the messenger
 	if messenger.Name == "" {
 		return 0, errors.WithStack(errors.New("messenger data is incomplete"))
 	}
 
-	// Call the repository to insert the user into the database
 	messengerID, err := s.messengerRepo.CreateMessenger(messenger)
 	if err != nil {
-		return 0, err
+		return 0, errors.WithStack(err)
 	}
 
 	return messengerID, nil
 }
 
-// GetMessenger retrieves a messenger by its ID
+// GetMessenger implements BL of retrieving existing messenger by its id
 func (s *MessengerService) GetMessenger(messengerID int64) (*models.Messenger, error) {
 	messenger, err := s.messengerRepo.GetMessengerByID(messengerID)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return messenger, nil
 }
 
-// GetMessengerIDByName retrieves a messenger ID by its name
+// GetMessengerIDByName implements BL of retrieving existing messenger by its name
 func (s *MessengerService) GetMessengerIDByName(messengerName string) (int64, error) {
 	messengerID, err := s.messengerRepo.GetMessengerIDByName(messengerName)
 	if err != nil {
-		return 0, err
+		return 0, errors.WithStack(err)
 	}
 
 	return messengerID, nil
 }
 
-// CreateMessengerRelatedUser creates a new messenger-related user in the system
+// CreateMessengerRelatedUser implements BL of adding new messenger-related user
 func (s *MessengerService) CreateMessengerRelatedUser(messengerRelatedUser *models.MessengerRelatedUser) (int64, error) {
-	// Perform some validation before creating the messenger
-	// TODO: check if UserID and MessengerID exist
-	if messengerRelatedUser.MessengerUserID == "" && messengerRelatedUser.ChatID == "" && messengerRelatedUser.UserID == nil && messengerRelatedUser.MessengerID == nil {
+	// perform some validation before creating the messenger-related user
+	if messengerRelatedUser.MessengerUserID == "" || messengerRelatedUser.ChatID == "" || messengerRelatedUser.UserID == nil || messengerRelatedUser.MessengerID == nil {
 		return 0, errors.WithStack(errors.New("messenger_user data is incomplete"))
 	}
 
-	// Call the repository to insert the messenger-related user into the database
+	// check if user and messenger exist
+	_, err := s.userRepo.GetUserByID(*messengerRelatedUser.UserID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
+		}
+
+		return 0, errors.WithStack(err)
+	}
+
+	_, err = s.messengerRepo.GetMessengerByID(*messengerRelatedUser.MessengerID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
+		}
+
+		return 0, errors.WithStack(err)
+	}
+
 	messengerRelatedUserID, err := s.messengerRepo.CreateMessengerRelatedUser(messengerRelatedUser)
 	if err != nil {
-		return 0, err
+		return 0, errors.WithStack(err)
 	}
 
 	return messengerRelatedUserID, nil
 }
 
-// GetMessengerRelatedUser retrieves a messenger-related user by chatID, messengerUserID, userID and messengerIDs
+// GetMessengerRelatedUser implements BL of retrieving existing messenger-related user by chatID, messengerUserID, userID and messengerIDs
 func (s *MessengerService) GetMessengerRelatedUser(chatID string, messengerUserID string, userID *int64, messengerID *int64) (*models.MessengerRelatedUser, error) {
+	// check if user exists (only if userID is provided)
+	if userID != nil {
+		_, err := s.userRepo.GetUserByID(*userID)
+		if err != nil {
+			if errors.Is(err, errs.ErrNotFound) {
+				err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
+			}
+
+			return nil, errors.WithStack(err)
+		}
+	}
+
+	// check if messenger exists (only if messengerID is provided)
+	if messengerID != nil {
+		_, err := s.messengerRepo.GetMessengerByID(*messengerID)
+		if err != nil {
+			if errors.Is(err, errs.ErrNotFound) {
+				err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
+			}
+
+			return nil, errors.WithStack(err)
+		}
+	}
+
 	messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUser(chatID, messengerUserID, userID, messengerID)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return messengerRelatedUser, nil
 }
 
-// GetUserID retrieves a userID user by messengerUserID
+// GetUserID implements BL of retrieving existing user by messengerUserID
+// TODO: add messengerUD + messengerUserID 422
 func (s *MessengerService) GetUserID(messengerUserID string) (int64, error) {
 	userID, err := s.messengerRepo.GetUserID(messengerUserID)
 	if err != nil {
-		return 0, err
+		return 0, errors.WithStack(err)
 	}
 
 	return userID, nil
