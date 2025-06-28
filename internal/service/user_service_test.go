@@ -135,8 +135,3 @@ func TestUserService_DeleteUser(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
-
-// ptrString is a helper to get a pointer to a string value
-func ptrString(s string) *string {
-	return &s
-}
