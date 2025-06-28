@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -8,21 +9,22 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
+	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/service"
 )
 
-// MessengerHandler handles messenger-related HTTP requests
+// MessengerHandler handles user-related HTTP requests
 type MessengerHandler struct {
-	Logger           zerolog.Logger
-	MessengerService *service.MessengerService // TODO: capital letter?
+	logger           zerolog.Logger
+	messengerService *service.MessengerService
 }
 
 // NewMessengerHandler creates a new MessengerHandler
 func NewMessengerHandler(logger zerolog.Logger, messengerService *service.MessengerService) *MessengerHandler {
 	return &MessengerHandler{
-		Logger:           logger,
-		MessengerService: messengerService,
+		logger:           logger,
+		messengerService: messengerService,
 	}
 }
 
@@ -33,25 +35,26 @@ func NewMessengerHandler(logger zerolog.Logger, messengerService *service.Messen
 // @Produce json
 // @Param messenger body models.Messenger true "Messenger to create"
 // @Success 201 {object} map[string]int64
-// @Failure 400 {object} models.APIError
-// @Failure 500 {object} models.APIError
+// @Failure 500 {object} map[string]string
 // @Router /api/v1/messengers [post]
 func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
 	var messenger models.Messenger
 	if err := c.ShouldBindJSON(&messenger); err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("Error while processing request with messenger struct parameter")
-		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
+		//h.logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("Error while processing request with messenger struct parameter")
+		//c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	messengerID, err := h.MessengerService.CreateMessenger(&messenger)
+	messengerID, err := h.messengerService.CreateMessenger(&messenger)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("Error while creating a messenger type")
-		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		h.logger.Error().Stack().Err(err).Msg("error while adding new messenger type")
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"messenger_id": messengerID})
+	c.JSON(http.StatusCreated, messengerID)
 }
 
 // @Summary Get messenger by ID
@@ -60,21 +63,30 @@ func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Messenger ID"
 // @Success 200 {object} models.Messenger
-// @Failure 400 {object} models.APIError
-// @Failure 500 {object} models.APIError
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
 // @Router /api/v1/messengers/{messenger_id} [get]
 func (h *MessengerHandler) GetMessenger(c *gin.Context) {
 	messengerID, err := strconv.ParseInt(c.Param("messenger_id"), 10, 64)
 	if err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse messengerID")).Msg("Error while processing request with id parameter")
-		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid messenger ID", http.StatusBadRequest))
+		//h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse messengerID")).Msg("Error while processing request with id parameter")
+		//c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid messenger ID", http.StatusBadRequest))
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	messenger, err := h.MessengerService.GetMessenger(messengerID)
+	messenger, err := h.messengerService.GetMessenger(messengerID)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("Error while getting a messenger by its id")
-		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		h.logger.Error().Stack().Err(err).Msg("error while getting messenger by its id")
+
+		if errors.Is(err, errs.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": fmt.Sprintf("messenger with id `%d` not found", messengerID),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -86,17 +98,25 @@ func (h *MessengerHandler) GetMessenger(c *gin.Context) {
 // @Tags Messengers
 // @Produce json
 // @Param messenger_name path string true "Messenger name"
-// @Success 200 {object} map[string]int64
-// @Failure 400 {object} models.APIError
-// @Failure 500 {object} models.APIError
+// @Success 200 {object} models.Messenger
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
 // @Router /api/v1/messengers/by-name/{messenger_name} [get]
 func (h *MessengerHandler) GetMessengerIDByName(c *gin.Context) {
 	messengerName := c.Param("messenger_name")
 
-	messengerID, err := h.MessengerService.GetMessengerIDByName(messengerName)
+	messengerID, err := h.messengerService.GetMessengerIDByName(messengerName)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("Error while getting a messenger ID by its name")
-		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		h.logger.Error().Stack().Err(err).Msg("error while getting messenger by its name")
+
+		if errors.Is(err, errs.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": fmt.Sprintf("messenger with name `%s` not found", messengerName),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -110,25 +130,32 @@ func (h *MessengerHandler) GetMessengerIDByName(c *gin.Context) {
 // @Produce json
 // @Param messenger body models.MessengerRelatedUser true "MessengerRelatedUser to create"
 // @Success 201 {object} map[string]int64
-// @Failure 400 {object} models.APIError
-// @Failure 500 {object} models.APIError
+// @Failure 422 {object} map[string]string
+// @Failure 500 {object} map[string]string
 // @Router /api/v1/messengerRelatedUsers [post]
 func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
 	var messengerRelatedUser models.MessengerRelatedUser
 	if err := c.ShouldBindJSON(&messengerRelatedUser); err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("Error while processing request with messenger-related user struct parameter")
-		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
+		//h.logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("Error while processing request with messenger-related user struct parameter")
+		//c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	messengerRelatedUserID, err := h.MessengerService.CreateMessengerRelatedUser(&messengerRelatedUser)
+	messengerRelatedUserID, err := h.messengerService.CreateMessengerRelatedUser(&messengerRelatedUser)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("Error while creating a messenger-related user")
-		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		h.logger.Error().Stack().Err(err).Msg("error while creating a messenger-related user")
+
+		if errors.Is(err, errs.ErrUnprocessableEntity) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"messenger_related_user_id": messengerRelatedUserID})
+	c.JSON(http.StatusCreated, messengerRelatedUserID)
 }
 
 // @Summary Get messenger-related user by chatID, messengerUserID, userID and messengerID
@@ -140,8 +167,9 @@ func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
 // @Param user_id query int false "User ID"
 // @Param messenger_id query int false "Messenger ID"
 // @Success 200 {object} models.MessengerRelatedUser
-// @Failure 400 {object} models.APIError
-// @Failure 500 {object} models.APIError
+// @Failure 404 {object} map[string]string
+// @Failure 422 {object} map[string]string
+// @Failure 500 {object} map[string]string
 // @Router /api/v1/messengerRelatedUsers [get]
 func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 	chatID := c.Query("chat_id")
@@ -149,24 +177,36 @@ func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 
 	userIDQuery, err := strconv.ParseInt(c.Query("user_id"), 10, 64)
 	if err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("Error while processing request with id parameter")
-		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid user ID", http.StatusBadRequest))
+		//h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("Error while processing request with id parameter")
+		//c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid user ID", http.StatusBadRequest))
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	userID := &userIDQuery
 
 	messengerIDQuery, err := strconv.ParseInt(c.Query("messenger_id"), 10, 64)
 	if err != nil {
-		h.Logger.Error().Stack().Err(errors.Wrap(err, "failed to parse messengerID")).Msg("Error while processing request with id parameter")
-		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid messenger ID", http.StatusBadRequest))
+		//h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse messengerID")).Msg("Error while processing request with id parameter")
+		//c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid messenger ID", http.StatusBadRequest))
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	messengerID := &messengerIDQuery
 
-	messengerRelatedUser, err := h.MessengerService.GetMessengerRelatedUser(chatID, messengerUserID, userID, messengerID)
+	messengerRelatedUser, err := h.messengerService.GetMessengerRelatedUser(chatID, messengerUserID, userID, messengerID)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("Error while getting a messenger-related user")
-		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		h.logger.Error().Stack().Err(err).Msg("error while getting a messenger-related user")
+
+		if errors.Is(err, errs.ErrUnprocessableEntity) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, errs.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -180,16 +220,22 @@ func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 // @Produce json
 // @Param messenger_user_id path string true "Messenger UserID"
 // @Success 200 {object} map[string]int64
-// @Failure 400 {object} models.APIError
-// @Failure 500 {object} models.APIError
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
 // @Router /api/v1/messengerRelatedUsers/{messenger_user_id}/user [get]
 func (h *MessengerHandler) GetUserID(c *gin.Context) {
 	messengerUserID := c.Param("messenger_user_id")
 
-	userID, err := h.MessengerService.GetUserID(messengerUserID)
+	userID, err := h.messengerService.GetUserID(messengerUserID)
 	if err != nil {
-		h.Logger.Error().Stack().Err(err).Msg("Error while getting a userID")
-		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
+		h.logger.Error().Stack().Err(err).Msg("error while getting a userID")
+
+		if errors.Is(err, errs.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
