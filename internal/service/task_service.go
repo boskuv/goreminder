@@ -42,7 +42,7 @@ func (s *TaskService) CreateTask(task *models.Task) (int64, error) {
 	if task.MessengerRelatedUserID != nil {
 
 		// check if messenger related user exists
-		_, err := s.messengerRepo.GetUserID("")
+		_, err := s.messengerRepo.GetMessengerRelatedUserByID(*task.MessengerRelatedUserID)
 		if err != nil {
 			if errors.Is(err, errs.ErrNotFound) {
 				err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
