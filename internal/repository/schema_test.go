@@ -27,6 +27,18 @@ func TestTableSchemasMatchModels(t *testing.T) {
 				"id", "name", "email", "password_hash", "created_at", "updated_at", "deleted_at",
 			},
 		},
+		{
+			tableName: "messengers",
+			expectedColumns: []string{
+				"id", "name", "created_at",
+			},
+		},
+		{
+			tableName: "user_messengers",
+			expectedColumns: []string{
+				"id", "messenger_id", "user_id", "chat_id", "messenger_user_id", "created_at", "updated_at",
+			},
+		},
 	}
 
 	// TODO: remove
