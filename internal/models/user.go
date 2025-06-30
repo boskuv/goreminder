@@ -10,4 +10,6 @@ type User struct {
 	CreatedAt    time.Time `db:"created_at"`
 	DeletedAt    time.Time `db:"deleted_at" json:"-"`
 	Timezone     *string   `db:"timezone" json:"timezone,omitempty"`
+	LanguageCode *string   `db:"language_code" json:"language_code,omitempty"`
+	Role         *string   `db:"role" json:"role,omitempty"`
 }

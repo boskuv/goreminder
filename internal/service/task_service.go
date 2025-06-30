@@ -108,8 +108,15 @@ func (s *TaskService) UpdateTask(taskID int64, updateRequest *models.TaskUpdateR
 	if updateRequest.Status != nil {
 		task.Status = *updateRequest.Status
 	}
-	if updateRequest.DueDate != nil { // TODO: ...DueDate.IsZero()
-		task.DueDate = *updateRequest.DueDate
+	if updateRequest.StartDate != nil {
+		task.StartDate = *updateRequest.StartDate
+	}
+	if updateRequest.FinishDate != nil {
+		task.FinishDate = updateRequest.FinishDate
+	}
+	// TODO: check if cron expression is valid
+	if updateRequest.CronExpression != nil {
+		task.CronExpression = updateRequest.CronExpression
 	}
 
 	err = s.taskRepo.UpdateTask(task)

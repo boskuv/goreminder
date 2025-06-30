@@ -37,8 +37,8 @@ func NewTaskRepository(db *sqlx.DB) TaskRepository {
 // nil values are preset for: updated_at, deleted_at (database-level)
 func (r *taskRepository) CreateTask(task *models.Task) (int64, error) {
 	query, args, err := r.sb.Insert("tasks").
-		Columns("title", "description", "user_id", "messenger_related_user_id", "due_date").          // status, deleted_at
-		Values(task.Title, task.Description, task.UserID, task.MessengerRelatedUserID, task.DueDate). // task.Status,
+		Columns("title", "description", "user_id", "messenger_related_user_id", "start_date", "finish_date", "cron_expression").
+		Values(task.Title, task.Description, task.UserID, task.MessengerRelatedUserID, task.StartDate, task.FinishDate, task.CronExpression).
 		Suffix("RETURNING id").
 		ToSql()
 	if err != nil {
@@ -57,7 +57,7 @@ func (r *taskRepository) CreateTask(task *models.Task) (int64, error) {
 // GetTaskByID retrieves a task by its ID
 // Returns task entity and an error if occurred
 func (r *taskRepository) GetTaskByID(id int64) (*models.Task, error) {
-	query, args, err := r.sb.Select("id", "title", "description", "user_id", "due_date", "status", "created_at").
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "start_date", "finish_date", "cron_expression", "status", "created_at").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": id}).
@@ -82,7 +82,7 @@ func (r *taskRepository) GetTaskByID(id int64) (*models.Task, error) {
 // GetTasksByUserID retrieves a task by user ID
 // Returns task entities for passed user ID and an error if occurred
 func (r *taskRepository) GetTasksByUserID(userID int64) ([]*models.Task, error) {
-	query, args, err := r.sb.Select("title", "description", "user_id", "due_date", "status", "created_at").
+	query, args, err := r.sb.Select("title", "description", "user_id", "start_date", "finish_date", "cron_expression", "status", "created_at").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"user_id": userID}).
@@ -107,7 +107,9 @@ func (r *taskRepository) UpdateTask(task *models.Task) error {
 		Set("title", task.Title).
 		Set("description", task.Description).
 		Set("status", task.Status).
-		Set("due_date", task.DueDate).
+		Set("start_date", task.StartDate).
+		Set("finish_date", task.FinishDate).
+		Set("cron_expression", task.CronExpression).
 		Set("updated_at", time.Now().UTC()).
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": task.ID}).
