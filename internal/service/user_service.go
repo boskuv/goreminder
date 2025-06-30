@@ -63,6 +63,12 @@ func (s *UserService) UpdateUser(userID int64, updateRequest *models.UserUpdateR
 	if updateRequest.Timezone != nil {
 		user.Timezone = updateRequest.Timezone
 	}
+	if updateRequest.LanguageCode != nil {
+		user.LanguageCode = updateRequest.LanguageCode
+	}
+	if updateRequest.Role != nil {
+		user.Role = updateRequest.Role
+	}
 
 	// save the updated user
 	err = s.userRepo.UpdateUser(user)

@@ -36,8 +36,8 @@ func NewUserRepository(db *sqlx.DB) UserRepository {
 // nil values are preset for: deleted_at (database-level)
 func (r *userRepository) CreateUser(user *models.User) (int64, error) {
 	query, args, err := r.sb.Insert("users").
-		Columns("name", "email", "password_hash", "timezone").
-		Values(user.Name, user.Email, user.PasswordHash, user.Timezone).
+		Columns("name", "email", "password_hash", "timezone", "language_code", "role").
+		Values(user.Name, user.Email, user.PasswordHash, user.Timezone, user.LanguageCode, user.Role).
 		Suffix("RETURNING id").
 		ToSql()
 	if err != nil {
@@ -56,7 +56,7 @@ func (r *userRepository) CreateUser(user *models.User) (int64, error) {
 // GetUserByID retrieves a user by ID
 // Returns user entity and an error if occurred
 func (r *userRepository) GetUserByID(id int64) (*models.User, error) {
-	query, args, err := r.sb.Select("id", "name", "email", "password_hash", "created_at", "timezone").
+	query, args, err := r.sb.Select("id", "name", "email", "password_hash", "created_at", "timezone", "language_code", "role").
 		From("users").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": id}).
@@ -86,6 +86,8 @@ func (r *userRepository) UpdateUser(user *models.User) error {
 		Set("email", user.Email).
 		Set("password_hash", user.PasswordHash).
 		Set("timezone", user.Timezone).
+		Set("language_code", user.LanguageCode).
+		Set("role", user.Role).
 		Set("updated_at", time.Now().UTC()).
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": user.ID}).
