@@ -23,7 +23,6 @@ tracing:
   serviceName: "goreminder-api"
   insecure: true
 
-
 metrics:
   enabled: true
   addr: ":9191"

@@ -39,8 +39,8 @@ func NewProducer(cfg *ProducerConfig) (*Producer, error) {
 	)
 
 	conn := rabbitroutine.NewConnector(rabbitroutine.Config{
-		ReconnectAttempts: 20,
-		Wait:              10 * time.Second,
+		ReconnectAttempts: 3,
+		Wait:              5 * time.Second,
 	})
 
 	pool := rabbitroutine.NewPool(conn)

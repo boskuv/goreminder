@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
@@ -32,7 +33,7 @@ func main() {
 	err := config.Setup(parsedArgs.ConfigPath)
 
 	if err != nil {
-		panic("Unable to setup configuration")
+		panic("unable to setup configuration")
 	}
 
 	cfg := config.GetConfig()
@@ -48,11 +49,22 @@ func main() {
 	log := logger.New(os.Stdout, minlvl, true)
 	logger.LogErrorStackViaPkgErrors(true)
 
-	observability.StartMetricsServer()
-	tracer, _ := observability.InitTracer("goreminder-api")
-	defer tracer.Shutdown(context.Background())
+	if cfg.Metrics.Enabled {
+		observability.StartMetricsServer(cfg.Metrics.Addr)
+	}
+
+	if cfg.Tracing.Enabled {
+		tracer, _ := observability.InitTracer(cfg.Tracing.ServiceName, cfg.Tracing.Endpoint, cfg.Tracing.Insecure)
+		defer tracer.Shutdown(context.Background())
+	}
 
 	// DB init
+	// TODO: move to config validation
+	maxLifetime, err := time.ParseDuration(cfg.Database.ConnMaxLifetime)
+	if err != nil {
+		//return fmt.Errorf("error while parsing db max_lifetime: %w", err)
+	}
+
 	dbConfig := &repository.DBConfig{
 		Host:         cfg.Database.Host,
 		Port:         cfg.Database.Port,
@@ -62,15 +74,16 @@ func main() {
 		SSLMode:      "disable", // For local development
 		MaxOpenConns: cfg.Database.MaxOpenConns,
 		MaxIdleConns: cfg.Database.MaxIdleConns,
-		MaxLifetime:  cfg.Database.MaxLifetime,
+		MaxLifetime:  maxLifetime,
+		MaxRetries:   cfg.Database.MaxRetries,
 	}
 
 	db, err := repository.NewDB(dbConfig)
 	if err != nil {
-		log.Fatal().Stack().Err(err).Msg("Error while connecting to DB")
+		log.Fatal().Stack().Err(err).Msg("error while connecting to DB")
 	}
 
-	// Producer init
+	// producer init
 	producerConfig := &queue.ProducerConfig{
 		Host:      cfg.Producer.Host,
 		Port:      cfg.Producer.Port,
@@ -82,65 +95,70 @@ func main() {
 
 	producer, err := queue.NewProducer(producerConfig)
 	if err != nil {
-		log.Fatal().Stack().Err(err).Msg("Error while connecting to producer")
+		log.Fatal().Stack().Err(err).Msg("error while connecting to producer")
 	}
 	defer func() {
 		if err := producer.Close(); err != nil {
-			log.Error().Stack().Err(err).Msg("Failed to close producer")
+			log.Error().Stack().Err(err).Msg("failed to close producer")
 		} else {
-			log.Info().Msg("Producer is closed gracefully")
+			log.Info().Msg("producer is closed gracefully")
 		}
 	}()
-	// defer producer.Close()
+	defer producer.Close()
 
-	// Setup repositories
+	// setup repositories
 	taskRepo := repository.NewTaskRepository(db)
 	userRepo := repository.NewUserRepository(db)
 	messengerRepo := repository.NewMessengerRepository(db)
 
-	// TODO: pointers?
-	// Setup services
-	taskService := service.NewTaskService(*taskRepo, *userRepo, *messengerRepo, producer)
-	userService := service.NewUserService(*userRepo)
-	messengerService := service.NewMessengerService(*messengerRepo)
+	// setup services
+	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, producer)
+	userService := service.NewUserService(userRepo)
+	messengerService := service.NewMessengerService(messengerRepo, userRepo)
 
-	// Initialize handlers
+	// initialize handlers
 	taskHandler := handlers.NewTaskHandler(log, taskService)
 	userHandler := handlers.NewUserHandler(log, userService)
 	messengerHandler := handlers.NewMessengerHandler(log, messengerService)
 
-	// Setup Swagger info
+	// setup swagger info
 	docs.SwaggerInfo.Title = "Task Management API"
 	docs.SwaggerInfo.Description = "API documentation for the Task Management system"
 	docs.SwaggerInfo.Version = "1.0"
 	docs.SwaggerInfo.Host = "localhost:8080" // TODO: remove hardcode
 	docs.SwaggerInfo.Schemes = []string{"http"}
 
-	// Setup router
+	// setup router
 	router := gin.Default()
 
 	// Register Swagger handler
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// Add middlewares
-	middleware.InitMetrics()
-	router.Use(middleware.MetricsMiddleware())
-	router.Use(middleware.TracingMiddleware("goreminder-api"))
+	// add middlewares
+	if cfg.Metrics.Enabled {
+		middleware.InitMetrics()
+		router.Use(middleware.MetricsMiddleware())
+	}
 
-	// Register application routes
+	if cfg.Tracing.Enabled {
+		router.Use(middleware.TracingMiddleware(cfg.Tracing.ServiceName))
+	}
+
+	// register application routes
 	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler)
 	routes.RegisterSystemRoutes(router, docs.SwaggerInfo.Version)
 
-	log.Info().Msg("Graceful startup")
+	log.Info().Msg("graceful startup")
 
-	// Start server
+	// start server
 	port := cfg.Server.Port
+	// TODO: add default port if not provided
 	if port == "" {
 		port = "8080"
 	}
 	log.Printf("Starting server on port %s", port)
 	if err := router.Run(":" + port); err != nil {
-		log.Fatal().Err(err).Msg("Failed to run server")
+		log.Fatal().Err(err).Msg("failed to run server")
 	}
 
 }
