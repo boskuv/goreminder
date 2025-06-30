@@ -13,6 +13,7 @@ type Configuration struct {
 	Database DatabaseConfiguration
 	Producer ProducerConfiguration
 	Tracing  TracingConfiguration
+	Metrics  MetricsConfiguration
 }
 
 type DatabaseConfiguration struct {
@@ -42,6 +43,11 @@ type TracingConfiguration struct {
 	Endpoint    string
 	ServiceName string
 	Insecure    bool
+}
+
+type MetricsConfiguration struct {
+	Enabled bool
+	Addr    string
 }
 
 type ServerConfiguration struct {
