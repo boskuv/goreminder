@@ -60,6 +60,9 @@ func (s *UserService) UpdateUser(userID int64, updateRequest *models.UserUpdateR
 	if updateRequest.PasswordHash != nil {
 		user.PasswordHash = *updateRequest.PasswordHash
 	}
+	if updateRequest.Timezone != nil {
+		user.Timezone = updateRequest.Timezone
+	}
 
 	// save the updated user
 	err = s.userRepo.UpdateUser(user)

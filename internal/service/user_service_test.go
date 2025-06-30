@@ -77,6 +77,7 @@ func TestUserService_UpdateUser(t *testing.T) {
 			Name:         ptrString("Jane"),
 			Email:        ptrString("jane@example.com"),
 			PasswordHash: ptrString("newhash"),
+			Timezone:     ptrString("Europe/Moscow"),
 		}
 		mockRepo.EXPECT().GetUserByID(int64(1)).Return(user, nil)
 		mockRepo.EXPECT().UpdateUser(gomock.Any()).Return(nil)
@@ -85,6 +86,7 @@ func TestUserService_UpdateUser(t *testing.T) {
 		assert.Equal(t, "Jane", updated.Name)
 		assert.Equal(t, "jane@example.com", updated.Email)
 		assert.Equal(t, "newhash", updated.PasswordHash)
+		assert.Equal(t, "Europe/Moscow", updated.Timezone)
 	})
 
 	t.Run("get user error", func(t *testing.T) {
