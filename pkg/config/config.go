@@ -12,6 +12,7 @@ type Configuration struct {
 	Server   ServerConfiguration
 	Database DatabaseConfiguration
 	Producer ProducerConfiguration
+	Tracing  TracingConfiguration
 }
 
 type DatabaseConfiguration struct {
@@ -34,6 +35,13 @@ type ProducerConfiguration struct {
 	Password  string
 	QueueName string
 	Exchange  string
+}
+
+type TracingConfiguration struct {
+	Enabled     bool
+	Endpoint    string
+	ServiceName string
+	Insecure    bool
 }
 
 type ServerConfiguration struct {

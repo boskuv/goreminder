@@ -17,5 +17,12 @@ producer:
   queueName: "celery"         
   exchange: "celery"   
 
+tracing:
+  enabled: true
+  endpoint: "localhost:4318"
+  serviceName: "goreminder-api"
+  insecure: true
+
+
 server:
   port: 8080

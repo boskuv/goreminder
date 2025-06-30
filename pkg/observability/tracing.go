@@ -12,14 +12,22 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 )
 
-func InitTracer(serviceName string) (*trace.TracerProvider, error) {
-
+func InitTracer(serviceName string, endpoint string, insecure bool) (*trace.TracerProvider, error) {
 	ctx := context.Background()
 
-	// TODO: pass if cant connect
+	clientOptions := []otlptracehttp.Option{}
+
+	// TODO: add default endpoint if not provided
+	if endpoint != "" {
+		clientOptions = append(clientOptions, otlptracehttp.WithEndpoint(endpoint))
+	}
+
+	if insecure {
+		clientOptions = append(clientOptions, otlptracehttp.WithInsecure())
+	}
+
 	client := otlptracehttp.NewClient(
-		otlptracehttp.WithEndpoint("localhost:4318"), // TODO: pass to config
-		otlptracehttp.WithInsecure(),                 // TODO: add dev flag to cfg
+		clientOptions...,
 	)
 
 	exporter, err := otlptrace.New(ctx, client)
