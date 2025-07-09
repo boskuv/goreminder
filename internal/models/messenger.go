@@ -10,7 +10,7 @@ type Messenger struct {
 }
 
 type MessengerRelatedUser struct {
-	ID              int64      `db:"id" json:"-"`
+	ID              int64      `db:"id" json:"id"`
 	UserID          *int64     `db:"user_id" json:"user_id"`
 	MessengerID     *int64     `db:"messenger_id" json:"messenger_id"`
 	MessengerUserID string     `db:"messenger_user_id" json:"messenger_user_id"`

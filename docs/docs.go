@@ -881,6 +881,9 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "id": {
+                    "type": "integer"
+                },
                 "messenger_id": {
                     "type": "integer"
                 },
@@ -902,15 +905,24 @@ const docTemplate = `{
                     "description": "TODO: json:\"-\"` + "`" + `",
                     "type": "string"
                 },
+                "cron_expression": {
+                    "type": "string"
+                },
                 "description": {
                     "type": "string"
                 },
-                "due_date": {
-                    "type": "string",
-                    "example": "2024-12-01T00:00:00Z"
+                "finish_date": {
+                    "type": "string"
+                },
+                "id": {
+                    "description": "TODO: db?",
+                    "type": "integer"
                 },
                 "messenger_related_user_id": {
                     "type": "integer"
+                },
+                "start_date": {
+                    "type": "string"
                 },
                 "status": {
                     "type": "string"
@@ -926,12 +938,17 @@ const docTemplate = `{
         "models.TaskUpdateRequest": {
             "type": "object",
             "properties": {
+                "cron_expression": {
+                    "type": "string"
+                },
                 "description": {
                     "type": "string"
                 },
-                "due_date": {
-                    "type": "string",
-                    "example": "2024-12-01T00:00:00Z"
+                "finish_date": {
+                    "type": "string"
+                },
+                "start_date": {
+                    "type": "string"
                 },
                 "status": {
                     "type": "string"
@@ -950,10 +967,22 @@ const docTemplate = `{
                 "email": {
                     "type": "string"
                 },
+                "id": {
+                    "type": "integer"
+                },
+                "language_code": {
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 },
                 "passwordHash": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "timezone": {
                     "type": "string"
                 }
             }
@@ -964,10 +993,19 @@ const docTemplate = `{
                 "email": {
                     "type": "string"
                 },
+                "language_code": {
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 },
                 "password_hash": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "timezone": {
                     "type": "string"
                 }
             }

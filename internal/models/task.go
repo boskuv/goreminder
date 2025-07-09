@@ -4,7 +4,7 @@ import "time"
 
 // Task represents the domain model for a task
 type Task struct {
-	ID                     int64      `db:"id" json:"-"` // TODO: db?
+	ID                     int64      `db:"id" json:"id"` // TODO: db?
 	Title                  string     `db:"title" json:"title"`
 	Description            string     `db:"description" json:"description"`
 	UserID                 int64      `db:"user_id" json:"user_id"`

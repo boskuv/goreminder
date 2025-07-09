@@ -82,7 +82,7 @@ func (r *taskRepository) GetTaskByID(id int64) (*models.Task, error) {
 // GetTasksByUserID retrieves a task by user ID
 // Returns task entities for passed user ID and an error if occurred
 func (r *taskRepository) GetTasksByUserID(userID int64) ([]*models.Task, error) {
-	query, args, err := r.sb.Select("title", "description", "user_id", "start_date", "finish_date", "cron_expression", "status", "created_at").
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "start_date", "finish_date", "cron_expression", "status", "created_at").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"user_id": userID}).
