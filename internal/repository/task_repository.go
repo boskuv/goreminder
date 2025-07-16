@@ -57,10 +57,11 @@ func (r *taskRepository) CreateTask(task *models.Task) (int64, error) {
 // GetTaskByID retrieves a task by its ID
 // Returns task entity and an error if occurred
 func (r *taskRepository) GetTaskByID(id int64) (*models.Task, error) {
-	query, args, err := r.sb.Select("id", "title", "description", "user_id", "start_date", "finish_date", "cron_expression", "status", "created_at").
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "start_date", "finish_date", "cron_expression", "status", "created_at").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": id}).
+		Where(squirrel.NotEq{"status": "done"}).
 		ToSql()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query while getting task by id")
@@ -86,6 +87,7 @@ func (r *taskRepository) GetTasksByUserID(userID int64) ([]*models.Task, error) 
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"user_id": userID}).
+		Where(squirrel.NotEq{"status": "done"}).
 		ToSql()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query while getting tasks by user id")
