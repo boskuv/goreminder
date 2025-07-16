@@ -177,10 +177,10 @@ func (r *messengerRepository) GetUserID(messengerUserID string) (int64, error) {
 // GetMessengerRelatedUserByID retrieves a messenger-related user by its ID
 // Returns messenger-related user entity and an error if occurred
 func (r *messengerRepository) GetMessengerRelatedUserByID(messengerUserID int) (*models.MessengerRelatedUser, error) {
-	query, args, err := r.sb.Select("user_id"). // TODO: "messenger_id", "messenger_user_id", "chat_id", "created_at", "updated_at").
-							From("user_messengers").
-							Where(squirrel.Eq{"id": messengerUserID}).
-							ToSql()
+	query, args, err := r.sb.Select("id", "user_id", "messenger_id", "messenger_user_id", "chat_id", "created_at", "updated_at").
+		From("user_messengers").
+		Where(squirrel.Eq{"id": messengerUserID}).
+		ToSql()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query while getting messenger-related user by id")
 	}
