@@ -3,7 +3,7 @@ database:
   dbname: "task_manager"  # Database name
   username: "postgres"    # Database username
   password: "password"    # Database password
-  host: "localhost"       # Host where the database is running
+  host: "postgres"       # Host where the database is running
   port: "5432"            # Database port
   maxLifetime: 30         # Maximum connection lifetime (seconds)
   maxOpenConns: 100       # Maximum open connections
@@ -12,7 +12,7 @@ database:
 producer:
   user: "guest"    
   password: "guest"   
-  host: "localhost"       
+  host: "rabbitmq"       
   port: "5672"           
   queueName: "celery"         
   exchange: "celery"   
