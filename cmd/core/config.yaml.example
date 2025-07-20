@@ -15,7 +15,9 @@ producer:
   host: "rabbitmq"       
   port: "5672"           
   queueName: "celery"         
-  exchange: "celery"   
+  exchange: "celery"
+  connectionRetries: 3
+  connectionRetryDelay: 5
 
 tracing:
   enabled: true
