@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -30,12 +31,14 @@ type DatabaseConfiguration struct {
 }
 
 type ProducerConfiguration struct {
-	Host      string
-	Port      string // TODO: int?
-	User      string
-	Password  string
-	QueueName string
-	Exchange  string
+	Host                 string
+	Port                 string // TODO: int?
+	User                 string
+	Password             string
+	QueueName            string
+	Exchange             string
+	ConnectionRetries    int
+	ConnectionRetryDelay time.Duration
 }
 
 type TracingConfiguration struct {

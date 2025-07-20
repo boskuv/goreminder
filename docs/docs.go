@@ -388,6 +388,52 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/tasks/queue": {
+            "post": {
+                "description": "Send task to queue with predefined action",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tasks"
+                ],
+                "summary": "Send task to queue",
+                "parameters": [
+                    {
+                        "description": "Task to enqueue",
+                        "name": "task",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ScheduledTask"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/tasks/{id}": {
             "get": {
                 "description": "Retrieves a task by its ID",
@@ -894,6 +940,23 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.ScheduledTask": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "example": "schedule"
+                },
+                "queue_name": {
+                    "description": "MessengerName string ` + "`" + `json:\"messenger_name\" example:\"telegram\"` + "`" + ` TODO",
+                    "type": "string",
+                    "example": "celery"
+                },
+                "task_id": {
                     "type": "integer"
                 }
             }

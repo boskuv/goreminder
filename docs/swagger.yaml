@@ -23,6 +23,19 @@ definitions:
       user_id:
         type: integer
     type: object
+  models.ScheduledTask:
+    properties:
+      action:
+        example: schedule
+        type: string
+      queue_name:
+        description: MessengerName string `json:"messenger_name" example:"telegram"`
+          TODO
+        example: celery
+        type: string
+      task_id:
+        type: integer
+    type: object
   models.Task:
     properties:
       created_at:
@@ -450,6 +463,36 @@ paths:
               type: string
             type: object
       summary: Update a task
+      tags:
+      - Tasks
+  /api/v1/tasks/queue:
+    post:
+      consumes:
+      - application/json
+      description: Send task to queue with predefined action
+      parameters:
+      - description: Task to enqueue
+        in: body
+        name: task
+        required: true
+        schema:
+          $ref: '#/definitions/models.ScheduledTask'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Send task to queue
       tags:
       - Tasks
   /api/v1/users:

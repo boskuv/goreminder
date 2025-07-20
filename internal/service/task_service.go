@@ -1,6 +1,8 @@
 package service
 
 import (
+	"fmt"
+
 	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/repository"
@@ -142,43 +144,63 @@ func (s *TaskService) DeleteTask(taskID int64) error {
 	return nil
 }
 
-// ScheduleTask sends a task to queue for interacting with scheduling service
-// func (s *TaskService) ScheduleTask(scheduledTask *models.ScheduledTask) error {
-// 	// Check if the task exists
-// 	task, err := s.taskRepo.GetTaskByID(scheduledTask.TaskID)
-// 	if err != nil {
-// 		return err
-// 	}
+// QueueTask implements BL of sending task to queue for interacting with scheduler service
+func (s *TaskService) QueueTask(scheduledTask *models.ScheduledTask) error {
+	// check if task exists
+	task, err := s.taskRepo.GetTaskByID(scheduledTask.TaskID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
 
-// 	if task == nil {
-// 		return errors.WithStack(errors.Errorf("task with ID %d does not exist", scheduledTask.TaskID))
-// 	}
+	var taskQueueMessage map[string]interface{}
+	if scheduledTask.Action == "schedule" {
+		// if task.StartDate.IsZero() {
+		// 	return errors.WithStack(errors.Errorf("task with ID %d has no StartDate value: it can't be nil", task.ID))
+		// 	// 409
+		// }
+		// messengerID, err := s.messengerRepo.GetMessengerIDByName(scheduledTask.MessengerName)
+		// if messengerID == 0 { // TODO: nil instead of 0
+		// 	return errors.WithStack(errors.Errorf("messenger with name %s does not exist", scheduledTask.MessengerName))
+		// }
 
-// 	if task.DueDate.IsZero() {
-// 		return errors.WithStack(errors.Errorf("task with ID %d has no DueDate value: it can't be nil", task.ID))
-// 	}
+		if task.MessengerRelatedUserID == nil {
+			return errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
+		}
 
-// 	// messengerID, err := s.messengerRepo.GetMessengerIDByName(scheduledTask.MessengerName)
-// 	// if messengerID == 0 { // TODO: nil instead of 0
-// 	// 	return errors.WithStack(errors.Errorf("messenger with name %s does not exist", scheduledTask.MessengerName))
-// 	// }
+		var messengerRelatedUser *models.MessengerRelatedUser
 
-// 	// s.messengerRepo.GetMessengerRelatedUser() // TODO: resolve it somehow so that we dont have a need to pass ChatID in scheduledTask
+		// check if messenger related user indeed exists
+		messengerRelatedUser, err = s.messengerRepo.GetMessengerRelatedUserByID(*task.MessengerRelatedUserID)
+		if err != nil {
+			if errors.Is(err, errs.ErrNotFound) {
+				err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
+			}
 
-// 	// Send the task to queue
-// 	taskQueueMessage := map[string]interface{}{
-// 		"task": scheduledTask.JobName,
-// 		"args": []interface{}{scheduledTask.MessengerName, scheduledTask.ChatID, task.ID, task.Title, task.Description, task.DueDate},
-// 	}
+			return errors.WithStack(err)
+		}
 
-// 	err = s.producer.Publish(taskQueueMessage)
-// 	if err != nil {
-// 		// TODO: retry | failed to publish message: Exception (504) Reason: \"channel/connection is not open\"
-// 		return errors.WithStack(errors.Errorf("can't publish message %v to rabbitmq: %s",
-// 			taskQueueMessage,
-// 			err,
-// 		))
-// 	}
+		taskQueueMessage = map[string]interface{}{
+			"task": "tasks.schedule_task",
+			"args": []interface{}{"telegram", messengerRelatedUser.ChatID, task.ID, task.Title, task.Description, task.StartDate, task.CronExpression},
+		}
 
-// 	return nil
-// }
+	} else {
+		taskQueueMessage = map[string]interface{}{
+			"task": "tasks.delete_task",
+			"args": []interface{}{task.ID},
+		}
+	}
+
+	err = s.producer.Publish(taskQueueMessage)
+	if err != nil {
+		// TODO: failed to publish message: Exception (504) Reason: \"channel/connection is not open\"
+		return errors.WithStack(errors.Errorf("can't publish message %v to rabbitmq: %s",
+			taskQueueMessage,
+			err,
+		))
+	}
+
+	// TODO: log message has been published
+
+	return nil
+}

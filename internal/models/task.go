@@ -17,12 +17,10 @@ type Task struct {
 	DeletedAt              time.Time  `db:"deleted_at" json:"-"`
 }
 
-// ScheduledTask represents the domain model for a task to schedule
+// ScheduledTask represents the domain model for a task to enqueue
 type ScheduledTask struct {
-	Action        string `json:"action" example:"add"`
-	ChatID        string `json:"chat_id"`
-	JobName       string `json:"job_name" example:"tasks.example_task"`
-	MessengerName string `json:"messenger_name" example:"telegram"`
-	QueueName     string `json:"queue_name" example:"celery"`
-	TaskID        int64  `json:"task_id"`
+	Action string `json:"action" example:"schedule"`
+	// MessengerName string `json:"messenger_name" example:"telegram"` TODO
+	QueueName string `json:"queue_name" example:"celery"`
+	TaskID    int64  `json:"task_id"`
 }

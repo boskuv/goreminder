@@ -61,7 +61,7 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("task with id `%d` was successfully added", taskID)})
+	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("task with id `%d` has been successfully added", taskID)})
 }
 
 // @Summary Get task by ID
@@ -221,30 +221,45 @@ func (h *TaskHandler) DeleteTask(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// // @Summary Schedule a new task
-// // @Description Schedule a task by sending it to queue
-// // @Tags Tasks
-// // @Accept json
-// // @Produce json
-// // @Param task body models.ScheduledTask true "Task to schedule"
-// // @Success 200 {object} map[string]string
-// // @Failure 400 {object} map[string]string
-// // @Failure 500 {object} map[string]string
-// // @Router /api/v1/tasks/schedule [post]
-// func (h *TaskHandler) ScheduleTask(c *gin.Context) {
-// 	var scheduledTask models.ScheduledTask
-// 	if err := c.ShouldBindJSON(&scheduledTask); err != nil {
-// 		h.logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("error while processing request with task struct parameter")
-// 		c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
-// 		return
-// 	}
+// @Summary Send task to queue
+// @Description Send task to queue with predefined action
+// @Tags Tasks
+// @Accept json
+// @Produce json
+// @Param task body models.ScheduledTask true "Task to enqueue"
+// @Success 201 {object} models.Task
+// @Failure 404 {object} map[string]string
+// @Failure 422 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/tasks/queue [post]
+func (h *TaskHandler) QueueTask(c *gin.Context) {
+	var scheduledTask models.ScheduledTask
+	if err := c.ShouldBindJSON(&scheduledTask); err != nil {
+		//h.logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("error while processing request with task struct parameter")
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-// 	err := h.taskService.ScheduleTask(&scheduledTask)
-// 	if err != nil {
-// 		h.logger.Error().Stack().Err(err).Msg("error while scheduling a task")
-// 		c.JSON(http.StatusInternalServerError, models.HTTPError(err, http.StatusInternalServerError))
-// 		return
-// 	}
+	err := h.taskService.QueueTask(&scheduledTask)
+	if err != nil {
+		h.logger.Error().Stack().Err(err).Msg("error while enqueuing task")
 
-// 	c.JSON(http.StatusOK, gin.H{"message": "Task scheduled successfully"})
-// }
+		if errors.Is(err, errs.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+		if errors.Is(err, errs.ErrUnprocessableEntity) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("task with id `%d` has been successfully enqueued", scheduledTask.TaskID)})
+}

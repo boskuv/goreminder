@@ -84,14 +84,16 @@ func main() {
 	}
 
 	// producer init
-	producerConfig := &queue.ProducerConfig{
-		Host:      cfg.Producer.Host,
-		Port:      cfg.Producer.Port,
-		User:      cfg.Producer.User,
-		Password:  cfg.Producer.Password,
-		QueueName: cfg.Producer.QueueName,
-		Exchange:  cfg.Producer.Exchange,
-	}
+	producerConfig := queue.NewProducerConfig(
+		cfg.Producer.Host,
+		cfg.Producer.Port,
+		cfg.Producer.User,
+		cfg.Producer.Password,
+		cfg.Producer.QueueName,
+		cfg.Producer.Exchange,
+		cfg.Producer.ConnectionRetries,
+		cfg.Producer.ConnectionRetryDelay,
+	)
 
 	producer, err := queue.NewProducer(producerConfig)
 	if err != nil {
