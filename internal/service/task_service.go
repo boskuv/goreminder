@@ -153,6 +153,7 @@ func (s *TaskService) QueueTask(scheduledTask *models.ScheduledTask) error {
 	}
 
 	var taskQueueMessage map[string]interface{}
+	// TODO: other actions
 	if scheduledTask.Action == "schedule" {
 		// if task.StartDate.IsZero() {
 		// 	return errors.WithStack(errors.Errorf("task with ID %d has no StartDate value: it can't be nil", task.ID))
@@ -180,14 +181,14 @@ func (s *TaskService) QueueTask(scheduledTask *models.ScheduledTask) error {
 		}
 
 		taskQueueMessage = map[string]interface{}{
-			"task": "tasks.schedule_task",
+			"task": "worker.schedule_task",
 			"args": []interface{}{"telegram", messengerRelatedUser.ChatID, task.ID, task.Title, task.Description, task.StartDate, task.CronExpression},
 		}
 
 	} else {
 		taskQueueMessage = map[string]interface{}{
-			"task": "tasks.delete_task",
-			"args": []interface{}{task.ID},
+			"task": "worker.delete_task",
+			"args": []interface{}{task.ID, "telegram"},
 		}
 	}
 

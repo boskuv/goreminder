@@ -3,18 +3,22 @@ package service
 import (
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/repository"
+	"github.com/boskuv/goreminder/pkg/queue"
 
 	"github.com/pkg/errors"
 )
 
 // UserService defines methods for user-related business logic
 type UserService struct {
-	userRepo repository.UserRepository
+	userRepo      repository.UserRepository
+	taskRepo      repository.TaskRepository
+	messengerRepo repository.MessengerRepository
+	producer      *queue.Producer
 }
 
 // NewUserService creates a new instance of UserService
-func NewUserService(userRepo repository.UserRepository) *UserService {
-	return &UserService{userRepo: userRepo}
+func NewUserService(userRepo repository.UserRepository, taskRepo repository.TaskRepository, messengerRepo repository.MessengerRepository, producer *queue.Producer) *UserService {
+	return &UserService{userRepo: userRepo, taskRepo: taskRepo, messengerRepo: messengerRepo, producer: producer}
 }
 
 // CreateUser implements BL of adding new user
@@ -82,6 +86,39 @@ func (s *UserService) UpdateUser(userID int64, updateRequest *models.UserUpdateR
 // DeleteUser implements BL of soft deleting user by id
 func (s *UserService) DeleteUser(userID int64) error {
 	_, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	tasks, err := s.taskRepo.GetTasksByUserID(userID)
+	if err != nil {
+		// TODO: hhtp code?
+		return errors.WithStack(err)
+	}
+	for _, task := range tasks {
+		// TODO: allow validation + check errors
+		err = s.taskRepo.DeleteTask(task.ID)
+		if err != nil {
+			// retry or rollback
+		}
+
+		taskQueueMessage := map[string]interface{}{
+			"task": "worker.delete_task",
+			"args": []interface{}{task.ID, "telegram"},
+		}
+
+		err = s.producer.Publish(taskQueueMessage)
+		if err != nil {
+			// TODO: failed to publish message: Exception (504) Reason: \"channel/connection is not open\"
+			return errors.WithStack(errors.Errorf("can't publish message %v to rabbitmq: %s",
+				taskQueueMessage,
+				err,
+			))
+
+		}
+	}
+
+	err = s.messengerRepo.DeleteMessengerRelatedUserByUserID(userID)
 	if err != nil {
 		return errors.WithStack(err)
 	}

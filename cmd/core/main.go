@@ -115,7 +115,7 @@ func main() {
 
 	// setup services
 	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, producer)
-	userService := service.NewUserService(userRepo)
+	userService := service.NewUserService(userRepo, taskRepo, messengerRepo, producer)
 	messengerService := service.NewMessengerService(messengerRepo, userRepo)
 
 	// initialize handlers

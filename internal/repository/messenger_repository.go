@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"time"
 
 	"github.com/Masterminds/squirrel"
 	"github.com/jmoiron/sqlx"
@@ -19,6 +20,7 @@ type MessengerRepository interface {
 	GetMessengerRelatedUser(chatID string, messengerUserID string, userID *int64, messengerID *int64) (*models.MessengerRelatedUser, error)
 	GetUserID(messengerUserID string) (int64, error)
 	GetMessengerRelatedUserByID(messengerUserID int) (*models.MessengerRelatedUser, error)
+	DeleteMessengerRelatedUserByUserID(userID int64) error
 }
 
 type messengerRepository struct {
@@ -128,6 +130,7 @@ func (r *messengerRepository) CreateMessengerRelatedUser(messengerRelatedUser *m
 func (r *messengerRepository) GetMessengerRelatedUser(chatID string, messengerUserID string, userID *int64, messengerID *int64) (*models.MessengerRelatedUser, error) {
 	query, args, err := r.sb.Select("id", "user_id", "messenger_id", "messenger_user_id", "chat_id", "created_at", "updated_at").
 		From("user_messengers").
+		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"chat_id": chatID}).
 		Where(squirrel.Eq{"messenger_user_id": messengerUserID}).
 		Where(squirrel.Eq{"user_id": userID}).
@@ -155,6 +158,7 @@ func (r *messengerRepository) GetMessengerRelatedUser(chatID string, messengerUs
 func (r *messengerRepository) GetUserID(messengerUserID string) (int64, error) {
 	query, args, err := r.sb.Select("user_id").
 		From("user_messengers").
+		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"messenger_user_id": messengerUserID}).
 		ToSql()
 	if err != nil {
@@ -179,6 +183,7 @@ func (r *messengerRepository) GetUserID(messengerUserID string) (int64, error) {
 func (r *messengerRepository) GetMessengerRelatedUserByID(messengerUserID int) (*models.MessengerRelatedUser, error) {
 	query, args, err := r.sb.Select("id", "user_id", "messenger_id", "messenger_user_id", "chat_id", "created_at", "updated_at").
 		From("user_messengers").
+		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": messengerUserID}).
 		ToSql()
 	if err != nil {
@@ -196,4 +201,24 @@ func (r *messengerRepository) GetMessengerRelatedUserByID(messengerUserID int) (
 	}
 
 	return &messengerRelatedUser, nil
+}
+
+// DeleteMessengerRelatedUserByUserID soft deletes messenger-related user by user id
+// It sets the deleted_at timestamp to the current time
+func (r *messengerRepository) DeleteMessengerRelatedUserByUserID(userID int64) error {
+	query, args, err := r.sb.Update("user_messengers").
+		Set("deleted_at", time.Now().UTC()).
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"user_id": userID}).
+		ToSql()
+	if err != nil {
+		return errors.Wrap(err, "failed to build query while soft deleting messenger-related user")
+	}
+
+	_, err = r.db.Exec(query, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to execute soft delete query for messenger-related user")
+	}
+
+	return nil
 }
