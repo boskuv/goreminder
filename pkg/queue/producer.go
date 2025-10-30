@@ -62,9 +62,22 @@ func NewProducer(cfg *ProducerConfig) (*Producer, error) {
 
 	// try to connect to RabbitMQ
 	go func() {
-		err := conn.Dial(ctx, rabbitMQURL)
-		if err != nil {
-			log.Fatalf("failed to connect to RabbitMQ: %v", err)
+		for {
+			err := conn.Dial(ctx, rabbitMQURL)
+			if err != nil {
+				// TODO: implement logging
+				log.Printf("Failed to connect to RabbitMQ: %v, retrying...", err)
+				// Wait before retrying the entire Dial process
+				time.Sleep(cfg.connectionRetryDelay)
+				continue
+			}
+
+			// If we get here, connection was successful
+			log.Println("Connected to RabbitMQ")
+
+			// Wait for context cancellation or connection drop
+			<-ctx.Done()
+			return
 		}
 	}()
 
