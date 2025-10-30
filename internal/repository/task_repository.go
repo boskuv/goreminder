@@ -133,6 +133,7 @@ func (r *taskRepository) UpdateTask(task *models.Task) error {
 func (r *taskRepository) DeleteTask(id int64) error {
 	query, args, err := r.sb.Update("tasks").
 		Set("deleted_at", time.Now().UTC()).
+		Set("status", "deleted").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": id}).
 		ToSql()
