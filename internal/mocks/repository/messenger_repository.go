@@ -144,3 +144,17 @@ func (mr *MockMessengerRepositoryMockRecorder) GetUserID(messengerUserID any) *g
         mr.mock.ctrl.T.Helper()
         return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserID", reflect.TypeOf((*MockMessengerRepository)(nil).GetUserID), messengerUserID)
 }
+
+// DeleteMessengerRelatedUserByUserID mocks base method.
+func (m *MockMessengerRepository) DeleteMessengerRelatedUserByUserID(userID int64) error {
+        m.ctrl.T.Helper()
+        ret := m.ctrl.Call(m, "DeleteMessengerRelatedUserByUserID", userID)
+        ret0, _ := ret[0].(error)
+        return ret0
+}
+
+// DeleteMessengerRelatedUserByUserID indicates an expected call of DeleteMessengerRelatedUserByUserID.
+func (mr *MockMessengerRepositoryMockRecorder) DeleteMessengerRelatedUserByUserID(userID any) *gomock.Call {
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteMessengerRelatedUserByUserID", reflect.TypeOf((*MockMessengerRepository)(nil).DeleteMessengerRelatedUserByUserID), userID)
+}
