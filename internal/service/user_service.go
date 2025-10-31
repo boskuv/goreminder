@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/repository"
 	"github.com/boskuv/goreminder/pkg/queue"
@@ -22,13 +24,13 @@ func NewUserService(userRepo repository.UserRepository, taskRepo repository.Task
 }
 
 // CreateUser implements BL of adding new user
-func (s *UserService) CreateUser(user *models.User) (int64, error) {
+func (s *UserService) CreateUser(ctx context.Context, user *models.User) (int64, error) {
 	// perform some validation before creating the user
 	if user.Name == "" {
 		return 0, errors.WithStack(errors.New("user data is incomplete"))
 	}
 
-	userID, err := s.userRepo.CreateUser(user)
+	userID, err := s.userRepo.CreateUser(ctx, user)
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}
@@ -37,8 +39,8 @@ func (s *UserService) CreateUser(user *models.User) (int64, error) {
 }
 
 // GetUser implements BL of retrieving existing user by its id
-func (s *UserService) GetUser(userID int64) (*models.User, error) {
-	user, err := s.userRepo.GetUserByID(userID)
+func (s *UserService) GetUser(ctx context.Context, userID int64) (*models.User, error) {
+	user, err := s.userRepo.GetUserByID(ctx, userID)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -47,9 +49,9 @@ func (s *UserService) GetUser(userID int64) (*models.User, error) {
 }
 
 // UpdateUser implements BL of updating user by id
-func (s *UserService) UpdateUser(userID int64, updateRequest *models.UserUpdateRequest) (*models.User, error) {
+func (s *UserService) UpdateUser(ctx context.Context, userID int64, updateRequest *models.UserUpdateRequest) (*models.User, error) {
 	// check if the user exists
-	user, err := s.userRepo.GetUserByID(userID)
+	user, err := s.userRepo.GetUserByID(ctx, userID)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -75,7 +77,7 @@ func (s *UserService) UpdateUser(userID int64, updateRequest *models.UserUpdateR
 	}
 
 	// save the updated user
-	err = s.userRepo.UpdateUser(user)
+	err = s.userRepo.UpdateUser(ctx, user)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -84,20 +86,20 @@ func (s *UserService) UpdateUser(userID int64, updateRequest *models.UserUpdateR
 }
 
 // DeleteUser implements BL of soft deleting user by id
-func (s *UserService) DeleteUser(userID int64) error {
-	_, err := s.userRepo.GetUserByID(userID)
+func (s *UserService) DeleteUser(ctx context.Context, userID int64) error {
+	_, err := s.userRepo.GetUserByID(ctx, userID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	tasks, err := s.taskRepo.GetTasksByUserID(userID)
+	tasks, err := s.taskRepo.GetTasksByUserID(ctx, userID)
 	if err != nil {
 		// TODO: hhtp code?
 		return errors.WithStack(err)
 	}
 	for _, task := range tasks {
 		// TODO: allow validation + check errors
-		err = s.taskRepo.DeleteTask(task.ID)
+		err = s.taskRepo.DeleteTask(ctx, task.ID)
 		if err != nil {
 			// retry or rollback
 		}
@@ -107,7 +109,7 @@ func (s *UserService) DeleteUser(userID int64) error {
 			"args": []interface{}{task.ID, "telegram"},
 		}
 
-		err = s.producer.Publish(taskQueueMessage)
+		err = s.producer.Publish(ctx, taskQueueMessage)
 		if err != nil {
 			// TODO: failed to publish message: Exception (504) Reason: \"channel/connection is not open\"
 			return errors.WithStack(errors.Errorf("can't publish message %v to rabbitmq: %s",
@@ -118,12 +120,12 @@ func (s *UserService) DeleteUser(userID int64) error {
 		}
 	}
 
-	err = s.messengerRepo.DeleteMessengerRelatedUserByUserID(userID)
+	err = s.messengerRepo.DeleteMessengerRelatedUserByUserID(ctx, userID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	err = s.userRepo.DeleteUser(userID)
+	err = s.userRepo.DeleteUser(ctx, userID)
 	if err != nil {
 		return errors.WithStack(err)
 	}

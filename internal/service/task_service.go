@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 
 	errs "github.com/boskuv/goreminder/internal/errors"
@@ -30,9 +31,9 @@ func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.User
 }
 
 // CreateTask implements BL of adding new task
-func (s *TaskService) CreateTask(task *models.Task) (int64, error) {
+func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64, error) {
 	// check if user exists
-	_, err := s.userRepo.GetUserByID(task.UserID)
+	_, err := s.userRepo.GetUserByID(ctx, task.UserID)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
@@ -44,7 +45,7 @@ func (s *TaskService) CreateTask(task *models.Task) (int64, error) {
 	if task.MessengerRelatedUserID != nil {
 
 		// check if messenger related user exists
-		_, err := s.messengerRepo.GetMessengerRelatedUserByID(*task.MessengerRelatedUserID)
+		_, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *task.MessengerRelatedUserID)
 		if err != nil {
 			if errors.Is(err, errs.ErrNotFound) {
 				err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
@@ -54,7 +55,7 @@ func (s *TaskService) CreateTask(task *models.Task) (int64, error) {
 		}
 	}
 
-	taskID, err := s.taskRepo.CreateTask(task)
+	taskID, err := s.taskRepo.CreateTask(ctx, task)
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}
@@ -63,8 +64,8 @@ func (s *TaskService) CreateTask(task *models.Task) (int64, error) {
 }
 
 // GetTask implements BL of retrieving existing task by its id
-func (s *TaskService) GetTask(taskID int64) (*models.Task, error) {
-	task, err := s.taskRepo.GetTaskByID(taskID)
+func (s *TaskService) GetTask(ctx context.Context, taskID int64) (*models.Task, error) {
+	task, err := s.taskRepo.GetTaskByID(ctx, taskID)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -73,9 +74,9 @@ func (s *TaskService) GetTask(taskID int64) (*models.Task, error) {
 }
 
 // GetUserTasks implements BL of retrieving existing tasks by user id
-func (s *TaskService) GetUserTasks(userID int64) ([]*models.Task, error) {
+func (s *TaskService) GetUserTasks(ctx context.Context, userID int64) ([]*models.Task, error) {
 	// check if user exists
-	_, err := s.userRepo.GetUserByID(userID)
+	_, err := s.userRepo.GetUserByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
@@ -84,7 +85,7 @@ func (s *TaskService) GetUserTasks(userID int64) ([]*models.Task, error) {
 		return nil, errors.WithStack(err)
 	}
 
-	tasks, err := s.taskRepo.GetTasksByUserID(userID)
+	tasks, err := s.taskRepo.GetTasksByUserID(ctx, userID)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -93,9 +94,9 @@ func (s *TaskService) GetUserTasks(userID int64) ([]*models.Task, error) {
 }
 
 // UpdateTask implements BL of updating task by id
-func (s *TaskService) UpdateTask(taskID int64, updateRequest *models.TaskUpdateRequest) (*models.Task, error) {
+func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateRequest *models.TaskUpdateRequest) (*models.Task, error) {
 	// check if the task exists
-	task, err := s.taskRepo.GetTaskByID(taskID)
+	task, err := s.taskRepo.GetTaskByID(ctx, taskID)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -121,7 +122,7 @@ func (s *TaskService) UpdateTask(taskID int64, updateRequest *models.TaskUpdateR
 		task.CronExpression = updateRequest.CronExpression
 	}
 
-	err = s.taskRepo.UpdateTask(task)
+	err = s.taskRepo.UpdateTask(ctx, task)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -130,13 +131,13 @@ func (s *TaskService) UpdateTask(taskID int64, updateRequest *models.TaskUpdateR
 }
 
 // DeleteTask implements BL of soft deleting task by id
-func (s *TaskService) DeleteTask(taskID int64) error {
-	_, err := s.taskRepo.GetTaskByID(taskID)
+func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
+	_, err := s.taskRepo.GetTaskByID(ctx, taskID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	err = s.taskRepo.DeleteTask(taskID)
+	err = s.taskRepo.DeleteTask(ctx, taskID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -145,9 +146,9 @@ func (s *TaskService) DeleteTask(taskID int64) error {
 }
 
 // QueueTask implements BL of sending task to queue for interacting with scheduler service
-func (s *TaskService) QueueTask(scheduledTask *models.ScheduledTask) error {
+func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.ScheduledTask) error {
 	// check if task exists
-	task, err := s.taskRepo.GetTaskByID(scheduledTask.TaskID)
+	task, err := s.taskRepo.GetTaskByID(ctx, scheduledTask.TaskID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -171,7 +172,7 @@ func (s *TaskService) QueueTask(scheduledTask *models.ScheduledTask) error {
 		var messengerRelatedUser *models.MessengerRelatedUser
 
 		// check if messenger related user indeed exists
-		messengerRelatedUser, err = s.messengerRepo.GetMessengerRelatedUserByID(*task.MessengerRelatedUserID)
+		messengerRelatedUser, err = s.messengerRepo.GetMessengerRelatedUserByID(ctx, *task.MessengerRelatedUserID)
 		if err != nil {
 			if errors.Is(err, errs.ErrNotFound) {
 				err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
@@ -192,7 +193,7 @@ func (s *TaskService) QueueTask(scheduledTask *models.ScheduledTask) error {
 		}
 	}
 
-	err = s.producer.Publish(taskQueueMessage)
+	err = s.producer.Publish(ctx, taskQueueMessage)
 	if err != nil {
 		// TODO: failed to publish message: Exception (504) Reason: \"channel/connection is not open\"
 		return errors.WithStack(errors.Errorf("can't publish message %v to rabbitmq: %s",

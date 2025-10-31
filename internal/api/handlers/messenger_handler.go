@@ -46,7 +46,7 @@ func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
 		return
 	}
 
-	messengerID, err := h.messengerService.CreateMessenger(&messenger)
+	messengerID, err := h.messengerService.CreateMessenger(c.Request.Context(), &messenger)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while adding new messenger type")
 
@@ -75,7 +75,7 @@ func (h *MessengerHandler) GetMessenger(c *gin.Context) {
 		return
 	}
 
-	messenger, err := h.messengerService.GetMessenger(messengerID)
+	messenger, err := h.messengerService.GetMessenger(c.Request.Context(), messengerID)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while getting messenger by its id")
 
@@ -105,7 +105,7 @@ func (h *MessengerHandler) GetMessenger(c *gin.Context) {
 func (h *MessengerHandler) GetMessengerIDByName(c *gin.Context) {
 	messengerName := c.Param("messenger_name")
 
-	messengerID, err := h.messengerService.GetMessengerIDByName(messengerName)
+	messengerID, err := h.messengerService.GetMessengerIDByName(c.Request.Context(), messengerName)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while getting messenger by its name")
 
@@ -142,7 +142,7 @@ func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
 		return
 	}
 
-	messengerRelatedUserID, err := h.messengerService.CreateMessengerRelatedUser(&messengerRelatedUser)
+	messengerRelatedUserID, err := h.messengerService.CreateMessengerRelatedUser(c.Request.Context(), &messengerRelatedUser)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while creating a messenger-related user")
 
@@ -193,7 +193,7 @@ func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 	}
 	messengerID := &messengerIDQuery
 
-	messengerRelatedUser, err := h.messengerService.GetMessengerRelatedUser(chatID, messengerUserID, userID, messengerID)
+	messengerRelatedUser, err := h.messengerService.GetMessengerRelatedUser(c.Request.Context(), chatID, messengerUserID, userID, messengerID)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while getting a messenger-related user")
 
@@ -226,7 +226,7 @@ func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 func (h *MessengerHandler) GetUserID(c *gin.Context) {
 	messengerUserID := c.Param("messenger_user_id")
 
-	userID, err := h.messengerService.GetUserID(messengerUserID)
+	userID, err := h.messengerService.GetUserID(c.Request.Context(), messengerUserID)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while getting a userID")
 

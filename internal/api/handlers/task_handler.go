@@ -46,7 +46,7 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 		return
 	}
 
-	taskID, err := h.taskService.CreateTask(&task)
+	taskID, err := h.taskService.CreateTask(c.Request.Context(), &task)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while adding new task")
 
@@ -81,7 +81,7 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 		return
 	}
 
-	task, err := h.taskService.GetTask(taskID)
+	task, err := h.taskService.GetTask(c.Request.Context(), taskID)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while getting task by its id")
 
@@ -116,7 +116,7 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		return
 	}
 
-	tasks, err := h.taskService.GetUserTasks(userID)
+	tasks, err := h.taskService.GetUserTasks(c.Request.Context(), userID)
 	if err != nil {
 		// h.logger.Error().Stack().Err(err).Msg("error while getting tasks by userID parameter")
 		if errors.Is(err, errs.ErrUnprocessableEntity) {
@@ -160,7 +160,7 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 		return
 	}
 
-	updatedTask, err := h.taskService.UpdateTask(taskID, &taskUpdateRequest)
+	updatedTask, err := h.taskService.UpdateTask(c.Request.Context(), taskID, &taskUpdateRequest)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while updating task")
 
@@ -203,7 +203,7 @@ func (h *TaskHandler) DeleteTask(c *gin.Context) {
 		return
 	}
 
-	err = h.taskService.DeleteTask(taskID)
+	err = h.taskService.DeleteTask(c.Request.Context(), taskID)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while soft deleting task")
 
@@ -240,7 +240,7 @@ func (h *TaskHandler) QueueTask(c *gin.Context) {
 		return
 	}
 
-	err := h.taskService.QueueTask(&scheduledTask)
+	err := h.taskService.QueueTask(c.Request.Context(), &scheduledTask)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while enqueuing task")
 

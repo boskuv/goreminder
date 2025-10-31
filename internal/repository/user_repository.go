@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"time"
 
@@ -13,10 +14,10 @@ import (
 )
 
 type UserRepository interface {
-	CreateUser(user *models.User) (int64, error)
-	GetUserByID(id int64) (*models.User, error)
-	UpdateUser(user *models.User) error
-	DeleteUser(id int64) error
+	CreateUser(ctx context.Context, user *models.User) (int64, error)
+	GetUserByID(ctx context.Context, id int64) (*models.User, error)
+	UpdateUser(ctx context.Context, user *models.User) error
+	DeleteUser(ctx context.Context, id int64) error
 }
 
 type userRepository struct {
@@ -34,7 +35,7 @@ func NewUserRepository(db *sqlx.DB) UserRepository {
 // CreateUser inserts a new user into the database
 // default values are preset for: id, created_at (database-level)
 // nil values are preset for: deleted_at (database-level)
-func (r *userRepository) CreateUser(user *models.User) (int64, error) {
+func (r *userRepository) CreateUser(ctx context.Context, user *models.User) (int64, error) {
 	query, args, err := r.sb.Insert("users").
 		Columns("name", "email", "password_hash", "timezone", "language_code", "role").
 		Values(user.Name, user.Email, user.PasswordHash, user.Timezone, user.LanguageCode, user.Role).
@@ -45,7 +46,7 @@ func (r *userRepository) CreateUser(user *models.User) (int64, error) {
 	}
 
 	var id int64
-	err = r.db.QueryRow(query, args...).Scan(&id)
+	err = r.db.QueryRowContext(ctx, query, args...).Scan(&id)
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to insert user")
 	}
@@ -55,7 +56,7 @@ func (r *userRepository) CreateUser(user *models.User) (int64, error) {
 
 // GetUserByID retrieves a user by ID
 // Returns user entity and an error if occurred
-func (r *userRepository) GetUserByID(id int64) (*models.User, error) {
+func (r *userRepository) GetUserByID(ctx context.Context, id int64) (*models.User, error) {
 	query, args, err := r.sb.Select("id", "name", "email", "password_hash", "created_at", "timezone", "language_code", "role").
 		From("users").
 		Where(squirrel.Eq{"deleted_at": nil}).
@@ -66,7 +67,7 @@ func (r *userRepository) GetUserByID(id int64) (*models.User, error) {
 	}
 
 	var user models.User
-	err = r.db.Get(&user, query, args...)
+	err = r.db.GetContext(ctx, &user, query, args...)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, errors.Wrap(errs.ErrNotFound, "no user found for passed id")
@@ -80,7 +81,7 @@ func (r *userRepository) GetUserByID(id int64) (*models.User, error) {
 
 // UpdateUser updates user with not nil fields passed in request
 // It sets the updated_at to the current time
-func (r *userRepository) UpdateUser(user *models.User) error {
+func (r *userRepository) UpdateUser(ctx context.Context, user *models.User) error {
 	query, args, err := r.sb.Update("users").
 		Set("name", user.Name).
 		Set("email", user.Email).
@@ -96,7 +97,7 @@ func (r *userRepository) UpdateUser(user *models.User) error {
 		return errors.Wrap(err, "failed to build query while updating user")
 	}
 
-	_, err = r.db.Exec(query, args...)
+	_, err = r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return errors.Wrap(err, "failed to execute update query for user")
 	}
@@ -106,7 +107,7 @@ func (r *userRepository) UpdateUser(user *models.User) error {
 
 // DeleteUser soft deletes user by its id
 // It sets the deleted_at timestamp to the current time
-func (r *userRepository) DeleteUser(id int64) error {
+func (r *userRepository) DeleteUser(ctx context.Context, id int64) error {
 	query, args, err := r.sb.Update("users").
 		Set("deleted_at", time.Now().UTC()).
 		Where(squirrel.Eq{"deleted_at": nil}).
@@ -116,7 +117,7 @@ func (r *userRepository) DeleteUser(id int64) error {
 		return errors.Wrap(err, "failed to build query while soft deleting user")
 	}
 
-	_, err = r.db.Exec(query, args...)
+	_, err = r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return errors.Wrap(err, "failed to execute soft delete query for user")
 	}

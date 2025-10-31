@@ -45,7 +45,7 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	userID, err := h.userService.CreateUser(&user)
+	userID, err := h.userService.CreateUser(c.Request.Context(), &user)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while adding new user")
 
@@ -74,7 +74,7 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.GetUser(userID)
+	user, err := h.userService.GetUser(c.Request.Context(), userID)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while getting user by its id")
 
@@ -121,7 +121,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	updatedUser, err := h.userService.UpdateUser(userID, &userUpdateRequest)
+	updatedUser, err := h.userService.UpdateUser(c.Request.Context(), userID, &userUpdateRequest)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while updating user")
 
@@ -163,7 +163,7 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 		return
 	}
 
-	err = h.userService.DeleteUser(userID)
+	err = h.userService.DeleteUser(c.Request.Context(), userID)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while soft deleting user")
 

@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -26,6 +29,9 @@ import (
 )
 
 func main() {
+	// root context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	// parse command-line arguments
 	parsedArgs := args.ParseArgs()
 
@@ -53,8 +59,10 @@ func main() {
 		observability.StartMetricsServer(cfg.Metrics.Addr)
 	}
 
+	var tracer interface{ Shutdown(context.Context) error }
 	if cfg.Tracing.Enabled {
-		tracer, _ := observability.InitTracer(cfg.Tracing.ServiceName, cfg.Tracing.Endpoint, cfg.Tracing.Insecure)
+		tp, _ := observability.InitTracer(cfg.Tracing.ServiceName, cfg.Tracing.Endpoint, cfg.Tracing.Insecure)
+		tracer = tp
 		defer tracer.Shutdown(context.Background())
 	}
 
@@ -106,7 +114,6 @@ func main() {
 			log.Info().Msg("producer is closed gracefully")
 		}
 	}()
-	defer producer.Close()
 
 	// setup repositories
 	taskRepo := repository.NewTaskRepository(db)
@@ -158,9 +165,52 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	log.Printf("Starting server on port %s", port)
-	if err := router.Run(":" + port); err != nil {
-		log.Fatal().Err(err).Msg("failed to run server")
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: router,
+	}
+
+	// signal handling
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	// run server
+	go func() {
+		log.Printf("Starting server on port %s", port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal().Err(err).Msg("failed to run server")
+		}
+	}()
+
+	// wait for signal
+	<-sigCh
+	log.Info().Msg("shutdown signal received")
+
+	// begin graceful shutdown
+	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer shutdownCancel()
+
+	// stop accepting new requests and wait for inflight to finish
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Error().Stack().Err(err).Msg("server shutdown error")
+	} else {
+		log.Info().Msg("server is closed gracefully")
+	}
+
+	// close DB
+	if err := db.Close(); err != nil {
+		log.Error().Stack().Err(err).Msg("failed to close db")
+	} else {
+		log.Info().Msg("db is closed gracefully")
+	}
+
+	// tracer shutdown (if set)
+	if tracer != nil {
+		if err := tracer.Shutdown(shutdownCtx); err != nil {
+			log.Error().Stack().Err(err).Msg("failed to close tracer")
+		} else {
+			log.Info().Msg("tracer is closed gracefully")
+		}
 	}
 
 }
