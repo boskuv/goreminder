@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -39,7 +40,8 @@ func main() {
 	err := config.Setup(parsedArgs.ConfigPath)
 
 	if err != nil {
-		panic("unable to setup configuration")
+		errMsg := fmt.Sprintf("Unable to setup configuration: %s", err)
+		panic(errMsg)
 	}
 
 	cfg := config.GetConfig()
@@ -100,7 +102,7 @@ func main() {
 		cfg.Producer.QueueName,
 		cfg.Producer.Exchange,
 		cfg.Producer.ConnectionRetries,
-		cfg.Producer.ConnectionRetryDelay,
+		time.Duration(cfg.Producer.ConnectionRetryDelay),
 	)
 
 	producer, err := queue.NewProducer(producerConfig)

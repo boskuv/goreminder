@@ -4,64 +4,70 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/creasty/defaults"
+	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 )
 
 var Config *Configuration
 
+var validate = validator.New()
+
 type Configuration struct {
-	Server   ServerConfiguration
-	Database DatabaseConfiguration
-	Producer ProducerConfiguration
-	Tracing  TracingConfiguration
-	Metrics  MetricsConfiguration
+	Server   ServerConfiguration   `mapstructure:"server"`
+	Database DatabaseConfiguration `mapstructure:"database"`
+	Producer ProducerConfiguration `mapstructure:"producer"`
+	Tracing  TracingConfiguration  `mapstructure:"tracing"`
+	Metrics  MetricsConfiguration  `mapstructure:"metrics"`
 }
 
 type DatabaseConfiguration struct {
-	Driver          string
-	Dbname          string
-	Username        string // TODO: simplify to User
-	Password        string
-	Host            string
-	Port            string
-	MaxOpenConns    int
-	MaxIdleConns    int
-	ConnMaxLifetime string //`yaml:"conn_max_lifetime" env:"POSTGRES_CONN_MAX_LIFETIME"`
-	MaxRetries      int    //`yaml:"max_retries" env:"MAX_RETRIES"`
+	Driver          string `mapstructure:"driver" validate:"required,oneof=postgres"`
+	Dbname          string `mapstructure:"dbname" validate:"required"`
+	Username        string `mapstructure:"username" validate:"required"`
+	Password        string `mapstructure:"password" validate:"required"`
+	Host            string `mapstructure:"host" validate:"required,hostname|ip"`
+	Port            string `mapstructure:"port" validate:"required,numeric"`
+	MaxOpenConns    int    `mapstructure:"maxOpenConns" default:"20" validate:"gte=1"`
+	MaxIdleConns    int    `mapstructure:"maxIdleConns" default:"10" validate:"gte=0"`
+	ConnMaxLifetime string `mapstructure:"connMaxLifetime" default:"30m"`
+	MaxRetries      int    `mapstructure:"maxRetries" default:"3" validate:"gte=0"`
+	// Legacy support: if provided as seconds in config under key maxLifetime
+	LegacyMaxLifetimeSeconds int `mapstructure:"maxLifetime"`
 }
 
 type ProducerConfiguration struct {
-	Host                 string
-	Port                 string // TODO: int?
-	User                 string
-	Password             string
-	QueueName            string
-	Exchange             string
-	ConnectionRetries    int
-	ConnectionRetryDelay time.Duration
+	Host                 string `mapstructure:"host"`
+	Port                 string `mapstructure:"port"`
+	User                 string `mapstructure:"user"`
+	Password             string `mapstructure:"password"`
+	QueueName            string `mapstructure:"queueName"`
+	Exchange             string `mapstructure:"exchange"`
+	ConnectionRetries    int    `mapstructure:"connectionRetries" default:"5" validate:"gte=0"`
+	ConnectionRetryDelay int    `mapstructure:"connectionRetryDelay" default:"2" validate:"gte=0"`
 }
 
 type TracingConfiguration struct {
-	Enabled     bool
-	Endpoint    string
-	ServiceName string
-	Insecure    bool
+	Enabled     bool   `mapstructure:"enabled"`
+	Endpoint    string `mapstructure:"endpoint"`
+	ServiceName string `mapstructure:"serviceName" default:"goreminder"`
+	Insecure    bool   `mapstructure:"insecure"`
 }
 
 type MetricsConfiguration struct {
-	Enabled bool
-	Addr    string
+	Enabled bool   `mapstructure:"enabled"`
+	Addr    string `mapstructure:"addr" default:":9090"`
 }
 
 type ServerConfiguration struct {
-	Port   string
-	Secret string
-	Mode   string
+	Port   string `mapstructure:"port" default:"8080" validate:"required,numeric"`
+	Secret string `mapstructure:"secret" default:"dev-secret"`
+	Mode   string `mapstructure:"mode" default:"development" validate:"oneof=development production test"`
 }
 
 // Setup configuration
 func Setup(configPath string) error {
-	var configuration *Configuration
+	var configuration Configuration
 
 	viper.SetConfigFile(configPath)
 	viper.SetConfigType("yaml")
@@ -70,12 +76,35 @@ func Setup(configPath string) error {
 		return fmt.Errorf("error reading config file: %w", err)
 	}
 
+	// Apply defaults to configuration before unmarshal so zero-values are prefilled
+	if err := defaults.Set(&configuration); err != nil {
+		return fmt.Errorf("unable to set default configuration values: %w", err)
+	}
+
+	// Unmarshal user-provided config
 	err := viper.Unmarshal(&configuration)
 	if err != nil {
 		return fmt.Errorf("unable to decode into struct: %w", err)
 	}
 
-	Config = configuration
+	// Additional derived/default logic not handled by tags
+	// Ensure DB ConnMaxLifetime is a valid duration string
+	if configuration.Database.ConnMaxLifetime == "" && configuration.Database.LegacyMaxLifetimeSeconds > 0 {
+		configuration.Database.ConnMaxLifetime = fmt.Sprintf("%ds", configuration.Database.LegacyMaxLifetimeSeconds)
+	}
+	if configuration.Database.ConnMaxLifetime != "" {
+		if _, err := time.ParseDuration(configuration.Database.ConnMaxLifetime); err != nil {
+			return fmt.Errorf("invalid database.connMaxLifetime duration: %w", err)
+		}
+	}
+
+	// Validate the resulting configuration
+	if err := validate.Struct(configuration); err != nil {
+		return fmt.Errorf("configuration validation failed: %w", err)
+	}
+
+	// Save final config
+	Config = &configuration
 
 	return nil
 }
