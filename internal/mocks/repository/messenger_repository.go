@@ -10,6 +10,7 @@
 package mock_repository
 
 import (
+        context "context"
         reflect "reflect"
 
         models "github.com/boskuv/goreminder/internal/models"
@@ -41,120 +42,120 @@ func (m *MockMessengerRepository) EXPECT() *MockMessengerRepositoryMockRecorder 
 }
 
 // CreateMessenger mocks base method.
-func (m *MockMessengerRepository) CreateMessenger(messenger *models.Messenger) (int64, error) {
+func (m *MockMessengerRepository) CreateMessenger(ctx context.Context, messenger *models.Messenger) (int64, error) {
         m.ctrl.T.Helper()
-        ret := m.ctrl.Call(m, "CreateMessenger", messenger)
+        ret := m.ctrl.Call(m, "CreateMessenger", ctx, messenger)
         ret0, _ := ret[0].(int64)
         ret1, _ := ret[1].(error)
         return ret0, ret1
 }
 
 // CreateMessenger indicates an expected call of CreateMessenger.
-func (mr *MockMessengerRepositoryMockRecorder) CreateMessenger(messenger any) *gomock.Call {
+func (mr *MockMessengerRepositoryMockRecorder) CreateMessenger(ctx, messenger any) *gomock.Call {
         mr.mock.ctrl.T.Helper()
-        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMessenger", reflect.TypeOf((*MockMessengerRepository)(nil).CreateMessenger), messenger)
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMessenger", reflect.TypeOf((*MockMessengerRepository)(nil).CreateMessenger), ctx, messenger)
 }
 
 // CreateMessengerRelatedUser mocks base method.
-func (m *MockMessengerRepository) CreateMessengerRelatedUser(messengerRelatedUser *models.MessengerRelatedUser) (int64, error) {
+func (m *MockMessengerRepository) CreateMessengerRelatedUser(ctx context.Context, messengerRelatedUser *models.MessengerRelatedUser) (int64, error) {
         m.ctrl.T.Helper()
-        ret := m.ctrl.Call(m, "CreateMessengerRelatedUser", messengerRelatedUser)
+        ret := m.ctrl.Call(m, "CreateMessengerRelatedUser", ctx, messengerRelatedUser)
         ret0, _ := ret[0].(int64)
         ret1, _ := ret[1].(error)
         return ret0, ret1
 }
 
 // CreateMessengerRelatedUser indicates an expected call of CreateMessengerRelatedUser.
-func (mr *MockMessengerRepositoryMockRecorder) CreateMessengerRelatedUser(messengerRelatedUser any) *gomock.Call {
+func (mr *MockMessengerRepositoryMockRecorder) CreateMessengerRelatedUser(ctx, messengerRelatedUser any) *gomock.Call {
         mr.mock.ctrl.T.Helper()
-        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMessengerRelatedUser", reflect.TypeOf((*MockMessengerRepository)(nil).CreateMessengerRelatedUser), messengerRelatedUser)
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMessengerRelatedUser", reflect.TypeOf((*MockMessengerRepository)(nil).CreateMessengerRelatedUser), ctx, messengerRelatedUser)
 }
 
 // GetMessengerByID mocks base method.
-func (m *MockMessengerRepository) GetMessengerByID(id int64) (*models.Messenger, error) {
+func (m *MockMessengerRepository) GetMessengerByID(ctx context.Context, id int64) (*models.Messenger, error) {
         m.ctrl.T.Helper()
-        ret := m.ctrl.Call(m, "GetMessengerByID", id)
+        ret := m.ctrl.Call(m, "GetMessengerByID", ctx, id)
         ret0, _ := ret[0].(*models.Messenger)
         ret1, _ := ret[1].(error)
         return ret0, ret1
 }
 
 // GetMessengerByID indicates an expected call of GetMessengerByID.
-func (mr *MockMessengerRepositoryMockRecorder) GetMessengerByID(id any) *gomock.Call {
+func (mr *MockMessengerRepositoryMockRecorder) GetMessengerByID(ctx, id any) *gomock.Call {
         mr.mock.ctrl.T.Helper()
-        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMessengerByID", reflect.TypeOf((*MockMessengerRepository)(nil).GetMessengerByID), id)
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMessengerByID", reflect.TypeOf((*MockMessengerRepository)(nil).GetMessengerByID), ctx, id)
 }
 
 // GetMessengerIDByName mocks base method.
-func (m *MockMessengerRepository) GetMessengerIDByName(messengerName string) (int64, error) {
+func (m *MockMessengerRepository) GetMessengerIDByName(ctx context.Context, messengerName string) (int64, error) {
         m.ctrl.T.Helper()
-        ret := m.ctrl.Call(m, "GetMessengerIDByName", messengerName)
+        ret := m.ctrl.Call(m, "GetMessengerIDByName", ctx, messengerName)
         ret0, _ := ret[0].(int64)
         ret1, _ := ret[1].(error)
         return ret0, ret1
 }
 
 // GetMessengerIDByName indicates an expected call of GetMessengerIDByName.
-func (mr *MockMessengerRepositoryMockRecorder) GetMessengerIDByName(messengerName any) *gomock.Call {
+func (mr *MockMessengerRepositoryMockRecorder) GetMessengerIDByName(ctx, messengerName any) *gomock.Call {
         mr.mock.ctrl.T.Helper()
-        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMessengerIDByName", reflect.TypeOf((*MockMessengerRepository)(nil).GetMessengerIDByName), messengerName)
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMessengerIDByName", reflect.TypeOf((*MockMessengerRepository)(nil).GetMessengerIDByName), ctx, messengerName)
 }
 
 // GetMessengerRelatedUser mocks base method.
-func (m *MockMessengerRepository) GetMessengerRelatedUser(chatID, messengerUserID string, userID, messengerID *int64) (*models.MessengerRelatedUser, error) {
+func (m *MockMessengerRepository) GetMessengerRelatedUser(ctx context.Context, chatID, messengerUserID string, userID, messengerID *int64) (*models.MessengerRelatedUser, error) {
         m.ctrl.T.Helper()
-        ret := m.ctrl.Call(m, "GetMessengerRelatedUser", chatID, messengerUserID, userID, messengerID)
+        ret := m.ctrl.Call(m, "GetMessengerRelatedUser", ctx, chatID, messengerUserID, userID, messengerID)
         ret0, _ := ret[0].(*models.MessengerRelatedUser)
         ret1, _ := ret[1].(error)
         return ret0, ret1
 }
 
 // GetMessengerRelatedUser indicates an expected call of GetMessengerRelatedUser.
-func (mr *MockMessengerRepositoryMockRecorder) GetMessengerRelatedUser(chatID, messengerUserID, userID, messengerID any) *gomock.Call {
+func (mr *MockMessengerRepositoryMockRecorder) GetMessengerRelatedUser(ctx, chatID, messengerUserID, userID, messengerID any) *gomock.Call {
         mr.mock.ctrl.T.Helper()
-        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMessengerRelatedUser", reflect.TypeOf((*MockMessengerRepository)(nil).GetMessengerRelatedUser), chatID, messengerUserID, userID, messengerID)
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMessengerRelatedUser", reflect.TypeOf((*MockMessengerRepository)(nil).GetMessengerRelatedUser), ctx, chatID, messengerUserID, userID, messengerID)
 }
 
 // GetMessengerRelatedUserByID mocks base method.
-func (m *MockMessengerRepository) GetMessengerRelatedUserByID(messengerUserID int) (*models.MessengerRelatedUser, error) {
+func (m *MockMessengerRepository) GetMessengerRelatedUserByID(ctx context.Context, messengerUserID int) (*models.MessengerRelatedUser, error) {
         m.ctrl.T.Helper()
-        ret := m.ctrl.Call(m, "GetMessengerRelatedUserByID", messengerUserID)
+        ret := m.ctrl.Call(m, "GetMessengerRelatedUserByID", ctx, messengerUserID)
         ret0, _ := ret[0].(*models.MessengerRelatedUser)
         ret1, _ := ret[1].(error)
         return ret0, ret1
 }
 
 // GetMessengerRelatedUserByID indicates an expected call of GetMessengerRelatedUserByID.
-func (mr *MockMessengerRepositoryMockRecorder) GetMessengerRelatedUserByID(messengerUserID any) *gomock.Call {
+func (mr *MockMessengerRepositoryMockRecorder) GetMessengerRelatedUserByID(ctx, messengerUserID any) *gomock.Call {
         mr.mock.ctrl.T.Helper()
-        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMessengerRelatedUserByID", reflect.TypeOf((*MockMessengerRepository)(nil).GetMessengerRelatedUserByID), messengerUserID)
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMessengerRelatedUserByID", reflect.TypeOf((*MockMessengerRepository)(nil).GetMessengerRelatedUserByID), ctx, messengerUserID)
 }
 
 // GetUserID mocks base method.
-func (m *MockMessengerRepository) GetUserID(messengerUserID string) (int64, error) {
+func (m *MockMessengerRepository) GetUserID(ctx context.Context, messengerUserID string) (int64, error) {
         m.ctrl.T.Helper()
-        ret := m.ctrl.Call(m, "GetUserID", messengerUserID)
+        ret := m.ctrl.Call(m, "GetUserID", ctx, messengerUserID)
         ret0, _ := ret[0].(int64)
         ret1, _ := ret[1].(error)
         return ret0, ret1
 }
 
 // GetUserID indicates an expected call of GetUserID.
-func (mr *MockMessengerRepositoryMockRecorder) GetUserID(messengerUserID any) *gomock.Call {
+func (mr *MockMessengerRepositoryMockRecorder) GetUserID(ctx, messengerUserID any) *gomock.Call {
         mr.mock.ctrl.T.Helper()
-        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserID", reflect.TypeOf((*MockMessengerRepository)(nil).GetUserID), messengerUserID)
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserID", reflect.TypeOf((*MockMessengerRepository)(nil).GetUserID), ctx, messengerUserID)
 }
 
 // DeleteMessengerRelatedUserByUserID mocks base method.
-func (m *MockMessengerRepository) DeleteMessengerRelatedUserByUserID(userID int64) error {
+func (m *MockMessengerRepository) DeleteMessengerRelatedUserByUserID(ctx context.Context, userID int64) error {
         m.ctrl.T.Helper()
-        ret := m.ctrl.Call(m, "DeleteMessengerRelatedUserByUserID", userID)
+        ret := m.ctrl.Call(m, "DeleteMessengerRelatedUserByUserID", ctx, userID)
         ret0, _ := ret[0].(error)
         return ret0
 }
 
 // DeleteMessengerRelatedUserByUserID indicates an expected call of DeleteMessengerRelatedUserByUserID.
-func (mr *MockMessengerRepositoryMockRecorder) DeleteMessengerRelatedUserByUserID(userID any) *gomock.Call {
+func (mr *MockMessengerRepositoryMockRecorder) DeleteMessengerRelatedUserByUserID(ctx, userID any) *gomock.Call {
         mr.mock.ctrl.T.Helper()
-        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteMessengerRelatedUserByUserID", reflect.TypeOf((*MockMessengerRepository)(nil).DeleteMessengerRelatedUserByUserID), userID)
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteMessengerRelatedUserByUserID", reflect.TypeOf((*MockMessengerRepository)(nil).DeleteMessengerRelatedUserByUserID), ctx, userID)
 }

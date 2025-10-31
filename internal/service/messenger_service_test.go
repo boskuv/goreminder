@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -17,18 +18,19 @@ func TestMessengerService_CreateMessenger(t *testing.T) {
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	svc := NewMessengerService(mockMessengerRepo, mockUserRepo)
+	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
 		messenger := &models.Messenger{Name: "Telegram"}
-		mockMessengerRepo.EXPECT().CreateMessenger(messenger).Return(int64(1), nil)
-		id, err := svc.CreateMessenger(messenger)
+		mockMessengerRepo.EXPECT().CreateMessenger(gomock.Any(), messenger).Return(int64(1), nil)
+		id, err := svc.CreateMessenger(ctx, messenger)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), id)
 	})
 
 	t.Run("validation error - empty name", func(t *testing.T) {
 		messenger := &models.Messenger{Name: ""}
-		id, err := svc.CreateMessenger(messenger)
+		id, err := svc.CreateMessenger(ctx, messenger)
 		assert.Error(t, err)
 		assert.Equal(t, int64(0), id)
 		assert.Contains(t, err.Error(), "messenger data is incomplete")
@@ -36,8 +38,8 @@ func TestMessengerService_CreateMessenger(t *testing.T) {
 
 	t.Run("repo error", func(t *testing.T) {
 		messenger := &models.Messenger{Name: "Telegram"}
-		mockMessengerRepo.EXPECT().CreateMessenger(messenger).Return(int64(0), errors.New("db error"))
-		id, err := svc.CreateMessenger(messenger)
+		mockMessengerRepo.EXPECT().CreateMessenger(gomock.Any(), messenger).Return(int64(0), errors.New("db error"))
+		id, err := svc.CreateMessenger(ctx, messenger)
 		assert.Error(t, err)
 		assert.Equal(t, int64(0), id)
 	})
@@ -50,18 +52,19 @@ func TestMessengerService_GetMessenger(t *testing.T) {
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	svc := NewMessengerService(mockMessengerRepo, mockUserRepo)
+	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
 		messenger := &models.Messenger{ID: 1, Name: "Telegram"}
-		mockMessengerRepo.EXPECT().GetMessengerByID(int64(1)).Return(messenger, nil)
-		result, err := svc.GetMessenger(1)
+		mockMessengerRepo.EXPECT().GetMessengerByID(gomock.Any(), int64(1)).Return(messenger, nil)
+		result, err := svc.GetMessenger(ctx, 1)
 		assert.NoError(t, err)
 		assert.Equal(t, messenger, result)
 	})
 
 	t.Run("repo error", func(t *testing.T) {
-		mockMessengerRepo.EXPECT().GetMessengerByID(int64(2)).Return(nil, errors.New("not found"))
-		result, err := svc.GetMessenger(2)
+		mockMessengerRepo.EXPECT().GetMessengerByID(gomock.Any(), int64(2)).Return(nil, errors.New("not found"))
+		result, err := svc.GetMessenger(ctx, 2)
 		assert.Error(t, err)
 		assert.Nil(t, result)
 	})
@@ -74,19 +77,20 @@ func TestMessengerService_GetMessengerIDByName(t *testing.T) {
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	svc := NewMessengerService(mockMessengerRepo, mockUserRepo)
+	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
 		messengerName := "Telegram"
-		mockMessengerRepo.EXPECT().GetMessengerIDByName(messengerName).Return(int64(1), nil)
-		id, err := svc.GetMessengerIDByName(messengerName)
+		mockMessengerRepo.EXPECT().GetMessengerIDByName(gomock.Any(), messengerName).Return(int64(1), nil)
+		id, err := svc.GetMessengerIDByName(ctx, messengerName)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), id)
 	})
 
 	t.Run("repo error", func(t *testing.T) {
 		messengerName := "NonExistent"
-		mockMessengerRepo.EXPECT().GetMessengerIDByName(messengerName).Return(int64(0), errors.New("not found"))
-		id, err := svc.GetMessengerIDByName(messengerName)
+		mockMessengerRepo.EXPECT().GetMessengerIDByName(gomock.Any(), messengerName).Return(int64(0), errors.New("not found"))
+		id, err := svc.GetMessengerIDByName(ctx, messengerName)
 		assert.Error(t, err)
 		assert.Equal(t, int64(0), id)
 	})
@@ -99,6 +103,7 @@ func TestMessengerService_CreateMessengerRelatedUser(t *testing.T) {
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	svc := NewMessengerService(mockMessengerRepo, mockUserRepo)
+	ctx := context.Background()
 
 	t.Run("success - with all fields", func(t *testing.T) {
 		userID := int64(1)
@@ -111,13 +116,13 @@ func TestMessengerService_CreateMessengerRelatedUser(t *testing.T) {
 		}
 
 		// Mock user existence check
-		mockUserRepo.EXPECT().GetUserByID(userID).Return(&models.User{ID: userID}, nil)
+		mockUserRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
 		// Mock messenger existence check
-		mockMessengerRepo.EXPECT().GetMessengerByID(messengerID).Return(&models.Messenger{ID: messengerID}, nil)
+		mockMessengerRepo.EXPECT().GetMessengerByID(gomock.Any(), messengerID).Return(&models.Messenger{ID: messengerID}, nil)
 		// Mock creation
-		mockMessengerRepo.EXPECT().CreateMessengerRelatedUser(messengerRelatedUser).Return(int64(1), nil)
+		mockMessengerRepo.EXPECT().CreateMessengerRelatedUser(gomock.Any(), messengerRelatedUser).Return(int64(1), nil)
 
-		id, err := svc.CreateMessengerRelatedUser(messengerRelatedUser)
+		id, err := svc.CreateMessengerRelatedUser(ctx, messengerRelatedUser)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), id)
 	})
@@ -132,7 +137,7 @@ func TestMessengerService_CreateMessengerRelatedUser(t *testing.T) {
 			// Missing MessengerUserID
 		}
 
-		id, err := svc.CreateMessengerRelatedUser(messengerRelatedUser)
+		id, err := svc.CreateMessengerRelatedUser(ctx, messengerRelatedUser)
 		assert.Error(t, err)
 		assert.Equal(t, int64(0), id)
 		assert.Contains(t, err.Error(), "messenger_user data is incomplete")
@@ -148,7 +153,7 @@ func TestMessengerService_CreateMessengerRelatedUser(t *testing.T) {
 			// Missing ChatID
 		}
 
-		id, err := svc.CreateMessengerRelatedUser(messengerRelatedUser)
+		id, err := svc.CreateMessengerRelatedUser(ctx, messengerRelatedUser)
 		assert.Error(t, err)
 		assert.Equal(t, int64(0), id)
 		assert.Contains(t, err.Error(), "messenger_user data is incomplete")
@@ -163,7 +168,7 @@ func TestMessengerService_CreateMessengerRelatedUser(t *testing.T) {
 			// Missing UserID
 		}
 
-		id, err := svc.CreateMessengerRelatedUser(messengerRelatedUser)
+		id, err := svc.CreateMessengerRelatedUser(ctx, messengerRelatedUser)
 		assert.Error(t, err)
 		assert.Equal(t, int64(0), id)
 		assert.Contains(t, err.Error(), "messenger_user data is incomplete")
@@ -178,7 +183,7 @@ func TestMessengerService_CreateMessengerRelatedUser(t *testing.T) {
 			// Missing MessengerID
 		}
 
-		id, err := svc.CreateMessengerRelatedUser(messengerRelatedUser)
+		id, err := svc.CreateMessengerRelatedUser(ctx, messengerRelatedUser)
 		assert.Error(t, err)
 		assert.Equal(t, int64(0), id)
 		assert.Contains(t, err.Error(), "messenger_user data is incomplete")
@@ -195,9 +200,9 @@ func TestMessengerService_CreateMessengerRelatedUser(t *testing.T) {
 		}
 
 		// Mock user not found
-		mockUserRepo.EXPECT().GetUserByID(userID).Return(nil, errors.New("user not found"))
+		mockUserRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(nil, errors.New("user not found"))
 
-		id, err := svc.CreateMessengerRelatedUser(messengerRelatedUser)
+		id, err := svc.CreateMessengerRelatedUser(ctx, messengerRelatedUser)
 		assert.Error(t, err)
 		assert.Equal(t, int64(0), id)
 	})
@@ -213,11 +218,11 @@ func TestMessengerService_CreateMessengerRelatedUser(t *testing.T) {
 		}
 
 		// Mock user exists
-		mockUserRepo.EXPECT().GetUserByID(userID).Return(&models.User{ID: userID}, nil)
+		mockUserRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
 		// Mock messenger not found
-		mockMessengerRepo.EXPECT().GetMessengerByID(messengerID).Return(nil, errors.New("messenger not found"))
+		mockMessengerRepo.EXPECT().GetMessengerByID(gomock.Any(), messengerID).Return(nil, errors.New("messenger not found"))
 
-		id, err := svc.CreateMessengerRelatedUser(messengerRelatedUser)
+		id, err := svc.CreateMessengerRelatedUser(ctx, messengerRelatedUser)
 		assert.Error(t, err)
 		assert.Equal(t, int64(0), id)
 	})
@@ -233,13 +238,13 @@ func TestMessengerService_CreateMessengerRelatedUser(t *testing.T) {
 		}
 
 		// Mock user exists
-		mockUserRepo.EXPECT().GetUserByID(userID).Return(&models.User{ID: userID}, nil)
+		mockUserRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
 		// Mock messenger exists
-		mockMessengerRepo.EXPECT().GetMessengerByID(messengerID).Return(&models.Messenger{ID: messengerID}, nil)
+		mockMessengerRepo.EXPECT().GetMessengerByID(gomock.Any(), messengerID).Return(&models.Messenger{ID: messengerID}, nil)
 		// Mock creation error
-		mockMessengerRepo.EXPECT().CreateMessengerRelatedUser(messengerRelatedUser).Return(int64(0), errors.New("db error"))
+		mockMessengerRepo.EXPECT().CreateMessengerRelatedUser(gomock.Any(), messengerRelatedUser).Return(int64(0), errors.New("db error"))
 
-		id, err := svc.CreateMessengerRelatedUser(messengerRelatedUser)
+		id, err := svc.CreateMessengerRelatedUser(ctx, messengerRelatedUser)
 		assert.Error(t, err)
 		assert.Equal(t, int64(0), id)
 	})
@@ -252,6 +257,7 @@ func TestMessengerService_GetMessengerRelatedUser(t *testing.T) {
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	svc := NewMessengerService(mockMessengerRepo, mockUserRepo)
+	ctx := context.Background()
 
 	t.Run("success with all parameters", func(t *testing.T) {
 		userID := int64(1)
@@ -265,13 +271,13 @@ func TestMessengerService_GetMessengerRelatedUser(t *testing.T) {
 		}
 
 		// Mock user existence check
-		mockUserRepo.EXPECT().GetUserByID(userID).Return(&models.User{ID: userID}, nil)
+		mockUserRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
 		// Mock messenger existence check
-		mockMessengerRepo.EXPECT().GetMessengerByID(messengerID).Return(&models.Messenger{ID: messengerID}, nil)
+		mockMessengerRepo.EXPECT().GetMessengerByID(gomock.Any(), messengerID).Return(&models.Messenger{ID: messengerID}, nil)
 		// Mock retrieval
-		mockMessengerRepo.EXPECT().GetMessengerRelatedUser("chat456", "user123", &userID, &messengerID).Return(expectedUser, nil)
+		mockMessengerRepo.EXPECT().GetMessengerRelatedUser(gomock.Any(), "chat456", "user123", &userID, &messengerID).Return(expectedUser, nil)
 
-		result, err := svc.GetMessengerRelatedUser("chat456", "user123", &userID, &messengerID)
+		result, err := svc.GetMessengerRelatedUser(ctx, "chat456", "user123", &userID, &messengerID)
 		assert.NoError(t, err)
 		assert.Equal(t, expectedUser, result)
 	})
@@ -286,9 +292,9 @@ func TestMessengerService_GetMessengerRelatedUser(t *testing.T) {
 		}
 
 		// When userID and messengerID are nil, no validation checks are performed
-		mockMessengerRepo.EXPECT().GetMessengerRelatedUser("chat456", "user123", nil, nil).Return(expectedUser, nil)
+		mockMessengerRepo.EXPECT().GetMessengerRelatedUser(gomock.Any(), "chat456", "user123", nil, nil).Return(expectedUser, nil)
 
-		result, err := svc.GetMessengerRelatedUser("chat456", "user123", nil, nil)
+		result, err := svc.GetMessengerRelatedUser(ctx, "chat456", "user123", nil, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, expectedUser, result)
 	})
@@ -298,9 +304,9 @@ func TestMessengerService_GetMessengerRelatedUser(t *testing.T) {
 		messengerID := int64(1)
 
 		// Mock user not found
-		mockUserRepo.EXPECT().GetUserByID(userID).Return(nil, errors.New("user not found"))
+		mockUserRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(nil, errors.New("user not found"))
 
-		result, err := svc.GetMessengerRelatedUser("chat456", "user123", &userID, &messengerID)
+		result, err := svc.GetMessengerRelatedUser(ctx, "chat456", "user123", &userID, &messengerID)
 		assert.Error(t, err)
 		assert.Nil(t, result)
 	})
@@ -310,11 +316,11 @@ func TestMessengerService_GetMessengerRelatedUser(t *testing.T) {
 		messengerID := int64(999)
 
 		// Mock user exists
-		mockUserRepo.EXPECT().GetUserByID(userID).Return(&models.User{ID: userID}, nil)
+		mockUserRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
 		// Mock messenger not found
-		mockMessengerRepo.EXPECT().GetMessengerByID(messengerID).Return(nil, errors.New("messenger not found"))
+		mockMessengerRepo.EXPECT().GetMessengerByID(gomock.Any(), messengerID).Return(nil, errors.New("messenger not found"))
 
-		result, err := svc.GetMessengerRelatedUser("chat456", "user123", &userID, &messengerID)
+		result, err := svc.GetMessengerRelatedUser(ctx, "chat456", "user123", &userID, &messengerID)
 		assert.Error(t, err)
 		assert.Nil(t, result)
 	})
@@ -324,13 +330,13 @@ func TestMessengerService_GetMessengerRelatedUser(t *testing.T) {
 		messengerID := int64(1)
 
 		// Mock user exists
-		mockUserRepo.EXPECT().GetUserByID(userID).Return(&models.User{ID: userID}, nil)
+		mockUserRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
 		// Mock messenger exists
-		mockMessengerRepo.EXPECT().GetMessengerByID(messengerID).Return(&models.Messenger{ID: messengerID}, nil)
+		mockMessengerRepo.EXPECT().GetMessengerByID(gomock.Any(), messengerID).Return(&models.Messenger{ID: messengerID}, nil)
 		// Mock retrieval error
-		mockMessengerRepo.EXPECT().GetMessengerRelatedUser("chat456", "user123", &userID, &messengerID).Return(nil, errors.New("not found"))
+		mockMessengerRepo.EXPECT().GetMessengerRelatedUser(gomock.Any(), "chat456", "user123", &userID, &messengerID).Return(nil, errors.New("not found"))
 
-		result, err := svc.GetMessengerRelatedUser("chat456", "user123", &userID, &messengerID)
+		result, err := svc.GetMessengerRelatedUser(ctx, "chat456", "user123", &userID, &messengerID)
 		assert.Error(t, err)
 		assert.Nil(t, result)
 	})
@@ -343,19 +349,20 @@ func TestMessengerService_GetUserID(t *testing.T) {
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	svc := NewMessengerService(mockMessengerRepo, mockUserRepo)
+	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
 		messengerUserID := "user123"
-		mockMessengerRepo.EXPECT().GetUserID(messengerUserID).Return(int64(1), nil)
-		userID, err := svc.GetUserID(messengerUserID)
+		mockMessengerRepo.EXPECT().GetUserID(gomock.Any(), messengerUserID).Return(int64(1), nil)
+		userID, err := svc.GetUserID(ctx, messengerUserID)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), userID)
 	})
 
 	t.Run("repo error", func(t *testing.T) {
 		messengerUserID := "nonexistent"
-		mockMessengerRepo.EXPECT().GetUserID(messengerUserID).Return(int64(0), errors.New("not found"))
-		userID, err := svc.GetUserID(messengerUserID)
+		mockMessengerRepo.EXPECT().GetUserID(gomock.Any(), messengerUserID).Return(int64(0), errors.New("not found"))
+		userID, err := svc.GetUserID(ctx, messengerUserID)
 		assert.Error(t, err)
 		assert.Equal(t, int64(0), userID)
 	})
