@@ -34,6 +34,7 @@ func NewUserHandler(logger zerolog.Logger, userService *service.UserService) *Us
 // @Produce json
 // @Param user body models.User true "User to create"
 // @Success 201 {object} map[string]int64
+// @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/users [post]
 func (h *UserHandler) CreateUser(c *gin.Context) {
@@ -62,6 +63,7 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 // @Produce json
 // @Param user_id path int true "User ID"
 // @Success 200 {object} models.User
+// @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/users/{user_id} [get]
@@ -100,6 +102,7 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 // @Param user_id path int true "User ID"
 // @Param user body models.UserUpdateRequest true "User update details"
 // @Success 200 {object} models.User
+// @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 422 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -151,6 +154,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 // @Produce json
 // @Param user_id path int true "User ID"
 // @Success 204 {object} nil
+// @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/users/{user_id} [delete]

@@ -35,6 +35,7 @@ func NewTaskHandler(logger zerolog.Logger, taskService *service.TaskService) *Ta
 // @Produce json
 // @Param task body models.Task true "Task to create"
 // @Success 201 {object} map[string]int64
+// @Failure 400 {object} map[string]string
 // @Failure 422 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/tasks [post]
@@ -70,6 +71,7 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Task ID"
 // @Success 200 {object} models.Task
+// @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/tasks/{id} [get]
@@ -105,6 +107,7 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 // @Produce json
 // @Param user_id path int true "User ID"
 // @Success 200 {object} []models.Task
+// @Failure 400 {object} map[string]string
 // @Failure 422 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/users/{user_id}/tasks [get]
@@ -141,6 +144,7 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 // @Param id path int true "Task ID"
 // @Param task body models.TaskUpdateRequest true "Task update details"
 // @Success 200 {object} models.Task
+// @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 422 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -191,6 +195,7 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Task ID"
 // @Success 204 {object} nil
+// @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/tasks/{id} [delete]
@@ -228,6 +233,7 @@ func (h *TaskHandler) DeleteTask(c *gin.Context) {
 // @Produce json
 // @Param task body models.ScheduledTask true "Task to enqueue"
 // @Success 201 {object} models.Task
+// @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 422 {object} map[string]string
 // @Failure 500 {object} map[string]string

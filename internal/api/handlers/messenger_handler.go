@@ -35,6 +35,7 @@ func NewMessengerHandler(logger zerolog.Logger, messengerService *service.Messen
 // @Produce json
 // @Param messenger body models.Messenger true "Messenger to create"
 // @Success 201 {object} map[string]int64
+// @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/messengers [post]
 func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
@@ -63,6 +64,7 @@ func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Messenger ID"
 // @Success 200 {object} models.Messenger
+// @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/messengers/{messenger_id} [get]
@@ -99,6 +101,7 @@ func (h *MessengerHandler) GetMessenger(c *gin.Context) {
 // @Produce json
 // @Param messenger_name path string true "Messenger name"
 // @Success 200 {object} models.Messenger
+// @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/messengers/by-name/{messenger_name} [get]
@@ -130,6 +133,7 @@ func (h *MessengerHandler) GetMessengerIDByName(c *gin.Context) {
 // @Produce json
 // @Param messenger body models.MessengerRelatedUser true "MessengerRelatedUser to create"
 // @Success 201 {object} map[string]int64
+// @Failure 400 {object} map[string]string
 // @Failure 422 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/messengerRelatedUsers [post]
@@ -167,6 +171,7 @@ func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
 // @Param user_id query int false "User ID"
 // @Param messenger_id query int false "Messenger ID"
 // @Success 200 {object} models.MessengerRelatedUser
+// @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 422 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -220,6 +225,7 @@ func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 // @Produce json
 // @Param messenger_user_id path string true "Messenger UserID"
 // @Success 200 {object} map[string]int64
+// @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/messengerRelatedUsers/{messenger_user_id}/user [get]
