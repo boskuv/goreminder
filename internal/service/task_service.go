@@ -8,6 +8,10 @@ import (
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/repository"
 	"github.com/boskuv/goreminder/pkg/queue"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/pkg/errors"
 )
@@ -19,6 +23,7 @@ type TaskService struct {
 	messengerRepo   repository.MessengerRepository
 	taskHistoryRepo repository.TaskHistoryRepository
 	producer        *queue.Producer
+	tracer          trace.Tracer
 }
 
 // NewTaskService creates a new TaskService
@@ -29,6 +34,7 @@ func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.User
 		messengerRepo:   messengerRepo,
 		taskHistoryRepo: taskHistoryRepo,
 		producer:        producer,
+		tracer:          otel.Tracer("task-service"),
 	}
 }
 
@@ -64,6 +70,11 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 
 	// Record history
 	task.ID = taskID
+	_, historySpan := s.tracer.Start(ctx, "task_service.record_task_created_history",
+		trace.WithAttributes(
+			attribute.Int64("task.id", taskID),
+			attribute.Int64("user.id", task.UserID),
+		))
 	history := &models.TaskHistory{
 		TaskID:   taskID,
 		UserID:   task.UserID,
@@ -71,9 +82,14 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 		NewValue: s.taskToMap(task),
 	}
 	if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
+		historySpan.RecordError(err)
+		historySpan.SetStatus(codes.Error, err.Error())
 		// Log error but don't fail the creation
 		// TODO: log error
+	} else {
+		historySpan.SetStatus(codes.Ok, "history recorded")
 	}
+	historySpan.End()
 
 	return taskID, nil
 }
@@ -152,6 +168,12 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 
 	// Record status change separately if status was changed
 	if statusChanged {
+		_, statusHistorySpan := s.tracer.Start(ctx, "task_service.record_status_changed_history",
+			trace.WithAttributes(
+				attribute.Int64("task.id", taskID),
+				attribute.String("status.old", oldStatus),
+				attribute.String("status.new", oldTask.Status),
+			))
 		statusHistory := &models.TaskHistory{
 			TaskID:   taskID,
 			UserID:   oldTask.UserID,
@@ -160,8 +182,13 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			NewValue: map[string]interface{}{"status": oldTask.Status},
 		}
 		if err := s.taskHistoryRepo.CreateTaskHistory(ctx, statusHistory); err != nil {
+			statusHistorySpan.RecordError(err)
+			statusHistorySpan.SetStatus(codes.Error, err.Error())
 			// TODO: log error
+		} else {
+			statusHistorySpan.SetStatus(codes.Ok, "status change history recorded")
 		}
+		statusHistorySpan.End()
 	}
 
 	// Record general update history (if other fields changed, not just status)
@@ -170,6 +197,11 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		updateRequest.CronExpression != nil
 
 	if hasOtherChanges || (updateRequest.Status != nil && !statusChanged) {
+		_, updateHistorySpan := s.tracer.Start(ctx, "task_service.record_task_updated_history",
+			trace.WithAttributes(
+				attribute.Int64("task.id", taskID),
+				attribute.Int64("user.id", oldTask.UserID),
+			))
 		history := &models.TaskHistory{
 			TaskID:   taskID,
 			UserID:   oldTask.UserID,
@@ -178,8 +210,13 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			NewValue: s.taskToMap(oldTask),
 		}
 		if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
+			updateHistorySpan.RecordError(err)
+			updateHistorySpan.SetStatus(codes.Error, err.Error())
 			// TODO: log error
+		} else {
+			updateHistorySpan.SetStatus(codes.Ok, "update history recorded")
 		}
+		updateHistorySpan.End()
 	}
 
 	return oldTask, nil
@@ -198,6 +235,11 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 	}
 
 	// Record history
+	_, deleteHistorySpan := s.tracer.Start(ctx, "task_service.record_task_deleted_history",
+		trace.WithAttributes(
+			attribute.Int64("task.id", taskID),
+			attribute.Int64("user.id", task.UserID),
+		))
 	history := &models.TaskHistory{
 		TaskID:   taskID,
 		UserID:   task.UserID,
@@ -205,8 +247,13 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		OldValue: s.taskToMap(task),
 	}
 	if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
+		deleteHistorySpan.RecordError(err)
+		deleteHistorySpan.SetStatus(codes.Error, err.Error())
 		// TODO: log error
+	} else {
+		deleteHistorySpan.SetStatus(codes.Ok, "delete history recorded")
 	}
+	deleteHistorySpan.End()
 
 	return nil
 }
@@ -275,36 +322,62 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 
 // GetTaskHistory implements BL of retrieving task history by task ID
 func (s *TaskService) GetTaskHistory(ctx context.Context, taskID int64) ([]*models.TaskHistory, error) {
+	ctx, span := s.tracer.Start(ctx, "task_service.GetTaskHistory",
+		trace.WithAttributes(
+			attribute.Int64("task.id", taskID),
+		))
+	defer span.End()
+
 	// Check if task exists
 	_, err := s.taskRepo.GetTaskByID(ctx, taskID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
 
 	histories, err := s.taskHistoryRepo.GetTaskHistoryByTaskID(ctx, taskID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
 
+	span.SetAttributes(attribute.Int("history.count", len(histories)))
+	span.SetStatus(codes.Ok, "task history retrieved successfully")
 	return histories, nil
 }
 
 // GetUserTaskHistory implements BL of retrieving task history by user ID
 func (s *TaskService) GetUserTaskHistory(ctx context.Context, userID int64, limit, offset int) ([]*models.TaskHistory, error) {
+	ctx, span := s.tracer.Start(ctx, "task_service.GetUserTaskHistory",
+		trace.WithAttributes(
+			attribute.Int64("user.id", userID),
+			attribute.Int("limit", limit),
+			attribute.Int("offset", offset),
+		))
+	defer span.End()
+
 	// Check if user exists
 	_, err := s.userRepo.GetUserByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
 
 	histories, err := s.taskHistoryRepo.GetTaskHistoryByUserID(ctx, userID, limit, offset)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
 
+	span.SetAttributes(attribute.Int("history.count", len(histories)))
+	span.SetStatus(codes.Ok, "user task history retrieved successfully")
 	return histories, nil
 }
 

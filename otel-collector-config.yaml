@@ -2,11 +2,13 @@ receivers:
   otlp:
     protocols:
       grpc:
+        endpoint: 0.0.0.0:4317
       http:
+        endpoint: 0.0.0.0:4318
 
 exporters:
   otlp:
-    endpoint: "jaeger:4317"  # Send traces to Jaeger via OTLP gRPC
+    endpoint: "jaeger:4317"  # Send traces to Jaeger via OTLP gRPC (format: host:port)
     tls:
       insecure: true
 

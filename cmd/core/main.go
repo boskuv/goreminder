@@ -63,9 +63,19 @@ func main() {
 
 	var tracer interface{ Shutdown(context.Context) error }
 	if cfg.Tracing.Enabled {
-		tp, _ := observability.InitTracer(cfg.Tracing.ServiceName, cfg.Tracing.Endpoint, cfg.Tracing.Insecure)
-		tracer = tp
-		defer tracer.Shutdown(context.Background())
+		tp, err := observability.InitTracer(cfg.Tracing.ServiceName, cfg.Tracing.Endpoint, cfg.Tracing.Insecure)
+		if err != nil {
+			log.Warn().Err(err).Msg("failed to initialize tracer, tracing will be disabled")
+		} else {
+			tracer = tp
+			defer func() {
+				if err := tracer.Shutdown(context.Background()); err != nil {
+					log.Error().Stack().Err(err).Msg("failed to shutdown tracer")
+				} else {
+					log.Info().Msg("tracer is closed gracefully")
+				}
+			}()
+		}
 	}
 
 	// DB init
