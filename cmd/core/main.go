@@ -68,13 +68,6 @@ func main() {
 			log.Warn().Err(err).Msg("failed to initialize tracer, tracing will be disabled")
 		} else {
 			tracer = tp
-			defer func() {
-				if err := tracer.Shutdown(context.Background()); err != nil {
-					log.Error().Stack().Err(err).Msg("failed to shutdown tracer")
-				} else {
-					log.Info().Msg("tracer is closed gracefully")
-				}
-			}()
 		}
 	}
 
