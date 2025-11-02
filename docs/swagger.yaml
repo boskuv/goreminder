@@ -61,6 +61,25 @@ definitions:
       user_id:
         type: integer
     type: object
+  models.TaskHistory:
+    properties:
+      action:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      new_value:
+        additionalProperties: true
+        type: object
+      old_value:
+        additionalProperties: true
+        type: object
+      task_id:
+        type: integer
+      user_id:
+        type: integer
+    type: object
   models.TaskUpdateRequest:
     properties:
       cron_expression:
@@ -525,6 +544,45 @@ paths:
       summary: Update a task
       tags:
       - Tasks
+  /api/v1/tasks/{id}/history:
+    get:
+      description: Retrieves history entries for a specific task
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.TaskHistory'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get task history by task ID
+      tags:
+      - Tasks
   /api/v1/tasks/queue:
     post:
       consumes:
@@ -767,6 +825,55 @@ paths:
               type: string
             type: object
       summary: Get all user's tasks by userID
+      tags:
+      - Tasks
+  /api/v1/users/{user_id}/tasks/history:
+    get:
+      description: Retrieves task history entries for a user with pagination
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      - default: 50
+        description: 'Limit (default: 50)'
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: 'Offset (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.TaskHistory'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get task history by user ID
       tags:
       - Tasks
   /docs:
