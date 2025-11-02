@@ -10,6 +10,10 @@ import (
 	"github.com/furdarius/rabbitroutine"
 	"github.com/pkg/errors"
 	"github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type ProducerConfig struct {
@@ -45,6 +49,7 @@ type Producer struct {
 	queue      string
 	exchange   string
 	publisher  *rabbitroutine.RetryPublisher
+	tracer     trace.Tracer
 }
 
 // NewProducer initializes a new Producer with the given configuration
@@ -127,6 +132,7 @@ func NewProducer(cfg *ProducerConfig) (*Producer, error) {
 		queue:      cfg.queueName,
 		exchange:   cfg.exchange,
 		publisher:  publisher,
+		tracer:     otel.Tracer("queue-producer"),
 	}
 
 	return producer, nil
@@ -152,10 +158,28 @@ func (p *Producer) Close() error {
 
 // Publish sends a message to the RabbitMQ queue
 func (p *Producer) Publish(ctx context.Context, message interface{}) error {
+	ctx, span := p.tracer.Start(ctx, "queue_producer.Publish",
+		trace.WithAttributes(
+			attribute.String("queue.name", p.queue),
+			attribute.String("exchange.name", p.exchange),
+		))
+	defer span.End()
+
+	// Extract task name from message if it's a map
+	if msgMap, ok := message.(map[string]interface{}); ok {
+		if task, ok := msgMap["task"].(string); ok {
+			span.SetAttributes(attribute.String("task.name", task))
+		}
+	}
+
 	body, err := json.Marshal(message)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return errors.Wrap(err, "failed to marshal message")
 	}
+
+	span.SetAttributes(attribute.Int("message.size", len(body)))
 
 	// Ensure bounded publish time; prefer request ctx if provided
 	var timeoutCtx context.Context
@@ -173,8 +197,11 @@ func (p *Producer) Publish(ctx context.Context, message interface{}) error {
 	)
 
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return errors.Wrap(err, "failed to publish message")
 	}
 
+	span.SetStatus(codes.Ok, "message published successfully")
 	return nil
 }
