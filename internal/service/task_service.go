@@ -40,33 +40,45 @@ func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.User
 
 // CreateTask implements BL of adding new task
 func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64, error) {
+	ctx, span := s.tracer.Start(ctx, "task_service.CreateTask",
+		trace.WithAttributes(
+			attribute.Int64("user.id", task.UserID),
+		))
+	defer span.End()
+
 	// check if user exists
 	_, err := s.userRepo.GetUserByID(ctx, task.UserID)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
 		}
-
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return 0, errors.WithStack(err)
 	}
 
 	if task.MessengerRelatedUserID != nil {
-
+		span.SetAttributes(attribute.Int("messenger_related_user.id", *task.MessengerRelatedUserID))
 		// check if messenger related user exists
 		_, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *task.MessengerRelatedUserID)
 		if err != nil {
 			if errors.Is(err, errs.ErrNotFound) {
 				err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
 			}
-
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return 0, errors.WithStack(err)
 		}
 	}
 
 	taskID, err := s.taskRepo.CreateTask(ctx, task)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return 0, errors.WithStack(err)
 	}
+
+	span.SetAttributes(attribute.Int64("task.id", taskID))
 
 	// Record history
 	task.ID = taskID
@@ -91,44 +103,73 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 	}
 	historySpan.End()
 
+	span.SetStatus(codes.Ok, "task created successfully")
 	return taskID, nil
 }
 
 // GetTask implements BL of retrieving existing task by its id
 func (s *TaskService) GetTask(ctx context.Context, taskID int64) (*models.Task, error) {
+	ctx, span := s.tracer.Start(ctx, "task_service.GetTask",
+		trace.WithAttributes(
+			attribute.Int64("task.id", taskID),
+		))
+	defer span.End()
+
 	task, err := s.taskRepo.GetTaskByID(ctx, taskID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
 
+	span.SetStatus(codes.Ok, "task retrieved successfully")
 	return task, nil
 }
 
 // GetUserTasks implements BL of retrieving existing tasks by user id
 func (s *TaskService) GetUserTasks(ctx context.Context, userID int64) ([]*models.Task, error) {
+	ctx, span := s.tracer.Start(ctx, "task_service.GetUserTasks",
+		trace.WithAttributes(
+			attribute.Int64("user.id", userID),
+		))
+	defer span.End()
+
 	// check if user exists
 	_, err := s.userRepo.GetUserByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
 		}
-
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
 
 	tasks, err := s.taskRepo.GetTasksByUserID(ctx, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
 
+	span.SetAttributes(attribute.Int("tasks.count", len(tasks)))
+	span.SetStatus(codes.Ok, "user tasks retrieved successfully")
 	return tasks, nil
 }
 
 // UpdateTask implements BL of updating task by id
 func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateRequest *models.TaskUpdateRequest) (*models.Task, error) {
+	ctx, span := s.tracer.Start(ctx, "task_service.UpdateTask",
+		trace.WithAttributes(
+			attribute.Int64("task.id", taskID),
+		))
+	defer span.End()
+
 	// check if the task exists
 	oldTask, err := s.taskRepo.GetTaskByID(ctx, taskID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
 
@@ -163,6 +204,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 
 	err = s.taskRepo.UpdateTask(ctx, oldTask)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
 
@@ -219,18 +262,29 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		updateHistorySpan.End()
 	}
 
+	span.SetStatus(codes.Ok, "task updated successfully")
 	return oldTask, nil
 }
 
 // DeleteTask implements BL of soft deleting task by id
 func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
+	ctx, span := s.tracer.Start(ctx, "task_service.DeleteTask",
+		trace.WithAttributes(
+			attribute.Int64("task.id", taskID),
+		))
+	defer span.End()
+
 	task, err := s.taskRepo.GetTaskByID(ctx, taskID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
 	}
 
 	err = s.taskRepo.DeleteTask(ctx, taskID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
 	}
 
@@ -255,14 +309,24 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 	}
 	deleteHistorySpan.End()
 
+	span.SetStatus(codes.Ok, "task deleted successfully")
 	return nil
 }
 
 // QueueTask implements BL of sending task to queue for interacting with scheduler service
 func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.ScheduledTask) error {
+	ctx, span := s.tracer.Start(ctx, "task_service.QueueTask",
+		trace.WithAttributes(
+			attribute.Int64("task.id", scheduledTask.TaskID),
+			attribute.String("action", scheduledTask.Action),
+		))
+	defer span.End()
+
 	// check if task exists
 	task, err := s.taskRepo.GetTaskByID(ctx, scheduledTask.TaskID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
 	}
 
@@ -279,7 +343,10 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 		// }
 
 		if task.MessengerRelatedUserID == nil {
-			return errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
+			err := errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		var messengerRelatedUser *models.MessengerRelatedUser
@@ -290,7 +357,8 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 			if errors.Is(err, errs.ErrNotFound) {
 				err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
 			}
-
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return errors.WithStack(err)
 		}
 
@@ -309,14 +377,16 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 	err = s.producer.Publish(ctx, taskQueueMessage)
 	if err != nil {
 		// TODO: failed to publish message: Exception (504) Reason: \"channel/connection is not open\"
-		return errors.WithStack(errors.Errorf("can't publish message %v to rabbitmq: %s",
+		err = errors.Errorf("can't publish message %v to rabbitmq: %s",
 			taskQueueMessage,
 			err,
-		))
+		)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.WithStack(err)
 	}
 
-	// TODO: log message has been published
-
+	span.SetStatus(codes.Ok, "task queued successfully")
 	return nil
 }
 
