@@ -14,16 +14,17 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func setup(t *testing.T) (*TaskService, *mock_repositories.MockTaskRepository, *mock_repositories.MockUserRepository, *mock_repositories.MockMessengerRepository, *queue.Producer) {
+func setup(t *testing.T) (*TaskService, *mock_repositories.MockTaskRepository, *mock_repositories.MockUserRepository, *mock_repositories.MockMessengerRepository, *mock_repositories.MockTaskHistoryRepository, *queue.Producer) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	taskRepo := mock_repositories.NewMockTaskRepository(ctrl)
 	userRepo := mock_repositories.NewMockUserRepository(ctrl)
 	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
+	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	producer := &queue.Producer{}
 
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, producer)
-	return service, taskRepo, userRepo, messengerRepo, producer
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer)
+	return service, taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer
 }
 
 // Helper functions
@@ -33,7 +34,7 @@ func ptrInt(i int) *int              { return &i }
 
 // CreateTask Tests
 func TestTaskService_CreateTask_Success(t *testing.T) {
-	service, taskRepo, userRepo, _, _ := setup(t)
+	service, taskRepo, userRepo, _, taskHistoryRepo, _ := setup(t)
 	ctx := context.Background()
 	task := &models.Task{
 		UserID:      1,
@@ -44,6 +45,7 @@ func TestTaskService_CreateTask_Success(t *testing.T) {
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
 	taskRepo.EXPECT().CreateTask(gomock.Any(), task).Return(int64(42), nil)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
 
 	id, err := service.CreateTask(ctx, task)
 	assert.NoError(t, err)
@@ -51,7 +53,7 @@ func TestTaskService_CreateTask_Success(t *testing.T) {
 }
 
 func TestTaskService_CreateTask_WithMessengerRelatedUser_Success(t *testing.T) {
-	service, taskRepo, userRepo, messengerRepo, _ := setup(t)
+	service, taskRepo, userRepo, messengerRepo, taskHistoryRepo, _ := setup(t)
 	ctx := context.Background()
 	messengerUserID := 123
 	task := &models.Task{
@@ -65,6 +67,7 @@ func TestTaskService_CreateTask_WithMessengerRelatedUser_Success(t *testing.T) {
 	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
 	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), messengerUserID).Return(&models.MessengerRelatedUser{ID: int64(messengerUserID)}, nil)
 	taskRepo.EXPECT().CreateTask(gomock.Any(), task).Return(int64(42), nil)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
 
 	id, err := service.CreateTask(ctx, task)
 	assert.NoError(t, err)
@@ -72,7 +75,7 @@ func TestTaskService_CreateTask_WithMessengerRelatedUser_Success(t *testing.T) {
 }
 
 func TestTaskService_CreateTask_UserNotFound(t *testing.T) {
-	service, _, userRepo, _, _ := setup(t)
+	service, _, userRepo, _, _, _ := setup(t)
 	ctx := context.Background()
 	task := &models.Task{UserID: 1}
 
@@ -85,7 +88,7 @@ func TestTaskService_CreateTask_UserNotFound(t *testing.T) {
 }
 
 func TestTaskService_CreateTask_UserRepositoryError(t *testing.T) {
-	service, _, userRepo, _, _ := setup(t)
+	service, _, userRepo, _, _, _ := setup(t)
 	ctx := context.Background()
 	task := &models.Task{UserID: 1}
 	expectedErr := errors.New("database error")
@@ -99,7 +102,7 @@ func TestTaskService_CreateTask_UserRepositoryError(t *testing.T) {
 }
 
 func TestTaskService_CreateTask_MessengerRelatedUserNotFound(t *testing.T) {
-	service, _, userRepo, messengerRepo, _ := setup(t)
+	service, _, userRepo, messengerRepo, _, _ := setup(t)
 	ctx := context.Background()
 	messengerUserID := 123
 	task := &models.Task{
@@ -117,7 +120,7 @@ func TestTaskService_CreateTask_MessengerRelatedUserNotFound(t *testing.T) {
 }
 
 func TestTaskService_CreateTask_MessengerRepositoryError(t *testing.T) {
-	service, _, userRepo, messengerRepo, _ := setup(t)
+	service, _, userRepo, messengerRepo, _, _ := setup(t)
 	ctx := context.Background()
 	messengerUserID := 123
 	task := &models.Task{
@@ -136,7 +139,7 @@ func TestTaskService_CreateTask_MessengerRepositoryError(t *testing.T) {
 }
 
 func TestTaskService_CreateTask_TaskRepositoryError(t *testing.T) {
-	service, taskRepo, userRepo, _, _ := setup(t)
+	service, taskRepo, userRepo, _, _, _ := setup(t)
 	ctx := context.Background()
 	task := &models.Task{UserID: 1}
 	expectedErr := errors.New("task creation failed")
@@ -152,7 +155,7 @@ func TestTaskService_CreateTask_TaskRepositoryError(t *testing.T) {
 
 // GetTask Tests
 func TestTaskService_GetTask_Success(t *testing.T) {
-	service, taskRepo, _, _, _ := setup(t)
+	service, taskRepo, _, _, _, _ := setup(t)
 	ctx := context.Background()
 	expectedTask := &models.Task{
 		ID:          1,
@@ -170,7 +173,7 @@ func TestTaskService_GetTask_Success(t *testing.T) {
 }
 
 func TestTaskService_GetTask_NotFound(t *testing.T) {
-	service, taskRepo, _, _, _ := setup(t)
+	service, taskRepo, _, _, _, _ := setup(t)
 	ctx := context.Background()
 
 	taskRepo.EXPECT().GetTaskByID(gomock.Any(), int64(1)).Return(nil, errs.ErrNotFound)
@@ -182,7 +185,7 @@ func TestTaskService_GetTask_NotFound(t *testing.T) {
 }
 
 func TestTaskService_GetTask_RepositoryError(t *testing.T) {
-	service, taskRepo, _, _, _ := setup(t)
+	service, taskRepo, _, _, _, _ := setup(t)
 	ctx := context.Background()
 	expectedErr := errors.New("database error")
 
@@ -196,7 +199,7 @@ func TestTaskService_GetTask_RepositoryError(t *testing.T) {
 
 // GetUserTasks Tests
 func TestTaskService_GetUserTasks_Success(t *testing.T) {
-	service, taskRepo, userRepo, _, _ := setup(t)
+	service, taskRepo, userRepo, _, _, _ := setup(t)
 	ctx := context.Background()
 	userID := int64(1)
 	expectedTasks := []*models.Task{
@@ -213,7 +216,7 @@ func TestTaskService_GetUserTasks_Success(t *testing.T) {
 }
 
 func TestTaskService_GetUserTasks_EmptyList(t *testing.T) {
-	service, taskRepo, userRepo, _, _ := setup(t)
+	service, taskRepo, userRepo, _, _, _ := setup(t)
 	ctx := context.Background()
 	userID := int64(1)
 
@@ -226,7 +229,7 @@ func TestTaskService_GetUserTasks_EmptyList(t *testing.T) {
 }
 
 func TestTaskService_GetUserTasks_UserNotFound(t *testing.T) {
-	service, _, userRepo, _, _ := setup(t)
+	service, _, userRepo, _, _, _ := setup(t)
 	ctx := context.Background()
 	userID := int64(1)
 
@@ -239,7 +242,7 @@ func TestTaskService_GetUserTasks_UserNotFound(t *testing.T) {
 }
 
 func TestTaskService_GetUserTasks_UserRepositoryError(t *testing.T) {
-	service, _, userRepo, _, _ := setup(t)
+	service, _, userRepo, _, _, _ := setup(t)
 	ctx := context.Background()
 	userID := int64(1)
 	expectedErr := errors.New("user database error")
@@ -253,7 +256,7 @@ func TestTaskService_GetUserTasks_UserRepositoryError(t *testing.T) {
 }
 
 func TestTaskService_GetUserTasks_TaskRepositoryError(t *testing.T) {
-	service, taskRepo, userRepo, _, _ := setup(t)
+	service, taskRepo, userRepo, _, _, _ := setup(t)
 	ctx := context.Background()
 	userID := int64(1)
 	expectedErr := errors.New("task database error")
@@ -269,7 +272,7 @@ func TestTaskService_GetUserTasks_TaskRepositoryError(t *testing.T) {
 
 // UpdateTask Tests
 func TestTaskService_UpdateTask_Success_AllFields(t *testing.T) {
-	service, taskRepo, _, _, _ := setup(t)
+	service, taskRepo, _, _, taskHistoryRepo, _ := setup(t)
 	ctx := context.Background()
 	taskID := int64(1)
 	originalTask := &models.Task{
@@ -288,6 +291,7 @@ func TestTaskService_UpdateTask_Success_AllFields(t *testing.T) {
 
 	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(originalTask, nil)
 	taskRepo.EXPECT().UpdateTask(gomock.Any(), gomock.Any()).Return(nil)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil).Times(2) // status change + general update
 
 	updatedTask, err := service.UpdateTask(ctx, taskID, updateReq)
 	assert.NoError(t, err)
@@ -298,7 +302,7 @@ func TestTaskService_UpdateTask_Success_AllFields(t *testing.T) {
 }
 
 func TestTaskService_UpdateTask_Success_PartialUpdate(t *testing.T) {
-	service, taskRepo, _, _, _ := setup(t)
+	service, taskRepo, _, _, taskHistoryRepo, _ := setup(t)
 	ctx := context.Background()
 	taskID := int64(1)
 	originalTask := &models.Task{
@@ -315,6 +319,7 @@ func TestTaskService_UpdateTask_Success_PartialUpdate(t *testing.T) {
 
 	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(originalTask, nil)
 	taskRepo.EXPECT().UpdateTask(gomock.Any(), gomock.Any()).Return(nil)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
 
 	updatedTask, err := service.UpdateTask(ctx, taskID, updateReq)
 	assert.NoError(t, err)
@@ -325,7 +330,7 @@ func TestTaskService_UpdateTask_Success_PartialUpdate(t *testing.T) {
 }
 
 func TestTaskService_UpdateTask_TaskNotFound(t *testing.T) {
-	service, taskRepo, _, _, _ := setup(t)
+	service, taskRepo, _, _, _, _ := setup(t)
 	ctx := context.Background()
 	taskID := int64(1)
 	updateReq := &models.TaskUpdateRequest{Title: ptrString("New Title")}
@@ -339,7 +344,7 @@ func TestTaskService_UpdateTask_TaskNotFound(t *testing.T) {
 }
 
 func TestTaskService_UpdateTask_GetTaskError(t *testing.T) {
-	service, taskRepo, _, _, _ := setup(t)
+	service, taskRepo, _, _, _, _ := setup(t)
 	ctx := context.Background()
 	taskID := int64(1)
 	updateReq := &models.TaskUpdateRequest{Title: ptrString("New Title")}
@@ -354,7 +359,7 @@ func TestTaskService_UpdateTask_GetTaskError(t *testing.T) {
 }
 
 func TestTaskService_UpdateTask_UpdateError(t *testing.T) {
-	service, taskRepo, _, _, _ := setup(t)
+	service, taskRepo, _, _, _, _ := setup(t)
 	ctx := context.Background()
 	taskID := int64(1)
 	originalTask := &models.Task{ID: taskID, Title: "Original Title"}
@@ -372,20 +377,21 @@ func TestTaskService_UpdateTask_UpdateError(t *testing.T) {
 
 // DeleteTask Tests
 func TestTaskService_DeleteTask_Success(t *testing.T) {
-	service, taskRepo, _, _, _ := setup(t)
+	service, taskRepo, _, _, taskHistoryRepo, _ := setup(t)
 	ctx := context.Background()
 	taskID := int64(1)
 	task := &models.Task{ID: taskID, Title: "Task to Delete"}
 
 	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(task, nil)
 	taskRepo.EXPECT().DeleteTask(gomock.Any(), taskID).Return(nil)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
 
 	err := service.DeleteTask(ctx, taskID)
 	assert.NoError(t, err)
 }
 
 func TestTaskService_DeleteTask_TaskNotFound(t *testing.T) {
-	service, taskRepo, _, _, _ := setup(t)
+	service, taskRepo, _, _, _, _ := setup(t)
 	ctx := context.Background()
 	taskID := int64(1)
 
@@ -397,7 +403,7 @@ func TestTaskService_DeleteTask_TaskNotFound(t *testing.T) {
 }
 
 func TestTaskService_DeleteTask_GetTaskError(t *testing.T) {
-	service, taskRepo, _, _, _ := setup(t)
+	service, taskRepo, _, _, _, _ := setup(t)
 	ctx := context.Background()
 	taskID := int64(1)
 	expectedErr := errors.New("database error")
@@ -410,7 +416,7 @@ func TestTaskService_DeleteTask_GetTaskError(t *testing.T) {
 }
 
 func TestTaskService_DeleteTask_DeleteError(t *testing.T) {
-	service, taskRepo, _, _, _ := setup(t)
+	service, taskRepo, _, _, _, _ := setup(t)
 	ctx := context.Background()
 	taskID := int64(1)
 	task := &models.Task{ID: taskID, Title: "Task to Delete"}
@@ -432,9 +438,10 @@ func TestNewTaskService(t *testing.T) {
 	taskRepo := mock_repositories.NewMockTaskRepository(ctrl)
 	userRepo := mock_repositories.NewMockUserRepository(ctrl)
 	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
+	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	producer := &queue.Producer{}
 
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, producer)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer)
 
 	assert.NotNil(t, service)
 	assert.Equal(t, taskRepo, service.taskRepo)
@@ -445,7 +452,7 @@ func TestNewTaskService(t *testing.T) {
 
 // Edge Cases and Additional Tests
 func TestTaskService_CreateTask_NilMessengerRelatedUserID(t *testing.T) {
-	service, taskRepo, userRepo, _, _ := setup(t)
+	service, taskRepo, userRepo, _, taskHistoryRepo, _ := setup(t)
 	ctx := context.Background()
 	task := &models.Task{
 		UserID:                 1,
@@ -455,6 +462,7 @@ func TestTaskService_CreateTask_NilMessengerRelatedUserID(t *testing.T) {
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
 	taskRepo.EXPECT().CreateTask(gomock.Any(), task).Return(int64(42), nil)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
 
 	id, err := service.CreateTask(ctx, task)
 	assert.NoError(t, err)
@@ -462,7 +470,7 @@ func TestTaskService_CreateTask_NilMessengerRelatedUserID(t *testing.T) {
 }
 
 func TestTaskService_UpdateTask_NilUpdateRequest(t *testing.T) {
-	service, taskRepo, _, _, _ := setup(t)
+	service, taskRepo, _, _, _, _ := setup(t)
 	ctx := context.Background()
 	taskID := int64(1)
 	originalTask := &models.Task{ID: taskID, Title: "Original Title"}
@@ -476,7 +484,7 @@ func TestTaskService_UpdateTask_NilUpdateRequest(t *testing.T) {
 }
 
 func TestTaskService_UpdateTask_AllNilFields(t *testing.T) {
-	service, taskRepo, _, _, _ := setup(t)
+	service, taskRepo, _, _, _, _ := setup(t)
 	ctx := context.Background()
 	taskID := int64(1)
 	originalTask := &models.Task{
@@ -503,4 +511,80 @@ func TestTaskService_UpdateTask_AllNilFields(t *testing.T) {
 	task, err := service.UpdateTask(ctx, taskID, updateReq)
 	assert.NoError(t, err)
 	assert.Equal(t, originalTask, task)
+}
+
+// GetTaskHistory Tests
+func TestTaskService_GetTaskHistory_Success(t *testing.T) {
+	service, taskRepo, _, _, taskHistoryRepo, _ := setup(t)
+	ctx := context.Background()
+	taskID := int64(1)
+	expectedHistories := []*models.TaskHistory{
+		{
+			ID:        1,
+			TaskID:    taskID,
+			UserID:    1,
+			Action:    string(models.TaskHistoryActionCreated),
+			NewValue:  map[string]interface{}{"title": "Test Task"},
+			CreatedAt: time.Now(),
+		},
+	}
+
+	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(&models.Task{ID: taskID}, nil)
+	taskHistoryRepo.EXPECT().GetTaskHistoryByTaskID(gomock.Any(), taskID).Return(expectedHistories, nil)
+
+	histories, err := service.GetTaskHistory(ctx, taskID)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedHistories, histories)
+}
+
+func TestTaskService_GetTaskHistory_TaskNotFound(t *testing.T) {
+	service, taskRepo, _, _, _, _ := setup(t)
+	ctx := context.Background()
+	taskID := int64(1)
+
+	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(nil, errs.ErrNotFound)
+
+	histories, err := service.GetTaskHistory(ctx, taskID)
+	assert.Error(t, err)
+	assert.Nil(t, histories)
+	assert.Contains(t, err.Error(), "no data found matching criteria")
+}
+
+// GetUserTaskHistory Tests
+func TestTaskService_GetUserTaskHistory_Success(t *testing.T) {
+	service, _, userRepo, _, taskHistoryRepo, _ := setup(t)
+	ctx := context.Background()
+	userID := int64(1)
+	limit := 10
+	offset := 0
+	expectedHistories := []*models.TaskHistory{
+		{
+			ID:        1,
+			TaskID:    1,
+			UserID:    userID,
+			Action:    string(models.TaskHistoryActionCreated),
+			NewValue:  map[string]interface{}{"title": "Test Task"},
+			CreatedAt: time.Now(),
+		},
+	}
+
+	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
+	taskHistoryRepo.EXPECT().GetTaskHistoryByUserID(gomock.Any(), userID, limit, offset).Return(expectedHistories, nil)
+
+	histories, err := service.GetUserTaskHistory(ctx, userID, limit, offset)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedHistories, histories)
+}
+
+func TestTaskService_GetUserTaskHistory_UserNotFound(t *testing.T) {
+	service, _, userRepo, _, _, _ := setup(t)
+	ctx := context.Background()
+	userID := int64(1)
+
+	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(nil, errs.ErrNotFound)
+
+	histories, err := service.GetUserTaskHistory(ctx, userID, 10, 0)
+	assert.Error(t, err)
+	assert.Nil(t, histories)
+	assert.Contains(t, err.Error(), "unprocessable entity")
 }

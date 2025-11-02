@@ -14,7 +14,9 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 		api.POST("/tasks", taskHandler.CreateTask)
 		api.POST("/tasks/queue", taskHandler.QueueTask)
 		api.GET("/tasks/:id", taskHandler.GetTask) // TODO: task_id
+		api.GET("/tasks/:id/history", taskHandler.GetTaskHistory)
 		api.GET("/users/:user_id/tasks", taskHandler.GetUserTasks)
+		api.GET("/users/:user_id/tasks/history", taskHandler.GetUserTaskHistory)
 		api.PUT("/tasks/:id", taskHandler.UpdateTask)
 		api.DELETE("/tasks/:id", taskHandler.DeleteTask)
 

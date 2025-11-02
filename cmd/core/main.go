@@ -121,9 +121,10 @@ func main() {
 	taskRepo := repository.NewTaskRepository(db)
 	userRepo := repository.NewUserRepository(db)
 	messengerRepo := repository.NewMessengerRepository(db)
+	taskHistoryRepo := repository.NewTaskHistoryRepository(db)
 
 	// setup services
-	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, producer)
+	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer)
 	userService := service.NewUserService(userRepo, taskRepo, messengerRepo, producer)
 	messengerService := service.NewMessengerService(messengerRepo, userRepo)
 

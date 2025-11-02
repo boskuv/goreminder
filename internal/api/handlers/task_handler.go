@@ -269,3 +269,90 @@ func (h *TaskHandler) QueueTask(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("task with id `%d` has been successfully enqueued", scheduledTask.TaskID)})
 }
+
+// @Summary Get task history by task ID
+// @Description Retrieves history entries for a specific task
+// @Tags Tasks
+// @Produce json
+// @Param id path int true "Task ID"
+// @Success 200 {object} []models.TaskHistory
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/tasks/{id}/history [get]
+func (h *TaskHandler) GetTaskHistory(c *gin.Context) {
+	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	histories, err := h.taskService.GetTaskHistory(c.Request.Context(), taskID)
+	if err != nil {
+		h.logger.Error().Stack().Err(err).Msg("error while getting task history")
+
+		if errors.Is(err, errs.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": fmt.Sprintf("task with id `%d` not found", taskID),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, histories)
+}
+
+// @Summary Get task history by user ID
+// @Description Retrieves task history entries for a user with pagination
+// @Tags Tasks
+// @Produce json
+// @Param user_id path int true "User ID"
+// @Param limit query int false "Limit (default: 50)" default(50)
+// @Param offset query int false "Offset (default: 0)" default(0)
+// @Success 200 {object} []models.TaskHistory
+// @Failure 400 {object} map[string]string
+// @Failure 422 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/users/{user_id}/tasks/history [get]
+func (h *TaskHandler) GetUserTaskHistory(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	limit := 50
+	offset := 0
+
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset >= 0 {
+			offset = parsedOffset
+		}
+	}
+
+	histories, err := h.taskService.GetUserTaskHistory(c.Request.Context(), userID, limit, offset)
+	if err != nil {
+		h.logger.Error().Stack().Err(err).Msg("error while getting user task history")
+
+		if errors.Is(err, errs.ErrUnprocessableEntity) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error": fmt.Sprintf("user with id `%d` not found", userID),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, histories)
+}

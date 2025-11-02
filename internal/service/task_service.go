@@ -14,19 +14,21 @@ import (
 
 // TaskService defines methods for task-related business logic
 type TaskService struct {
-	taskRepo      repository.TaskRepository
-	userRepo      repository.UserRepository
-	messengerRepo repository.MessengerRepository
-	producer      *queue.Producer
+	taskRepo        repository.TaskRepository
+	userRepo        repository.UserRepository
+	messengerRepo   repository.MessengerRepository
+	taskHistoryRepo repository.TaskHistoryRepository
+	producer        *queue.Producer
 }
 
 // NewTaskService creates a new TaskService
-func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, producer *queue.Producer) *TaskService {
+func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, taskHistoryRepo repository.TaskHistoryRepository, producer *queue.Producer) *TaskService {
 	return &TaskService{
-		taskRepo:      taskRepo,
-		userRepo:      userRepo,
-		messengerRepo: messengerRepo,
-		producer:      producer,
+		taskRepo:        taskRepo,
+		userRepo:        userRepo,
+		messengerRepo:   messengerRepo,
+		taskHistoryRepo: taskHistoryRepo,
+		producer:        producer,
 	}
 }
 
@@ -58,6 +60,19 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 	taskID, err := s.taskRepo.CreateTask(ctx, task)
 	if err != nil {
 		return 0, errors.WithStack(err)
+	}
+
+	// Record history
+	task.ID = taskID
+	history := &models.TaskHistory{
+		TaskID:   taskID,
+		UserID:   task.UserID,
+		Action:   string(models.TaskHistoryActionCreated),
+		NewValue: s.taskToMap(task),
+	}
+	if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
+		// Log error but don't fail the creation
+		// TODO: log error
 	}
 
 	return taskID, nil
@@ -96,43 +111,83 @@ func (s *TaskService) GetUserTasks(ctx context.Context, userID int64) ([]*models
 // UpdateTask implements BL of updating task by id
 func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateRequest *models.TaskUpdateRequest) (*models.Task, error) {
 	// check if the task exists
-	task, err := s.taskRepo.GetTaskByID(ctx, taskID)
+	oldTask, err := s.taskRepo.GetTaskByID(ctx, taskID)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
+
+	// Create a copy for old values
+	oldTaskMap := s.taskToMap(oldTask)
+	oldStatus := oldTask.Status
+	statusChanged := false
 
 	// update the task fields (partial update)
 	if updateRequest.Title != nil {
-		task.Title = *updateRequest.Title
+		oldTask.Title = *updateRequest.Title
 	}
 	if updateRequest.Description != nil {
-		task.Description = *updateRequest.Description
+		oldTask.Description = *updateRequest.Description
 	}
 	if updateRequest.Status != nil {
-		task.Status = *updateRequest.Status
+		if oldTask.Status != *updateRequest.Status {
+			statusChanged = true
+		}
+		oldTask.Status = *updateRequest.Status
 	}
 	if updateRequest.StartDate != nil {
-		task.StartDate = *updateRequest.StartDate
+		oldTask.StartDate = *updateRequest.StartDate
 	}
 	if updateRequest.FinishDate != nil {
-		task.FinishDate = updateRequest.FinishDate
+		oldTask.FinishDate = updateRequest.FinishDate
 	}
 	// TODO: check if cron expression is valid
 	if updateRequest.CronExpression != nil {
-		task.CronExpression = updateRequest.CronExpression
+		oldTask.CronExpression = updateRequest.CronExpression
 	}
 
-	err = s.taskRepo.UpdateTask(ctx, task)
+	err = s.taskRepo.UpdateTask(ctx, oldTask)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	return task, nil
+	// Record status change separately if status was changed
+	if statusChanged {
+		statusHistory := &models.TaskHistory{
+			TaskID:   taskID,
+			UserID:   oldTask.UserID,
+			Action:   string(models.TaskHistoryActionStatusChanged),
+			OldValue: map[string]interface{}{"status": oldStatus},
+			NewValue: map[string]interface{}{"status": oldTask.Status},
+		}
+		if err := s.taskHistoryRepo.CreateTaskHistory(ctx, statusHistory); err != nil {
+			// TODO: log error
+		}
+	}
+
+	// Record general update history (if other fields changed, not just status)
+	hasOtherChanges := updateRequest.Title != nil || updateRequest.Description != nil ||
+		updateRequest.StartDate != nil || updateRequest.FinishDate != nil ||
+		updateRequest.CronExpression != nil
+
+	if hasOtherChanges || (updateRequest.Status != nil && !statusChanged) {
+		history := &models.TaskHistory{
+			TaskID:   taskID,
+			UserID:   oldTask.UserID,
+			Action:   string(models.TaskHistoryActionUpdated),
+			OldValue: oldTaskMap,
+			NewValue: s.taskToMap(oldTask),
+		}
+		if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
+			// TODO: log error
+		}
+	}
+
+	return oldTask, nil
 }
 
 // DeleteTask implements BL of soft deleting task by id
 func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
-	_, err := s.taskRepo.GetTaskByID(ctx, taskID)
+	task, err := s.taskRepo.GetTaskByID(ctx, taskID)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -140,6 +195,17 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 	err = s.taskRepo.DeleteTask(ctx, taskID)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	// Record history
+	history := &models.TaskHistory{
+		TaskID:   taskID,
+		UserID:   task.UserID,
+		Action:   string(models.TaskHistoryActionDeleted),
+		OldValue: s.taskToMap(task),
+	}
+	if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
+		// TODO: log error
 	}
 
 	return nil
@@ -205,4 +271,64 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 	// TODO: log message has been published
 
 	return nil
+}
+
+// GetTaskHistory implements BL of retrieving task history by task ID
+func (s *TaskService) GetTaskHistory(ctx context.Context, taskID int64) ([]*models.TaskHistory, error) {
+	// Check if task exists
+	_, err := s.taskRepo.GetTaskByID(ctx, taskID)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	histories, err := s.taskHistoryRepo.GetTaskHistoryByTaskID(ctx, taskID)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return histories, nil
+}
+
+// GetUserTaskHistory implements BL of retrieving task history by user ID
+func (s *TaskService) GetUserTaskHistory(ctx context.Context, userID int64, limit, offset int) ([]*models.TaskHistory, error) {
+	// Check if user exists
+	_, err := s.userRepo.GetUserByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
+		}
+		return nil, errors.WithStack(err)
+	}
+
+	histories, err := s.taskHistoryRepo.GetTaskHistoryByUserID(ctx, userID, limit, offset)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return histories, nil
+}
+
+// taskToMap converts a task to a map for history storage
+func (s *TaskService) taskToMap(task *models.Task) map[string]interface{} {
+	result := map[string]interface{}{
+		"id":          task.ID,
+		"title":       task.Title,
+		"description": task.Description,
+		"status":      task.Status,
+	}
+
+	if !task.StartDate.IsZero() {
+		result["start_date"] = task.StartDate
+	}
+	if task.FinishDate != nil {
+		result["finish_date"] = *task.FinishDate
+	}
+	if task.CronExpression != nil {
+		result["cron_expression"] = *task.CronExpression
+	}
+	if task.MessengerRelatedUserID != nil {
+		result["messenger_related_user_id"] = *task.MessengerRelatedUserID
+	}
+
+	return result
 }
