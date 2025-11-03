@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog"
 	swaggerFiles "github.com/swaggo/files" // Swagger embedded files
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -24,6 +25,7 @@ import (
 	"github.com/boskuv/goreminder/internal/service"
 	"github.com/boskuv/goreminder/pkg/args"
 	"github.com/boskuv/goreminder/pkg/config"
+	"github.com/boskuv/goreminder/pkg/database"
 	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/observability"
 	"github.com/boskuv/goreminder/pkg/queue"
@@ -78,7 +80,7 @@ func main() {
 		//return fmt.Errorf("error while parsing db max_lifetime: %w", err)
 	}
 
-	dbConfig := &repository.DBConfig{
+	dbConfig := &database.DBConfig{
 		Host:         cfg.Database.Host,
 		Port:         cfg.Database.Port,
 		User:         cfg.Database.Username,
@@ -89,12 +91,36 @@ func main() {
 		MaxIdleConns: cfg.Database.MaxIdleConns,
 		MaxLifetime:  maxLifetime,
 		MaxRetries:   cfg.Database.MaxRetries,
+		RetryDelay:   3 * time.Second, // Default retry delay
 	}
 
-	db, err := repository.NewDB(dbConfig)
+	// Create connection manager with automatic health checking and reconnection
+	// Check interval: 30 seconds (can be made configurable)
+	checkInterval := 30 * time.Second
+
+	// Create connection manager with automatic health checking and reconnection
+	dbManager, err := database.NewConnectionManager(ctx, dbConfig, checkInterval, func(db *sqlx.DB) {
+		log.Info().Msg("database reconnected successfully - new connection pool created")
+	})
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("error while connecting to DB")
 	}
+	defer func() {
+		if err := dbManager.Close(); err != nil {
+			log.Error().Stack().Err(err).Msg("failed to close database manager")
+		} else {
+			log.Info().Msg("database manager is closed gracefully")
+		}
+	}()
+
+	// Get the database connection from the manager
+	db := dbManager.GetDB()
+
+	// setup repositories
+	taskRepo := repository.NewTaskRepository(db, log)
+	userRepo := repository.NewUserRepository(db, log)
+	messengerRepo := repository.NewMessengerRepository(db, log)
+	taskHistoryRepo := repository.NewTaskHistoryRepository(db, log)
 
 	// producer init
 	producerConfig := queue.NewProducerConfig(
@@ -119,12 +145,6 @@ func main() {
 			log.Info().Msg("producer is closed gracefully")
 		}
 	}()
-
-	// setup repositories
-	taskRepo := repository.NewTaskRepository(db, log)
-	userRepo := repository.NewUserRepository(db, log)
-	messengerRepo := repository.NewMessengerRepository(db, log)
-	taskHistoryRepo := repository.NewTaskHistoryRepository(db, log)
 
 	// setup services
 	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer, log)
@@ -203,12 +223,7 @@ func main() {
 		log.Info().Msg("server is closed gracefully")
 	}
 
-	// close DB
-	if err := db.Close(); err != nil {
-		log.Error().Stack().Err(err).Msg("failed to close db")
-	} else {
-		log.Info().Msg("db is closed gracefully")
-	}
+	// Database manager is closed via defer above
 
 	// tracer shutdown (if set)
 	if tracer != nil {
