@@ -40,7 +40,6 @@ func main() {
 
 	// setup configuration
 	err := config.Setup(parsedArgs.ConfigPath)
-
 	if err != nil {
 		errMsg := fmt.Sprintf("Unable to setup configuration: %s", err)
 		panic(errMsg)

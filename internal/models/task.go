@@ -1,10 +1,67 @@
 package models
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
+
+// TaskStatus represents the status of a task
+type TaskStatus string
+
+const (
+	// TaskStatusPending - task created, awaiting execution
+	TaskStatusPending TaskStatus = "pending"
+	// TaskStatusScheduled - task scheduled (in queue/calendar)
+	TaskStatusScheduled TaskStatus = "scheduled"
+	// TaskStatusDone - task completed
+	TaskStatusDone TaskStatus = "done"
+	// TaskStatusRescheduled - task rescheduled (for one-time tasks with autoreschedule)
+	TaskStatusRescheduled TaskStatus = "rescheduled"
+	// TaskStatusPostponed - task postponed
+	TaskStatusPostponed TaskStatus = "postponed"
+	// TaskStatusDeleted - task deleted
+	TaskStatusDeleted TaskStatus = "deleted"
+)
+
+// ValidTaskStatuses returns a slice of all valid task statuses
+func ValidTaskStatuses() []TaskStatus {
+	return []TaskStatus{
+		TaskStatusPending,
+		TaskStatusScheduled,
+		TaskStatusDone,
+		TaskStatusRescheduled,
+		TaskStatusPostponed,
+		TaskStatusDeleted,
+	}
+}
+
+// IsValid checks if the status is valid
+func (s TaskStatus) IsValid() bool {
+	for _, validStatus := range ValidTaskStatuses() {
+		if s == validStatus {
+			return true
+		}
+	}
+	return false
+}
+
+// String returns the string representation of the status
+func (s TaskStatus) String() string {
+	return string(s)
+}
+
+// ValidateTaskStatus validates if a status string is valid
+func ValidateTaskStatus(status string) error {
+	taskStatus := TaskStatus(status)
+	if !taskStatus.IsValid() {
+		return fmt.Errorf("invalid task status: %s. Valid statuses are: %v", status, ValidTaskStatuses())
+	}
+	return nil
+}
 
 // Task represents the domain model for a task
 type Task struct {
-	ID                     int64      `db:"id" json:"id"` // TODO: db?
+	ID                     int64      `db:"id" json:"id"`
 	Title                  string     `db:"title" json:"title"`
 	Description            string     `db:"description" json:"description"`
 	UserID                 int64      `db:"user_id" json:"user_id"`

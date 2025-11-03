@@ -66,6 +66,12 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 			Int64("user.id", task.UserID).
 			Msg("error while adding new task")
 
+		if errors.Is(err, errs.ErrValidation) {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
 		if errors.Is(err, errs.ErrUnprocessableEntity) {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{
 				"error": err.Error(),
@@ -242,6 +248,12 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 			Int64("task.id", taskID).
 			Msg("error while updating task")
 
+		if errors.Is(err, errs.ErrValidation) {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
 		if errors.Is(err, errs.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": fmt.Sprintf("task with id `%d` not found", taskID),

@@ -74,6 +74,21 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 		Int64("user.id", task.UserID).
 		Msg("user exists, proceeding with task creation")
 
+	// Validate and set default status
+	if task.Status == "" {
+		task.Status = string(models.TaskStatusPending)
+	} else {
+		if err := models.ValidateTaskStatus(task.Status); err != nil {
+			log.Debug().
+				Err(err).
+				Str("status", task.Status).
+				Msg("invalid task status")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return 0, errors.Wrap(errs.ErrValidation, err.Error())
+		}
+	}
+
 	if task.MessengerRelatedUserID != nil {
 		span.SetAttributes(attribute.Int("messenger_related_user.id", *task.MessengerRelatedUserID))
 		// check if messenger related user exists
@@ -261,6 +276,16 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		oldTask.Description = *updateRequest.Description
 	}
 	if updateRequest.Status != nil {
+		// Validate status
+		if err := models.ValidateTaskStatus(*updateRequest.Status); err != nil {
+			log.Debug().
+				Err(err).
+				Str("status", *updateRequest.Status).
+				Msg("invalid task status in update")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, errors.Wrap(errs.ErrValidation, err.Error())
+		}
 		if oldTask.Status != *updateRequest.Status {
 			statusChanged = true
 		}
