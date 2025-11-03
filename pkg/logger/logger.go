@@ -4,11 +4,13 @@
 package logger
 
 import (
+	"context"
 	"io"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/pkgerrors"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // New is a convenience function to initialize a zerolog.Logger
@@ -41,4 +43,21 @@ func LogErrorStackViaPkgErrors(p bool) {
 	// set ErrorStackMarshaler to pkgerrors.MarshalStack
 	// to enable error stack traces
 	zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
+}
+
+// WithTraceContext adds trace and span IDs from the OpenTelemetry context to the logger
+// This allows logs to be correlated with traces
+func WithTraceContext(ctx context.Context, log zerolog.Logger) zerolog.Logger {
+	spanContext := trace.SpanContextFromContext(ctx)
+	if !spanContext.IsValid() {
+		return log
+	}
+
+	traceID := spanContext.TraceID().String()
+	spanID := spanContext.SpanID().String()
+
+	return log.With().
+		Str("trace_id", traceID).
+		Str("span_id", spanID).
+		Logger()
 }
