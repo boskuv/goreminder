@@ -10,10 +10,13 @@ import (
 	"github.com/furdarius/rabbitroutine"
 	"github.com/pkg/errors"
 	"github.com/rabbitmq/amqp091-go"
+	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/boskuv/goreminder/pkg/logger"
 )
 
 type ProducerConfig struct {
@@ -50,10 +53,11 @@ type Producer struct {
 	exchange   string
 	publisher  *rabbitroutine.RetryPublisher
 	tracer     trace.Tracer
+	logger     zerolog.Logger
 }
 
 // NewProducer initializes a new Producer with the given configuration
-func NewProducer(cfg *ProducerConfig) (*Producer, error) {
+func NewProducer(cfg *ProducerConfig, logger zerolog.Logger) (*Producer, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	rabbitMQURL := fmt.Sprintf(
@@ -133,6 +137,7 @@ func NewProducer(cfg *ProducerConfig) (*Producer, error) {
 		exchange:   cfg.exchange,
 		publisher:  publisher,
 		tracer:     otel.Tracer("queue-producer"),
+		logger:     logger,
 	}
 
 	return producer, nil
@@ -165,21 +170,38 @@ func (p *Producer) Publish(ctx context.Context, message interface{}) error {
 		))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, p.logger)
+
 	// Extract task name from message if it's a map
+	taskName := ""
 	if msgMap, ok := message.(map[string]interface{}); ok {
 		if task, ok := msgMap["task"].(string); ok {
+			taskName = task
 			span.SetAttributes(attribute.String("task.name", task))
 		}
 	}
 
+	log.Debug().
+		Str("queue.name", p.queue).
+		Str("exchange.name", p.exchange).
+		Str("task.name", taskName).
+		Msg("publishing message to queue")
+
 	body, err := json.Marshal(message)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Msg("failed to marshal message")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.Wrap(err, "failed to marshal message")
 	}
 
 	span.SetAttributes(attribute.Int("message.size", len(body)))
+	log.Debug().
+		Int("message.size", len(body)).
+		Str("queue.name", p.queue).
+		Msg("message marshaled, publishing to queue")
 
 	// Ensure bounded publish time; prefer request ctx if provided
 	var timeoutCtx context.Context
@@ -197,11 +219,19 @@ func (p *Producer) Publish(ctx context.Context, message interface{}) error {
 	)
 
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Str("queue.name", p.queue).
+			Msg("failed to publish message to queue")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.Wrap(err, "failed to publish message")
 	}
 
+	log.Debug().
+		Str("queue.name", p.queue).
+		Int("message.size", len(body)).
+		Msg("message published successfully")
 	span.SetStatus(codes.Ok, "message published successfully")
 	return nil
 }
