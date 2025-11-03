@@ -3,13 +3,16 @@ package service
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
 	errs "github.com/boskuv/goreminder/internal/errors"
 	mock_repositories "github.com/boskuv/goreminder/internal/mocks/repository"
 	"github.com/boskuv/goreminder/internal/models"
+	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/queue"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 )
@@ -22,8 +25,9 @@ func setup(t *testing.T) (*TaskService, *mock_repositories.MockTaskRepository, *
 	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
 	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	producer := &queue.Producer{}
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
 
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer, testLogger)
 	return service, taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer
 }
 
@@ -440,8 +444,9 @@ func TestNewTaskService(t *testing.T) {
 	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
 	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	producer := &queue.Producer{}
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
 
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer, testLogger)
 
 	assert.NotNil(t, service)
 	assert.Equal(t, taskRepo, service.taskRepo)

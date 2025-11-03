@@ -3,10 +3,13 @@ package service
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 
 	mock_repository "github.com/boskuv/goreminder/internal/mocks/repository"
 	"github.com/boskuv/goreminder/internal/models"
+	"github.com/boskuv/goreminder/pkg/logger"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 )
@@ -17,7 +20,8 @@ func TestMessengerService_CreateMessenger(t *testing.T) {
 
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
-	svc := NewMessengerService(mockMessengerRepo, mockUserRepo)
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -51,7 +55,8 @@ func TestMessengerService_GetMessenger(t *testing.T) {
 
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
-	svc := NewMessengerService(mockMessengerRepo, mockUserRepo)
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -76,7 +81,8 @@ func TestMessengerService_GetMessengerIDByName(t *testing.T) {
 
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
-	svc := NewMessengerService(mockMessengerRepo, mockUserRepo)
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -102,7 +108,8 @@ func TestMessengerService_CreateMessengerRelatedUser(t *testing.T) {
 
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
-	svc := NewMessengerService(mockMessengerRepo, mockUserRepo)
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
 	ctx := context.Background()
 
 	t.Run("success - with all fields", func(t *testing.T) {
@@ -256,7 +263,8 @@ func TestMessengerService_GetMessengerRelatedUser(t *testing.T) {
 
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
-	svc := NewMessengerService(mockMessengerRepo, mockUserRepo)
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
 	ctx := context.Background()
 
 	t.Run("success with all parameters", func(t *testing.T) {
@@ -348,7 +356,8 @@ func TestMessengerService_GetUserID(t *testing.T) {
 
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
-	svc := NewMessengerService(mockMessengerRepo, mockUserRepo)
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -374,7 +383,8 @@ func TestMessengerService_NewMessengerService(t *testing.T) {
 
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
-	svc := NewMessengerService(mockMessengerRepo, mockUserRepo)
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
 
 	assert.NotNil(t, svc)
 	assert.Equal(t, mockMessengerRepo, svc.messengerRepo)

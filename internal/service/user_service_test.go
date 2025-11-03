@@ -3,11 +3,14 @@ package service
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 
 	mock_repository "github.com/boskuv/goreminder/internal/mocks/repository"
 	"github.com/boskuv/goreminder/internal/models"
+	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/queue"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 )
@@ -20,7 +23,8 @@ func TestUserService_CreateUser(t *testing.T) {
 	taskRepo := mock_repository.NewMockTaskRepository(ctrl)
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer)
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -55,7 +59,8 @@ func TestUserService_GetUser(t *testing.T) {
 	taskRepo := mock_repository.NewMockTaskRepository(ctrl)
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer)
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -82,7 +87,8 @@ func TestUserService_UpdateUser(t *testing.T) {
 	taskRepo := mock_repository.NewMockTaskRepository(ctrl)
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer)
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -134,7 +140,8 @@ func TestUserService_DeleteUser(t *testing.T) {
 	taskRepo := mock_repository.NewMockTaskRepository(ctrl)
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer)
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
