@@ -1,0 +1,36 @@
+# Binaries for the current project
+*.exe
+*.o
+*.so
+*.a
+*.dll
+
+# Build output directories
+/bin/
+/pkg/
+
+# Test output
+/testdata/*.out
+
+# Go module cache
+/go.mod
+/go.sum
+/vendor/
+
+# IDE and editor specific files
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Log files
+*.log
+
+# Environment variables
+.env
+
+# Other
+temp/
+config*.yaml
+core
