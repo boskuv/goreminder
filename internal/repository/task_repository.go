@@ -15,6 +15,8 @@ import (
 
 	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
+	"github.com/boskuv/goreminder/pkg/logger"
+	"github.com/rs/zerolog"
 )
 
 type TaskRepository interface {
@@ -29,13 +31,15 @@ type taskRepository struct {
 	db     *sqlx.DB
 	sb     squirrel.StatementBuilderType
 	tracer trace.Tracer
+	logger zerolog.Logger
 }
 
-func NewTaskRepository(db *sqlx.DB) TaskRepository {
+func NewTaskRepository(db *sqlx.DB, logger zerolog.Logger) TaskRepository {
 	return &taskRepository{
 		db:     db,
 		sb:     squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar),
 		tracer: otel.Tracer("task-repository"),
+		logger: logger,
 	}
 }
 
@@ -49,6 +53,12 @@ func (r *taskRepository) CreateTask(ctx context.Context, task *models.Task) (int
 			attribute.String("task.title", task.Title),
 		))
 	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("user.id", task.UserID).
+		Str("task.title", task.Title).
+		Msg("creating task in database")
 
 	query, args, err := r.sb.Insert("tasks").
 		Columns("title", "description", "user_id", "messenger_related_user_id", "start_date", "finish_date", "cron_expression").
@@ -83,6 +93,11 @@ func (r *taskRepository) GetTaskByID(ctx context.Context, id int64) (*models.Tas
 		))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("task.id", id).
+		Msg("getting task by id from database")
+
 	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "start_date", "finish_date", "cron_expression", "status", "created_at").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
@@ -100,16 +115,28 @@ func (r *taskRepository) GetTaskByID(ctx context.Context, id int64) (*models.Tas
 	if err != nil {
 		if err == sql.ErrNoRows {
 			err = errors.Wrap(errs.ErrNotFound, "no task found for passed id")
+			log.Debug().
+				Err(err).
+				Int64("task.id", id).
+				Msg("task not found")
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
 
+		log.Debug().
+			Err(err).
+			Int64("task.id", id).
+			Msg("failed to get task by id from database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.Wrap(err, "failed to get task by id")
 	}
 
+	log.Debug().
+		Int64("task.id", id).
+		Int64("user.id", task.UserID).
+		Msg("task retrieved successfully from database")
 	span.SetAttributes(attribute.Int64("user.id", task.UserID))
 	span.SetStatus(codes.Ok, "task retrieved successfully")
 	return &task, nil
@@ -123,6 +150,11 @@ func (r *taskRepository) GetTasksByUserID(ctx context.Context, userID int64) ([]
 			attribute.Int64("user.id", userID),
 		))
 	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("user.id", userID).
+		Msg("getting tasks by user id from database")
 
 	query, args, err := r.sb.Select("id", "title", "description", "user_id", "start_date", "finish_date", "cron_expression", "status", "created_at").
 		From("tasks").
@@ -139,11 +171,19 @@ func (r *taskRepository) GetTasksByUserID(ctx context.Context, userID int64) ([]
 	var tasks []*models.Task
 	err = r.db.SelectContext(ctx, &tasks, query, args...)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("failed to get tasks by user id from database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.Wrap(err, "failed to get tasks by user id")
 	}
 
+	log.Debug().
+		Int64("user.id", userID).
+		Int("tasks.count", len(tasks)).
+		Msg("tasks retrieved successfully from database")
 	span.SetAttributes(attribute.Int("tasks.count", len(tasks)))
 	span.SetStatus(codes.Ok, "tasks retrieved successfully")
 	return tasks, nil
@@ -158,6 +198,12 @@ func (r *taskRepository) UpdateTask(ctx context.Context, task *models.Task) erro
 			attribute.String("task.status", task.Status),
 		))
 	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("task.id", task.ID).
+		Str("task.status", task.Status).
+		Msg("updating task in database")
 
 	query, args, err := r.sb.Update("tasks").
 		Set("title", task.Title).
@@ -178,11 +224,18 @@ func (r *taskRepository) UpdateTask(ctx context.Context, task *models.Task) erro
 
 	_, err = r.db.ExecContext(ctx, query, args...)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", task.ID).
+			Msg("failed to update task in database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.Wrap(err, "failed to execute update query for task")
 	}
 
+	log.Debug().
+		Int64("task.id", task.ID).
+		Msg("task updated successfully in database")
 	span.SetStatus(codes.Ok, "task updated successfully")
 	return nil
 }
@@ -195,6 +248,11 @@ func (r *taskRepository) DeleteTask(ctx context.Context, id int64) error {
 			attribute.Int64("task.id", id),
 		))
 	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("task.id", id).
+		Msg("deleting task from database")
 
 	query, args, err := r.sb.Update("tasks").
 		Set("deleted_at", time.Now().UTC()).
@@ -210,11 +268,18 @@ func (r *taskRepository) DeleteTask(ctx context.Context, id int64) error {
 
 	_, err = r.db.ExecContext(ctx, query, args...)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", id).
+			Msg("failed to delete task from database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.Wrap(err, "failed to execute soft delete query for task")
 	}
 
+	log.Debug().
+		Int64("task.id", id).
+		Msg("task deleted successfully from database")
 	span.SetStatus(codes.Ok, "task deleted successfully")
 	return nil
 }

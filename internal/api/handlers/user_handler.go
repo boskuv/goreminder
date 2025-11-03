@@ -8,6 +8,7 @@ import (
 	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/service"
+	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -20,7 +21,7 @@ type UserHandler struct {
 }
 
 // NewUserHandler creates a new UserHandler
-func NewUserHandler(logger zerolog.Logger, userService *service.UserService) *UserHandler {
+func NewUserHandler(userService *service.UserService, logger zerolog.Logger) *UserHandler {
 	return &UserHandler{
 		logger:      logger,
 		userService: userService,
@@ -38,10 +39,15 @@ func NewUserHandler(logger zerolog.Logger, userService *service.UserService) *Us
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/users [post]
 func (h *UserHandler) CreateUser(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	var user models.User
 	if err := c.ShouldBindJSON(&user); err != nil {
-		// h.logger.Error().Stack().Err(errors.Wrap(err, "invalid request payload")).Msg("Error while processing request with user struct parameter")
-		// c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		log.Error().
+			Err(err).
+			Msg("invalid request payload for user creation")
+
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -162,7 +168,7 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
 	if err != nil {
 		// TODO: wrap?
-		h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("Error while processing request with userID parameter")
+		h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("error while processing request with userID parameter")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

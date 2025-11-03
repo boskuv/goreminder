@@ -12,6 +12,7 @@ import (
 	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/service"
+	"github.com/boskuv/goreminder/pkg/logger"
 )
 
 // TaskHandler handles task-related HTTP requests
@@ -21,7 +22,7 @@ type TaskHandler struct {
 }
 
 // NewTaskHandler creates a new TaskHandler
-func NewTaskHandler(logger zerolog.Logger, taskService *service.TaskService) *TaskHandler {
+func NewTaskHandler(taskService *service.TaskService, logger zerolog.Logger) *TaskHandler {
 	return &TaskHandler{
 		logger:      logger,
 		taskService: taskService,
@@ -40,16 +41,30 @@ func NewTaskHandler(logger zerolog.Logger, taskService *service.TaskService) *Ta
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/tasks [post]
 func (h *TaskHandler) CreateTask(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	var task models.Task // TODO: separate struct
 	if err := c.ShouldBindJSON(&task); err != nil {
-		// h.logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("error while processing request with task struct parameter")
+		log.Info().
+			Err(err).
+			Msg("invalid request payload for task creation")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	taskID, err := h.taskService.CreateTask(c.Request.Context(), &task)
+	log.Info().
+		Int64("user.id", task.UserID).
+		Str("task.title", task.Title).
+		Msg("creating task")
+
+	taskID, err := h.taskService.CreateTask(ctx, &task)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while adding new task")
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("user.id", task.UserID).
+			Msg("error while adding new task")
 
 		if errors.Is(err, errs.ErrUnprocessableEntity) {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{
@@ -61,6 +76,11 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	log.Info().
+		Int64("task.id", taskID).
+		Int64("user.id", task.UserID).
+		Msg("task created successfully")
 
 	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("task with id `%d` has been successfully added", taskID)})
 }
@@ -76,16 +96,30 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/tasks/{id} [get]
 func (h *TaskHandler) GetTask(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		// h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("error while processing request with id parameter")
+		log.Info().
+			Err(err).
+			Str("task_id_param", c.Param("id")).
+			Msg("invalid task ID parameter")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	task, err := h.taskService.GetTask(c.Request.Context(), taskID)
+	log.Info().
+		Int64("task.id", taskID).
+		Msg("getting task")
+
+	task, err := h.taskService.GetTask(ctx, taskID)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while getting task by its id")
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("error while getting task by its id")
 
 		if errors.Is(err, errs.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
@@ -97,6 +131,10 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	log.Info().
+		Int64("task.id", taskID).
+		Msg("task retrieved successfully")
 
 	c.JSON(http.StatusOK, task)
 }
@@ -112,16 +150,30 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/users/{user_id}/tasks [get]
 func (h *TaskHandler) GetUserTasks(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
 	if err != nil {
-		// h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("error while processing request with userID parameter")
+		log.Info().
+			Err(err).
+			Str("user_id_param", c.Param("user_id")).
+			Msg("invalid user ID parameter")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	tasks, err := h.taskService.GetUserTasks(c.Request.Context(), userID)
+	log.Info().
+		Int64("user.id", userID).
+		Msg("getting user tasks")
+
+	tasks, err := h.taskService.GetUserTasks(ctx, userID)
 	if err != nil {
-		// h.logger.Error().Stack().Err(err).Msg("error while getting tasks by userID parameter")
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("error while getting tasks by userID parameter")
 		if errors.Is(err, errs.ErrUnprocessableEntity) {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{
 				"error": fmt.Sprintf("user with id `%d` not found", userID),
@@ -132,6 +184,11 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	log.Info().
+		Int64("user.id", userID).
+		Int("tasks.count", len(tasks)).
+		Msg("user tasks retrieved successfully")
 
 	c.JSON(http.StatusOK, tasks)
 }
@@ -150,23 +207,40 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/tasks/{id} [put]
 func (h *TaskHandler) UpdateTask(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		// h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse taskID")).Msg("error while processing request with taskID parameter")
+		log.Info().
+			Err(err).
+			Str("task_id_param", c.Param("id")).
+			Msg("invalid task ID parameter")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	var taskUpdateRequest models.TaskUpdateRequest
 	if err := c.ShouldBindJSON(&taskUpdateRequest); err != nil {
-		// h.logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("error while processing request with taskUpdateRequest struct parameter")
+		log.Info().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("invalid request payload for task update")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	updatedTask, err := h.taskService.UpdateTask(c.Request.Context(), taskID, &taskUpdateRequest)
+	log.Info().
+		Int64("task.id", taskID).
+		Msg("updating task")
+
+	updatedTask, err := h.taskService.UpdateTask(ctx, taskID, &taskUpdateRequest)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while updating task")
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("error while updating task")
 
 		if errors.Is(err, errs.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
@@ -185,6 +259,10 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 		return
 	}
 
+	log.Info().
+		Int64("task.id", taskID).
+		Msg("task updated successfully")
+
 	c.JSON(http.StatusOK, updatedTask)
 }
 
@@ -200,17 +278,30 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/tasks/{id} [delete]
 func (h *TaskHandler) DeleteTask(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		// TODO: wrap?
-		h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse taskID")).Msg("error while processing request with taskID parameter")
+		log.Info().
+			Err(errors.Wrap(err, "failed to parse taskID")).
+			Str("task_id_param", c.Param("id")).
+			Msg("invalid task ID parameter")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	err = h.taskService.DeleteTask(c.Request.Context(), taskID)
+	log.Info().
+		Int64("task.id", taskID).
+		Msg("deleting task")
+
+	err = h.taskService.DeleteTask(ctx, taskID)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while soft deleting task")
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("error while soft deleting task")
 
 		if errors.Is(err, errs.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
@@ -222,6 +313,10 @@ func (h *TaskHandler) DeleteTask(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	log.Info().
+		Int64("task.id", taskID).
+		Msg("task deleted successfully")
 
 	c.Status(http.StatusNoContent)
 }
@@ -239,16 +334,30 @@ func (h *TaskHandler) DeleteTask(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/tasks/queue [post]
 func (h *TaskHandler) QueueTask(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	var scheduledTask models.ScheduledTask
 	if err := c.ShouldBindJSON(&scheduledTask); err != nil {
-		//h.logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("error while processing request with task struct parameter")
+		log.Info().
+			Err(err).
+			Msg("invalid request payload for task queue")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	err := h.taskService.QueueTask(c.Request.Context(), &scheduledTask)
+	log.Info().
+		Int64("task.id", scheduledTask.TaskID).
+		Str("action", scheduledTask.Action).
+		Msg("queuing task")
+
+	err := h.taskService.QueueTask(ctx, &scheduledTask)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while enqueuing task")
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", scheduledTask.TaskID).
+			Msg("error while enqueuing task")
 
 		if errors.Is(err, errs.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
@@ -267,6 +376,11 @@ func (h *TaskHandler) QueueTask(c *gin.Context) {
 		return
 	}
 
+	log.Info().
+		Int64("task.id", scheduledTask.TaskID).
+		Str("action", scheduledTask.Action).
+		Msg("task queued successfully")
+
 	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("task with id `%d` has been successfully enqueued", scheduledTask.TaskID)})
 }
 
@@ -281,15 +395,30 @@ func (h *TaskHandler) QueueTask(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/tasks/{id}/history [get]
 func (h *TaskHandler) GetTaskHistory(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
+		log.Info().
+			Err(err).
+			Str("task_id_param", c.Param("id")).
+			Msg("invalid task ID parameter")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	histories, err := h.taskService.GetTaskHistory(c.Request.Context(), taskID)
+	log.Info().
+		Int64("task.id", taskID).
+		Msg("getting task history")
+
+	histories, err := h.taskService.GetTaskHistory(ctx, taskID)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while getting task history")
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("error while getting task history")
 
 		if errors.Is(err, errs.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
@@ -301,6 +430,11 @@ func (h *TaskHandler) GetTaskHistory(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	log.Info().
+		Int64("task.id", taskID).
+		Int("history.count", len(histories)).
+		Msg("task history retrieved successfully")
 
 	c.JSON(http.StatusOK, histories)
 }
@@ -318,8 +452,15 @@ func (h *TaskHandler) GetTaskHistory(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/users/{user_id}/tasks/history [get]
 func (h *TaskHandler) GetUserTaskHistory(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
 	if err != nil {
+		log.Info().
+			Err(err).
+			Str("user_id_param", c.Param("user_id")).
+			Msg("invalid user ID parameter")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -339,9 +480,19 @@ func (h *TaskHandler) GetUserTaskHistory(c *gin.Context) {
 		}
 	}
 
-	histories, err := h.taskService.GetUserTaskHistory(c.Request.Context(), userID, limit, offset)
+	log.Info().
+		Int64("user.id", userID).
+		Int("limit", limit).
+		Int("offset", offset).
+		Msg("getting user task history")
+
+	histories, err := h.taskService.GetUserTaskHistory(ctx, userID, limit, offset)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while getting user task history")
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("error while getting user task history")
 
 		if errors.Is(err, errs.ErrUnprocessableEntity) {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{
@@ -353,6 +504,11 @@ func (h *TaskHandler) GetUserTaskHistory(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	log.Info().
+		Int64("user.id", userID).
+		Int("history.count", len(histories)).
+		Msg("user task history retrieved successfully")
 
 	c.JSON(http.StatusOK, histories)
 }

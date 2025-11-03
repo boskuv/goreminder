@@ -15,6 +15,8 @@ import (
 
 	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
+	"github.com/boskuv/goreminder/pkg/logger"
+	"github.com/rs/zerolog"
 )
 
 type UserRepository interface {
@@ -28,13 +30,15 @@ type userRepository struct {
 	db     *sqlx.DB
 	sb     squirrel.StatementBuilderType
 	tracer trace.Tracer
+	logger zerolog.Logger
 }
 
-func NewUserRepository(db *sqlx.DB) UserRepository {
+func NewUserRepository(db *sqlx.DB, logger zerolog.Logger) UserRepository {
 	return &userRepository{
 		db:     db,
 		sb:     squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar),
 		tracer: otel.Tracer("user-repository"),
+		logger: logger,
 	}
 }
 
@@ -48,6 +52,12 @@ func (r *userRepository) CreateUser(ctx context.Context, user *models.User) (int
 			attribute.String("user.email", user.Email),
 		))
 	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Str("user.name", user.Name).
+		Str("user.email", user.Email).
+		Msg("creating user in database")
 
 	query, args, err := r.sb.Insert("users").
 		Columns("name", "email", "password_hash", "timezone", "language_code", "role").
@@ -82,6 +92,11 @@ func (r *userRepository) GetUserByID(ctx context.Context, id int64) (*models.Use
 		))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("user.id", id).
+		Msg("getting user by id from database")
+
 	query, args, err := r.sb.Select("id", "name", "email", "password_hash", "created_at", "timezone", "language_code", "role").
 		From("users").
 		Where(squirrel.Eq{"deleted_at": nil}).
@@ -98,16 +113,28 @@ func (r *userRepository) GetUserByID(ctx context.Context, id int64) (*models.Use
 	if err != nil {
 		if err == sql.ErrNoRows {
 			err = errors.Wrap(errs.ErrNotFound, "no user found for passed id")
+			log.Debug().
+				Err(err).
+				Int64("user.id", id).
+				Msg("user not found")
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
 
+		log.Debug().
+			Err(err).
+			Int64("user.id", id).
+			Msg("failed to get user by id from database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.Wrap(err, "failed to get user by id")
 	}
 
+	log.Debug().
+		Int64("user.id", id).
+		Str("user.name", user.Name).
+		Msg("user retrieved successfully from database")
 	span.SetStatus(codes.Ok, "user retrieved successfully")
 	return &user, nil
 }
@@ -120,6 +147,11 @@ func (r *userRepository) UpdateUser(ctx context.Context, user *models.User) erro
 			attribute.Int64("user.id", user.ID),
 		))
 	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("user.id", user.ID).
+		Msg("updating user in database")
 
 	query, args, err := r.sb.Update("users").
 		Set("name", user.Name).
@@ -140,11 +172,18 @@ func (r *userRepository) UpdateUser(ctx context.Context, user *models.User) erro
 
 	_, err = r.db.ExecContext(ctx, query, args...)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", user.ID).
+			Msg("failed to update user in database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.Wrap(err, "failed to execute update query for user")
 	}
 
+	log.Debug().
+		Int64("user.id", user.ID).
+		Msg("user updated successfully in database")
 	span.SetStatus(codes.Ok, "user updated successfully")
 	return nil
 }
@@ -157,6 +196,11 @@ func (r *userRepository) DeleteUser(ctx context.Context, id int64) error {
 			attribute.Int64("user.id", id),
 		))
 	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("user.id", id).
+		Msg("deleting user from database")
 
 	query, args, err := r.sb.Update("users").
 		Set("deleted_at", time.Now().UTC()).
@@ -171,11 +215,18 @@ func (r *userRepository) DeleteUser(ctx context.Context, id int64) error {
 
 	_, err = r.db.ExecContext(ctx, query, args...)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", id).
+			Msg("failed to delete user from database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.Wrap(err, "failed to execute soft delete query for user")
 	}
 
+	log.Debug().
+		Int64("user.id", id).
+		Msg("user deleted successfully from database")
 	span.SetStatus(codes.Ok, "user deleted successfully")
 	return nil
 }

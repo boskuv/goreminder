@@ -14,6 +14,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/boskuv/goreminder/internal/models"
+	"github.com/boskuv/goreminder/pkg/logger"
+	"github.com/rs/zerolog"
 )
 
 type TaskHistoryRepository interface {
@@ -26,6 +28,7 @@ type taskHistoryRepository struct {
 	db     *sqlx.DB
 	sb     squirrel.StatementBuilderType
 	tracer trace.Tracer
+	logger zerolog.Logger
 }
 
 // TaskHistoryRow is used to scan JSONB fields as []byte before unmarshaling
@@ -39,11 +42,12 @@ type TaskHistoryRow struct {
 	CreatedAt time.Time `db:"created_at"`
 }
 
-func NewTaskHistoryRepository(db *sqlx.DB) TaskHistoryRepository {
+func NewTaskHistoryRepository(db *sqlx.DB, logger zerolog.Logger) TaskHistoryRepository {
 	return &taskHistoryRepository{
 		db:     db,
 		sb:     squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar),
 		tracer: otel.Tracer("task-history-repository"),
+		logger: logger,
 	}
 }
 
@@ -56,6 +60,13 @@ func (r *taskHistoryRepository) CreateTaskHistory(ctx context.Context, history *
 			attribute.String("action", history.Action),
 		))
 	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("task.id", history.TaskID).
+		Int64("user.id", history.UserID).
+		Str("action", history.Action).
+		Msg("creating task history in database")
 
 	var oldValueJSON, newValueJSON []byte
 	var err error
@@ -90,11 +101,22 @@ func (r *taskHistoryRepository) CreateTaskHistory(ctx context.Context, history *
 
 	_, err = r.db.ExecContext(ctx, query, args...)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", history.TaskID).
+			Int64("user.id", history.UserID).
+			Str("action", history.Action).
+			Msg("failed to create task history in database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.Wrap(err, "failed to insert task history")
 	}
 
+	log.Debug().
+		Int64("task.id", history.TaskID).
+		Int64("user.id", history.UserID).
+		Str("action", history.Action).
+		Msg("task history created successfully in database")
 	span.SetStatus(codes.Ok, "task history created successfully")
 	return nil
 }
@@ -106,6 +128,11 @@ func (r *taskHistoryRepository) GetTaskHistoryByTaskID(ctx context.Context, task
 			attribute.Int64("task.id", taskID),
 		))
 	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("task.id", taskID).
+		Msg("getting task history by task id from database")
 
 	query, args, err := r.sb.Select("id", "task_id", "user_id", "action", "old_value", "new_value", "created_at").
 		From("task_history").
@@ -121,6 +148,10 @@ func (r *taskHistoryRepository) GetTaskHistoryByTaskID(ctx context.Context, task
 	var rows []TaskHistoryRow
 	err = r.db.SelectContext(ctx, &rows, query, args...)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to get task history by task id from database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.Wrap(err, "failed to get task history by task id")
@@ -153,6 +184,10 @@ func (r *taskHistoryRepository) GetTaskHistoryByTaskID(ctx context.Context, task
 		histories = append(histories, history)
 	}
 
+	log.Debug().
+		Int64("task.id", taskID).
+		Int("history.count", len(histories)).
+		Msg("task history retrieved successfully from database")
 	span.SetAttributes(attribute.Int("history.count", len(histories)))
 	span.SetStatus(codes.Ok, "task history retrieved successfully")
 	return histories, nil
@@ -167,6 +202,13 @@ func (r *taskHistoryRepository) GetTaskHistoryByUserID(ctx context.Context, user
 			attribute.Int("offset", offset),
 		))
 	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("user.id", userID).
+		Int("limit", limit).
+		Int("offset", offset).
+		Msg("getting task history by user id from database")
 
 	if limit <= 0 {
 		limit = 50 // default limit
@@ -191,6 +233,10 @@ func (r *taskHistoryRepository) GetTaskHistoryByUserID(ctx context.Context, user
 	var rows []TaskHistoryRow
 	err = r.db.SelectContext(ctx, &rows, query, args...)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("failed to get task history by user id from database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.Wrap(err, "failed to get task history by user id")
@@ -223,6 +269,10 @@ func (r *taskHistoryRepository) GetTaskHistoryByUserID(ctx context.Context, user
 		histories = append(histories, history)
 	}
 
+	log.Debug().
+		Int64("user.id", userID).
+		Int("history.count", len(histories)).
+		Msg("task history retrieved successfully from database")
 	span.SetAttributes(attribute.Int("history.count", len(histories)))
 	span.SetStatus(codes.Ok, "task history retrieved successfully")
 	return histories, nil

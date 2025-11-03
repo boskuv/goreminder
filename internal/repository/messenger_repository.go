@@ -15,6 +15,8 @@ import (
 
 	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
+	"github.com/boskuv/goreminder/pkg/logger"
+	"github.com/rs/zerolog"
 )
 
 type MessengerRepository interface {
@@ -32,13 +34,15 @@ type messengerRepository struct {
 	db     *sqlx.DB
 	sb     squirrel.StatementBuilderType
 	tracer trace.Tracer
+	logger zerolog.Logger
 }
 
-func NewMessengerRepository(db *sqlx.DB) MessengerRepository {
+func NewMessengerRepository(db *sqlx.DB, logger zerolog.Logger) MessengerRepository {
 	return &messengerRepository{
 		db:     db,
 		sb:     squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar),
 		tracer: otel.Tracer("messenger-repository"),
+		logger: logger,
 	}
 }
 
@@ -50,6 +54,11 @@ func (r *messengerRepository) CreateMessenger(ctx context.Context, messenger *mo
 			attribute.String("messenger.name", messenger.Name),
 		))
 	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Str("messenger.name", messenger.Name).
+		Msg("creating messenger in database")
 
 	query, args, err := r.sb.Insert("messengers").
 		Columns("name").
@@ -65,11 +74,19 @@ func (r *messengerRepository) CreateMessenger(ctx context.Context, messenger *mo
 	var id int64
 	err = r.db.QueryRowContext(ctx, query, args...).Scan(&id)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Str("messenger.name", messenger.Name).
+			Msg("failed to create messenger in database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return 0, errors.Wrap(err, "failed to insert messenger")
 	}
 
+	log.Debug().
+		Int64("messenger.id", id).
+		Str("messenger.name", messenger.Name).
+		Msg("messenger created successfully in database")
 	span.SetAttributes(attribute.Int64("messenger.id", id))
 	span.SetStatus(codes.Ok, "messenger created successfully")
 	return id, nil
@@ -83,6 +100,11 @@ func (r *messengerRepository) GetMessengerByID(ctx context.Context, id int64) (*
 			attribute.Int64("messenger.id", id),
 		))
 	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("messenger.id", id).
+		Msg("getting messenger by id from database")
 
 	query, args, err := r.sb.Select("name", "created_at").
 		From("messengers").
@@ -99,16 +121,28 @@ func (r *messengerRepository) GetMessengerByID(ctx context.Context, id int64) (*
 	if err != nil {
 		if err == sql.ErrNoRows {
 			err = errors.Wrap(errs.ErrNotFound, "no messenger found for passed id")
+			log.Debug().
+				Err(err).
+				Int64("messenger.id", id).
+				Msg("messenger not found")
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
 
+		log.Debug().
+			Err(err).
+			Int64("messenger.id", id).
+			Msg("failed to get messenger by id from database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.Wrap(err, "failed to get messenger by id")
 	}
 
+	log.Debug().
+		Int64("messenger.id", id).
+		Str("messenger.name", messenger.Name).
+		Msg("messenger retrieved successfully from database")
 	span.SetStatus(codes.Ok, "messenger retrieved successfully")
 	return &messenger, nil
 }
@@ -121,6 +155,11 @@ func (r *messengerRepository) GetMessengerIDByName(ctx context.Context, messenge
 			attribute.String("messenger.name", messengerName),
 		))
 	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Str("messenger.name", messengerName).
+		Msg("getting messenger id by name from database")
 
 	query, args, err := r.sb.Select("id").
 		From("messengers").
@@ -137,16 +176,28 @@ func (r *messengerRepository) GetMessengerIDByName(ctx context.Context, messenge
 	if err != nil {
 		if err == sql.ErrNoRows {
 			err = errors.Wrap(errs.ErrNotFound, "no messenger found for passed name")
+			log.Debug().
+				Err(err).
+				Str("messenger.name", messengerName).
+				Msg("messenger not found by name")
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return 0, err
 		}
 
+		log.Debug().
+			Err(err).
+			Str("messenger.name", messengerName).
+			Msg("failed to get messenger id by name from database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return 0, errors.Wrap(err, "failed to get messenger id by name")
 	}
 
+	log.Debug().
+		Int64("messenger.id", messengerID).
+		Str("messenger.name", messengerName).
+		Msg("messenger id retrieved successfully from database")
 	span.SetAttributes(attribute.Int64("messenger.id", messengerID))
 	span.SetStatus(codes.Ok, "messenger id retrieved successfully")
 	return messengerID, nil
@@ -169,6 +220,17 @@ func (r *messengerRepository) CreateMessengerRelatedUser(ctx context.Context, me
 		trace.WithAttributes(attrs...))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Str("messenger_user.id", messengerRelatedUser.MessengerUserID).
+		Msg("creating messenger-related user in database")
+	if messengerRelatedUser.UserID != nil {
+		log = log.With().Int64("user.id", *messengerRelatedUser.UserID).Logger()
+	}
+	if messengerRelatedUser.MessengerID != nil {
+		log = log.With().Int64("messenger.id", *messengerRelatedUser.MessengerID).Logger()
+	}
+
 	query, args, err := r.sb.Insert("user_messengers").
 		Columns("chat_id", "messenger_id", "messenger_user_id", "user_id").
 		Values(messengerRelatedUser.ChatID, messengerRelatedUser.MessengerID, messengerRelatedUser.MessengerUserID, messengerRelatedUser.UserID).
@@ -183,11 +245,19 @@ func (r *messengerRepository) CreateMessengerRelatedUser(ctx context.Context, me
 	var id int64
 	err = r.db.QueryRowContext(ctx, query, args...).Scan(&id)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Str("messenger_user.id", messengerRelatedUser.MessengerUserID).
+			Msg("failed to create messenger-related user in database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return 0, errors.Wrap(err, "failed to insert messenger-related user")
 	}
 
+	log.Debug().
+		Int64("messenger_related_user.id", id).
+		Str("messenger_user.id", messengerRelatedUser.MessengerUserID).
+		Msg("messenger-related user created successfully in database")
 	span.SetAttributes(attribute.Int64("messenger_related_user.id", id))
 	span.SetStatus(codes.Ok, "messenger-related user created successfully")
 	return id, nil
@@ -203,11 +273,18 @@ func (r *messengerRepository) GetMessengerRelatedUser(ctx context.Context, chatI
 		))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Str("chat.id", chatID).
+		Str("messenger_user.id", messengerUserID).
+		Msg("getting messenger-related user from database")
 	if userID != nil {
 		span.SetAttributes(attribute.Int64("user.id", *userID))
+		log = log.With().Int64("user.id", *userID).Logger()
 	}
 	if messengerID != nil {
 		span.SetAttributes(attribute.Int64("messenger.id", *messengerID))
+		log = log.With().Int64("messenger.id", *messengerID).Logger()
 	}
 
 	query, args, err := r.sb.Select("id", "user_id", "messenger_id", "messenger_user_id", "chat_id", "created_at", "updated_at").
@@ -229,16 +306,31 @@ func (r *messengerRepository) GetMessengerRelatedUser(ctx context.Context, chatI
 	if err != nil {
 		if err == sql.ErrNoRows {
 			err = errors.Wrap(errs.ErrNotFound, "no messenger-related user found for passed chatID, messengerUserID, userID and messengerID")
+			log.Debug().
+				Err(err).
+				Str("chat.id", chatID).
+				Str("messenger_user.id", messengerUserID).
+				Msg("messenger-related user not found")
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
 
+		log.Debug().
+			Err(err).
+			Str("chat.id", chatID).
+			Str("messenger_user.id", messengerUserID).
+			Msg("failed to get messenger-related user from database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.Wrap(err, "failed to get messenger-related user")
 	}
 
+	log.Debug().
+		Int64("messenger_related_user.id", messengerRelatedUser.ID).
+		Str("chat.id", chatID).
+		Str("messenger_user.id", messengerUserID).
+		Msg("messenger-related user retrieved successfully from database")
 	span.SetAttributes(attribute.Int64("messenger_related_user.id", messengerRelatedUser.ID))
 	span.SetStatus(codes.Ok, "messenger-related user retrieved successfully")
 	return &messengerRelatedUser, nil
@@ -252,6 +344,11 @@ func (r *messengerRepository) GetUserID(ctx context.Context, messengerUserID str
 			attribute.String("messenger_user.id", messengerUserID),
 		))
 	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Str("messenger_user.id", messengerUserID).
+		Msg("getting user id by messenger user id from database")
 
 	query, args, err := r.sb.Select("user_id").
 		From("user_messengers").
@@ -269,16 +366,28 @@ func (r *messengerRepository) GetUserID(ctx context.Context, messengerUserID str
 	if err != nil {
 		if err == sql.ErrNoRows {
 			err = errors.Wrap(errs.ErrNotFound, "no user found for passed messenger user id")
+			log.Debug().
+				Err(err).
+				Str("messenger_user.id", messengerUserID).
+				Msg("user not found by messenger user id")
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return 0, err
 		}
 
+		log.Debug().
+			Err(err).
+			Str("messenger_user.id", messengerUserID).
+			Msg("failed to get user id by messenger user id from database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return 0, errors.Wrap(err, "failed to get user id by messenger user id")
 	}
 
+	log.Debug().
+		Int64("user.id", userID).
+		Str("messenger_user.id", messengerUserID).
+		Msg("user id retrieved successfully from database")
 	span.SetAttributes(attribute.Int64("user.id", userID))
 	span.SetStatus(codes.Ok, "user id retrieved successfully")
 	return userID, nil
@@ -292,6 +401,11 @@ func (r *messengerRepository) GetMessengerRelatedUserByID(ctx context.Context, m
 			attribute.Int("messenger_related_user.id", messengerUserID),
 		))
 	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int("messenger_related_user.id", messengerUserID).
+		Msg("getting messenger-related user by id from database")
 
 	query, args, err := r.sb.Select("id", "user_id", "messenger_id", "messenger_user_id", "chat_id", "created_at", "updated_at").
 		From("user_messengers").
@@ -309,11 +423,19 @@ func (r *messengerRepository) GetMessengerRelatedUserByID(ctx context.Context, m
 	if err != nil {
 		if err == sql.ErrNoRows {
 			err = errors.Wrap(errs.ErrNotFound, "no messenger-related user found for passed id")
+			log.Debug().
+				Err(err).
+				Int("messenger_related_user.id", messengerUserID).
+				Msg("messenger-related user not found")
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
 
+		log.Debug().
+			Err(err).
+			Int("messenger_related_user.id", messengerUserID).
+			Msg("failed to get messenger-related user by id from database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.Wrap(err, "failed to get messenger-related user by id")
@@ -321,7 +443,11 @@ func (r *messengerRepository) GetMessengerRelatedUserByID(ctx context.Context, m
 
 	if messengerRelatedUser.UserID != nil {
 		span.SetAttributes(attribute.Int64("user.id", *messengerRelatedUser.UserID))
+		log = log.With().Int64("user.id", *messengerRelatedUser.UserID).Logger()
 	}
+	log.Debug().
+		Int("messenger_related_user.id", messengerUserID).
+		Msg("messenger-related user retrieved successfully from database")
 	span.SetStatus(codes.Ok, "messenger-related user retrieved successfully")
 	return &messengerRelatedUser, nil
 }
@@ -334,6 +460,11 @@ func (r *messengerRepository) DeleteMessengerRelatedUserByUserID(ctx context.Con
 			attribute.Int64("user.id", userID),
 		))
 	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("user.id", userID).
+		Msg("deleting messenger-related user by user id from database")
 
 	query, args, err := r.sb.Update("user_messengers").
 		Set("deleted_at", time.Now().UTC()).
@@ -348,11 +479,18 @@ func (r *messengerRepository) DeleteMessengerRelatedUserByUserID(ctx context.Con
 
 	_, err = r.db.ExecContext(ctx, query, args...)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("failed to delete messenger-related user by user id from database")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.Wrap(err, "failed to execute soft delete query for messenger-related user")
 	}
 
+	log.Debug().
+		Int64("user.id", userID).
+		Msg("messenger-related user deleted successfully from database")
 	span.SetStatus(codes.Ok, "messenger-related user deleted successfully")
 	return nil
 }

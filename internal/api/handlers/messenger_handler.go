@@ -12,6 +12,7 @@ import (
 	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/service"
+	"github.com/boskuv/goreminder/pkg/logger"
 )
 
 // MessengerHandler handles user-related HTTP requests
@@ -21,7 +22,7 @@ type MessengerHandler struct {
 }
 
 // NewMessengerHandler creates a new MessengerHandler
-func NewMessengerHandler(logger zerolog.Logger, messengerService *service.MessengerService) *MessengerHandler {
+func NewMessengerHandler(messengerService *service.MessengerService, logger zerolog.Logger) *MessengerHandler {
 	return &MessengerHandler{
 		logger:           logger,
 		messengerService: messengerService,
@@ -39,10 +40,14 @@ func NewMessengerHandler(logger zerolog.Logger, messengerService *service.Messen
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/messengers [post]
 func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	var messenger models.Messenger
 	if err := c.ShouldBindJSON(&messenger); err != nil {
-		//h.logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("Error while processing request with messenger struct parameter")
-		//c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
+		log.Error().
+			Err(err).
+			Msg("invalid request payload for messenger creation")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -138,10 +143,15 @@ func (h *MessengerHandler) GetMessengerIDByName(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /api/v1/messengerRelatedUsers [post]
 func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	var messengerRelatedUser models.MessengerRelatedUser
 	if err := c.ShouldBindJSON(&messengerRelatedUser); err != nil {
-		//h.logger.Error().Stack().Err(errors.Wrap(err, "invalid input data")).Msg("Error while processing request with messenger-related user struct parameter")
-		//c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid input data", http.StatusBadRequest))
+		log.Error().
+			Err(err).
+			Msg("invalid request payload for messenger-related user creation")
+
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

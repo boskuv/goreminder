@@ -108,7 +108,7 @@ func main() {
 		time.Duration(cfg.Producer.ConnectionRetryDelay),
 	)
 
-	producer, err := queue.NewProducer(producerConfig)
+	producer, err := queue.NewProducer(producerConfig, log)
 	if err != nil {
 		log.Fatal().Stack().Err(err).Msg("error while connecting to producer")
 	}
@@ -121,20 +121,20 @@ func main() {
 	}()
 
 	// setup repositories
-	taskRepo := repository.NewTaskRepository(db)
-	userRepo := repository.NewUserRepository(db)
-	messengerRepo := repository.NewMessengerRepository(db)
-	taskHistoryRepo := repository.NewTaskHistoryRepository(db)
+	taskRepo := repository.NewTaskRepository(db, log)
+	userRepo := repository.NewUserRepository(db, log)
+	messengerRepo := repository.NewMessengerRepository(db, log)
+	taskHistoryRepo := repository.NewTaskHistoryRepository(db, log)
 
 	// setup services
-	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer)
-	userService := service.NewUserService(userRepo, taskRepo, messengerRepo, producer)
-	messengerService := service.NewMessengerService(messengerRepo, userRepo)
+	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer, log)
+	userService := service.NewUserService(userRepo, taskRepo, messengerRepo, producer, log)
+	messengerService := service.NewMessengerService(messengerRepo, userRepo, log)
 
 	// initialize handlers
-	taskHandler := handlers.NewTaskHandler(log, taskService)
-	userHandler := handlers.NewUserHandler(log, userService)
-	messengerHandler := handlers.NewMessengerHandler(log, messengerService)
+	taskHandler := handlers.NewTaskHandler(taskService, log)
+	userHandler := handlers.NewUserHandler(userService, log)
+	messengerHandler := handlers.NewMessengerHandler(messengerService, log)
 
 	// setup swagger info
 	docs.SwaggerInfo.Title = "Task Management API"
@@ -182,7 +182,7 @@ func main() {
 
 	// run server
 	go func() {
-		log.Printf("Starting server on port %s", port)
+		log.Printf("starting server on port %s", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal().Err(err).Msg("failed to run server")
 		}

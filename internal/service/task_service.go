@@ -7,6 +7,7 @@ import (
 	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/repository"
+	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/queue"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -14,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 )
 
 // TaskService defines methods for task-related business logic
@@ -24,10 +26,11 @@ type TaskService struct {
 	taskHistoryRepo repository.TaskHistoryRepository
 	producer        *queue.Producer
 	tracer          trace.Tracer
+	logger          zerolog.Logger
 }
 
 // NewTaskService creates a new TaskService
-func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, taskHistoryRepo repository.TaskHistoryRepository, producer *queue.Producer) *TaskService {
+func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, taskHistoryRepo repository.TaskHistoryRepository, producer *queue.Producer, logger zerolog.Logger) *TaskService {
 	return &TaskService{
 		taskRepo:        taskRepo,
 		userRepo:        userRepo,
@@ -35,6 +38,7 @@ func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.User
 		taskHistoryRepo: taskHistoryRepo,
 		producer:        producer,
 		tracer:          otel.Tracer("task-service"),
+		logger:          logger,
 	}
 }
 
@@ -46,16 +50,29 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 		))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Int64("user.id", task.UserID).
+		Str("task.title", task.Title).
+		Msg("starting task creation")
+
 	// check if user exists
 	_, err := s.userRepo.GetUserByID(ctx, task.UserID)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
 		}
+		log.Debug().
+			Err(err).
+			Int64("user.id", task.UserID).
+			Msg("user not found or error retrieving user")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return 0, errors.WithStack(err)
 	}
+	log.Debug().
+		Int64("user.id", task.UserID).
+		Msg("user exists, proceeding with task creation")
 
 	if task.MessengerRelatedUserID != nil {
 		span.SetAttributes(attribute.Int("messenger_related_user.id", *task.MessengerRelatedUserID))
@@ -71,14 +88,25 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 		}
 	}
 
+	log.Debug().
+		Int64("user.id", task.UserID).
+		Msg("creating task in repository")
 	taskID, err := s.taskRepo.CreateTask(ctx, task)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", task.UserID).
+			Msg("failed to create task in repository")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return 0, errors.WithStack(err)
 	}
 
 	span.SetAttributes(attribute.Int64("task.id", taskID))
+	log.Debug().
+		Int64("task.id", taskID).
+		Int64("user.id", task.UserID).
+		Msg("task created in repository, recording history")
 
 	// Record history
 	task.ID = taskID
@@ -94,15 +122,24 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 		NewValue: s.taskToMap(task),
 	}
 	if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to record task history")
 		historySpan.RecordError(err)
 		historySpan.SetStatus(codes.Error, err.Error())
-		// Log error but don't fail the creation
-		// TODO: log error
 	} else {
+		log.Debug().
+			Int64("task.id", taskID).
+			Msg("task history recorded successfully")
 		historySpan.SetStatus(codes.Ok, "history recorded")
 	}
 	historySpan.End()
 
+	log.Debug().
+		Int64("task.id", taskID).
+		Int64("user.id", task.UserID).
+		Msg("task creation completed successfully")
 	span.SetStatus(codes.Ok, "task created successfully")
 	return taskID, nil
 }
@@ -115,13 +152,25 @@ func (s *TaskService) GetTask(ctx context.Context, taskID int64) (*models.Task, 
 		))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Int64("task.id", taskID).
+		Msg("getting task")
+
 	task, err := s.taskRepo.GetTaskByID(ctx, taskID)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to get task")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
 
+	log.Debug().
+		Int64("task.id", taskID).
+		Msg("task retrieved successfully")
 	span.SetStatus(codes.Ok, "task retrieved successfully")
 	return task, nil
 }
@@ -134,12 +183,21 @@ func (s *TaskService) GetUserTasks(ctx context.Context, userID int64) ([]*models
 		))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Int64("user.id", userID).
+		Msg("getting user tasks")
+
 	// check if user exists
 	_, err := s.userRepo.GetUserByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
 		}
+		log.Debug().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("user not found when getting tasks")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
@@ -147,11 +205,19 @@ func (s *TaskService) GetUserTasks(ctx context.Context, userID int64) ([]*models
 
 	tasks, err := s.taskRepo.GetTasksByUserID(ctx, userID)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("failed to get user tasks")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
 
+	log.Debug().
+		Int64("user.id", userID).
+		Int("tasks.count", len(tasks)).
+		Msg("user tasks retrieved successfully")
 	span.SetAttributes(attribute.Int("tasks.count", len(tasks)))
 	span.SetStatus(codes.Ok, "user tasks retrieved successfully")
 	return tasks, nil
@@ -165,9 +231,18 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Int64("task.id", taskID).
+		Msg("updating task")
+
 	// check if the task exists
 	oldTask, err := s.taskRepo.GetTaskByID(ctx, taskID)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to get task for update")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
@@ -204,6 +279,10 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 
 	err = s.taskRepo.UpdateTask(ctx, oldTask)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to update task")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
@@ -262,6 +341,9 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		updateHistorySpan.End()
 	}
 
+	log.Debug().
+		Int64("task.id", taskID).
+		Msg("task updated successfully")
 	span.SetStatus(codes.Ok, "task updated successfully")
 	return oldTask, nil
 }
@@ -274,8 +356,17 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Int64("task.id", taskID).
+		Msg("deleting task")
+
 	task, err := s.taskRepo.GetTaskByID(ctx, taskID)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to get task for deletion")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
@@ -283,6 +374,10 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 
 	err = s.taskRepo.DeleteTask(ctx, taskID)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to delete task")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
@@ -309,6 +404,9 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 	}
 	deleteHistorySpan.End()
 
+	log.Debug().
+		Int64("task.id", taskID).
+		Msg("task deleted successfully")
 	span.SetStatus(codes.Ok, "task deleted successfully")
 	return nil
 }
@@ -322,9 +420,19 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 		))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Int64("task.id", scheduledTask.TaskID).
+		Str("action", scheduledTask.Action).
+		Msg("queuing task")
+
 	// check if task exists
 	task, err := s.taskRepo.GetTaskByID(ctx, scheduledTask.TaskID)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", scheduledTask.TaskID).
+			Msg("failed to get task for queuing")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
@@ -376,6 +484,11 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 
 	err = s.producer.Publish(ctx, taskQueueMessage)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", scheduledTask.TaskID).
+			Str("action", scheduledTask.Action).
+			Msg("failed to queue task")
 		// TODO: failed to publish message: Exception (504) Reason: \"channel/connection is not open\"
 		err = errors.Errorf("can't publish message %v to rabbitmq: %s",
 			taskQueueMessage,
@@ -386,6 +499,10 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 		return errors.WithStack(err)
 	}
 
+	log.Debug().
+		Int64("task.id", scheduledTask.TaskID).
+		Str("action", scheduledTask.Action).
+		Msg("task queued successfully")
 	span.SetStatus(codes.Ok, "task queued successfully")
 	return nil
 }
@@ -398,9 +515,18 @@ func (s *TaskService) GetTaskHistory(ctx context.Context, taskID int64) ([]*mode
 		))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Int64("task.id", taskID).
+		Msg("getting task history")
+
 	// Check if task exists
 	_, err := s.taskRepo.GetTaskByID(ctx, taskID)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("task not found when getting history")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
@@ -408,11 +534,19 @@ func (s *TaskService) GetTaskHistory(ctx context.Context, taskID int64) ([]*mode
 
 	histories, err := s.taskHistoryRepo.GetTaskHistoryByTaskID(ctx, taskID)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to get task history")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
 
+	log.Debug().
+		Int64("task.id", taskID).
+		Int("history.count", len(histories)).
+		Msg("task history retrieved successfully")
 	span.SetAttributes(attribute.Int("history.count", len(histories)))
 	span.SetStatus(codes.Ok, "task history retrieved successfully")
 	return histories, nil
@@ -428,12 +562,23 @@ func (s *TaskService) GetUserTaskHistory(ctx context.Context, userID int64, limi
 		))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Int64("user.id", userID).
+		Int("limit", limit).
+		Int("offset", offset).
+		Msg("getting user task history")
+
 	// Check if user exists
 	_, err := s.userRepo.GetUserByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
 		}
+		log.Debug().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("user not found when getting task history")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
@@ -441,11 +586,19 @@ func (s *TaskService) GetUserTaskHistory(ctx context.Context, userID int64, limi
 
 	histories, err := s.taskHistoryRepo.GetTaskHistoryByUserID(ctx, userID, limit, offset)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("failed to get user task history")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
 
+	log.Debug().
+		Int64("user.id", userID).
+		Int("history.count", len(histories)).
+		Msg("user task history retrieved successfully")
 	span.SetAttributes(attribute.Int("history.count", len(histories)))
 	span.SetStatus(codes.Ok, "user task history retrieved successfully")
 	return histories, nil

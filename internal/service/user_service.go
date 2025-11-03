@@ -5,6 +5,7 @@ import (
 
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/repository"
+	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/queue"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -12,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 )
 
 // UserService defines methods for user-related business logic
@@ -21,16 +23,18 @@ type UserService struct {
 	messengerRepo repository.MessengerRepository
 	producer      *queue.Producer
 	tracer        trace.Tracer
+	logger        zerolog.Logger
 }
 
 // NewUserService creates a new instance of UserService
-func NewUserService(userRepo repository.UserRepository, taskRepo repository.TaskRepository, messengerRepo repository.MessengerRepository, producer *queue.Producer) *UserService {
+func NewUserService(userRepo repository.UserRepository, taskRepo repository.TaskRepository, messengerRepo repository.MessengerRepository, producer *queue.Producer, logger zerolog.Logger) *UserService {
 	return &UserService{
 		userRepo:      userRepo,
 		taskRepo:      taskRepo,
 		messengerRepo: messengerRepo,
 		producer:      producer,
 		tracer:        otel.Tracer("user-service"),
+		logger:        logger,
 	}
 }
 
@@ -42,22 +46,42 @@ func (s *UserService) CreateUser(ctx context.Context, user *models.User) (int64,
 		))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Str("user.name", user.Name).
+		Str("user.email", user.Email).
+		Msg("starting user creation")
+
 	// perform some validation before creating the user
 	if user.Name == "" {
 		err := errors.New("user data is incomplete")
+		log.Debug().
+			Err(err).
+			Msg("user validation failed: name is empty")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return 0, errors.WithStack(err)
 	}
 
+	log.Debug().
+		Str("user.name", user.Name).
+		Msg("creating user in repository")
 	userID, err := s.userRepo.CreateUser(ctx, user)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Str("user.name", user.Name).
+			Msg("failed to create user in repository")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return 0, errors.WithStack(err)
 	}
 
 	span.SetAttributes(attribute.Int64("user.id", userID))
+	log.Debug().
+		Int64("user.id", userID).
+		Str("user.name", user.Name).
+		Msg("user created successfully")
 	span.SetStatus(codes.Ok, "user created successfully")
 	return userID, nil
 }
@@ -70,13 +94,25 @@ func (s *UserService) GetUser(ctx context.Context, userID int64) (*models.User, 
 		))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Int64("user.id", userID).
+		Msg("getting user")
+
 	user, err := s.userRepo.GetUserByID(ctx, userID)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("failed to get user")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
 
+	log.Debug().
+		Int64("user.id", userID).
+		Msg("user retrieved successfully")
 	span.SetStatus(codes.Ok, "user retrieved successfully")
 	return user, nil
 }
@@ -89,9 +125,18 @@ func (s *UserService) UpdateUser(ctx context.Context, userID int64, updateReques
 		))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Int64("user.id", userID).
+		Msg("updating user")
+
 	// check if the user exists
 	user, err := s.userRepo.GetUserByID(ctx, userID)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("failed to get user for update")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
@@ -132,11 +177,18 @@ func (s *UserService) UpdateUser(ctx context.Context, userID int64, updateReques
 	// save the updated user
 	err = s.userRepo.UpdateUser(ctx, user)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("failed to update user")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
 
+	log.Debug().
+		Int64("user.id", userID).
+		Msg("user updated successfully")
 	span.SetStatus(codes.Ok, "user updated successfully")
 	return user, nil
 }
@@ -149,8 +201,17 @@ func (s *UserService) DeleteUser(ctx context.Context, userID int64) error {
 		))
 	defer span.End()
 
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Int64("user.id", userID).
+		Msg("deleting user")
+
 	_, err := s.userRepo.GetUserByID(ctx, userID)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("failed to get user for deletion")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
@@ -199,11 +260,18 @@ func (s *UserService) DeleteUser(ctx context.Context, userID int64) error {
 
 	err = s.userRepo.DeleteUser(ctx, userID)
 	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("failed to delete user")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
 	}
 
+	log.Debug().
+		Int64("user.id", userID).
+		Msg("user deleted successfully")
 	span.SetStatus(codes.Ok, "user deleted successfully")
 	return nil
 }
