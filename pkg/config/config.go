@@ -14,11 +14,13 @@ var Config *Configuration
 var validate = validator.New()
 
 type Configuration struct {
-	Server   ServerConfiguration   `mapstructure:"server"`
-	Database DatabaseConfiguration `mapstructure:"database"`
-	Producer ProducerConfiguration `mapstructure:"producer"`
-	Tracing  TracingConfiguration  `mapstructure:"tracing"`
-	Metrics  MetricsConfiguration  `mapstructure:"metrics"`
+	Server    ServerConfiguration    `mapstructure:"server"`
+	Database  DatabaseConfiguration  `mapstructure:"database"`
+	Producer  ProducerConfiguration  `mapstructure:"producer"`
+	Tracing   TracingConfiguration   `mapstructure:"tracing"`
+	Metrics   MetricsConfiguration   `mapstructure:"metrics"`
+	RateLimit RateLimitConfiguration `mapstructure:"ratelimit"`
+	Cors      CorsConfiguration      `mapstructure:"cors"`
 }
 
 type DatabaseConfiguration struct {
@@ -65,6 +67,22 @@ type ServerConfiguration struct {
 	Mode   string `mapstructure:"mode" default:"development" validate:"oneof=development production test"`
 }
 
+type RateLimitConfiguration struct {
+	Enabled  bool   `mapstructure:"enabled" default:"false"`
+	Requests int    `mapstructure:"requests" default:"100" validate:"gte=1"`
+	Window   string `mapstructure:"window" default:"1m" validate:"required"`
+}
+
+type CorsConfiguration struct {
+	Enabled          bool     `mapstructure:"enabled" default:"false"`
+	AllowOrigins     []string `mapstructure:"allowOrigins" default:"[\"*\"]"`
+	AllowMethods     []string `mapstructure:"allowMethods"`
+	AllowHeaders     []string `mapstructure:"allowHeaders"`
+	ExposeHeaders    []string `mapstructure:"exposeHeaders"`
+	AllowCredentials bool     `mapstructure:"allowCredentials" default:"false"`
+	MaxAge           int      `mapstructure:"maxAge" default:"3600" validate:"gte=0"`
+}
+
 // Setup configuration
 func Setup(configPath string) error {
 	var configuration Configuration
@@ -95,6 +113,13 @@ func Setup(configPath string) error {
 	if configuration.Database.ConnMaxLifetime != "" {
 		if _, err := time.ParseDuration(configuration.Database.ConnMaxLifetime); err != nil {
 			return fmt.Errorf("invalid database.connMaxLifetime duration: %w", err)
+		}
+	}
+
+	// Validate rate limit window duration
+	if configuration.RateLimit.Window != "" {
+		if _, err := time.ParseDuration(configuration.RateLimit.Window); err != nil {
+			return fmt.Errorf("invalid ratelimit.window duration: %w", err)
 		}
 	}
 

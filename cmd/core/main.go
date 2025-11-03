@@ -169,12 +169,48 @@ func main() {
 	// Register Swagger handler
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// add middlewares
+	// Add base middlewares (order matters)
+
+	// 1. Request ID middleware - should be first to add ID to all requests
+	router.Use(middleware.RequestIDMiddleware())
+
+	// 2. Logger middleware - logs all requests with request ID
+	router.Use(middleware.LoggerMiddleware(log))
+
+	// 3. CORS middleware (if enabled)
+	if cfg.Cors.Enabled {
+		router.Use(middleware.CorsMiddleware(middleware.CorsConfig{
+			Enabled:          cfg.Cors.Enabled,
+			AllowOrigins:     cfg.Cors.AllowOrigins,
+			AllowMethods:     cfg.Cors.AllowMethods,
+			AllowHeaders:     cfg.Cors.AllowHeaders,
+			ExposeHeaders:    cfg.Cors.ExposeHeaders,
+			AllowCredentials: cfg.Cors.AllowCredentials,
+			MaxAge:           cfg.Cors.MaxAge,
+		}))
+	}
+
+	// 4. Rate limiting middleware (if enabled)
+	if cfg.RateLimit.Enabled {
+		rateLimitWindow, err := time.ParseDuration(cfg.RateLimit.Window)
+		if err != nil {
+			log.Warn().Err(err).Msg("failed to parse rate limit window, using default 1m")
+			rateLimitWindow = 1 * time.Minute
+		}
+		router.Use(middleware.RateLimitMiddleware(middleware.RateLimitConfig{
+			Enabled:  cfg.RateLimit.Enabled,
+			Requests: cfg.RateLimit.Requests,
+			Window:   rateLimitWindow,
+		}))
+	}
+
+	// 5. Metrics middleware (if enabled)
 	if cfg.Metrics.Enabled {
 		middleware.InitMetrics()
 		router.Use(middleware.MetricsMiddleware())
 	}
 
+	// 6. Tracing middleware (if enabled)
 	if cfg.Tracing.Enabled {
 		router.Use(middleware.TracingMiddleware(cfg.Tracing.ServiceName))
 	}

@@ -21,7 +21,7 @@ producer:
 
 tracing:
   enabled: true
-  endpoint: "localhost:4318"
+  endpoint: "localhost:4318"  # Format: host:port (without http:// prefix)
   serviceName: "goreminder-api"
   insecure: true
 
@@ -31,3 +31,28 @@ metrics:
 
 server:
   port: 8080
+
+ratelimit:
+  enabled: true
+  requests: 100        # Number of requests allowed
+  window: "1m"          # Time window (e.g., "1m", "1h", "30s")
+
+cors:
+  enabled: true
+  allowOrigins:         # List of allowed origins (use ["*"] for all)
+    - "*"
+  allowMethods:         # Allowed HTTP methods (optional, defaults to common methods)
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "OPTIONS"
+    - "PATCH"
+  allowHeaders:         # Allowed headers (optional, defaults to common headers)
+    - "Content-Type"
+    - "Authorization"
+    - "X-Request-ID"
+  exposeHeaders:        # Headers to expose to client (optional)
+    - "X-Request-ID"
+  allowCredentials: false  # Allow credentials in CORS requests
+  maxAge: 3600          # Max age for preflight requests (in seconds)
