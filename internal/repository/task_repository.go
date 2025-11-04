@@ -25,6 +25,7 @@ type TaskRepository interface {
 	GetTasksByUserID(ctx context.Context, userID int64) ([]*models.Task, error)
 	UpdateTask(ctx context.Context, task *models.Task) error
 	DeleteTask(ctx context.Context, id int64) error
+	GetTasksNeedingRescheduling(ctx context.Context) ([]*models.Task, error)
 }
 
 type taskRepository struct {
@@ -282,4 +283,48 @@ func (r *taskRepository) DeleteTask(ctx context.Context, id int64) error {
 		Msg("task deleted successfully from database")
 	span.SetStatus(codes.Ok, "task deleted successfully")
 	return nil
+}
+
+// GetTasksNeedingRescheduling retrieves tasks that need to be rescheduled:
+// - no cron expression (cron_expression IS NULL)
+// - status is 'scheduled'
+// - start_date has passed (start_date < NOW())
+func (r *taskRepository) GetTasksNeedingRescheduling(ctx context.Context) ([]*models.Task, error) {
+	ctx, span := r.tracer.Start(ctx, "task_repository.GetTasksNeedingRescheduling")
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Msg("getting tasks needing rescheduling from database")
+
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "start_date", "finish_date", "cron_expression", "status", "created_at").
+		From("tasks").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"status": string(models.TaskStatusScheduled)}).
+		Where(squirrel.Eq{"cron_expression": nil}).
+		Where(squirrel.Lt{"start_date": time.Now().UTC()}).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to build query while getting tasks needing rescheduling")
+	}
+
+	var tasks []*models.Task
+	err = r.db.SelectContext(ctx, &tasks, query, args...)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Msg("failed to get tasks needing rescheduling from database")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to get tasks needing rescheduling")
+	}
+
+	log.Debug().
+		Int("tasks.count", len(tasks)).
+		Msg("tasks needing rescheduling retrieved successfully from database")
+	span.SetAttributes(attribute.Int("tasks.count", len(tasks)))
+	span.SetStatus(codes.Ok, "tasks needing rescheduling retrieved successfully")
+	return tasks, nil
 }

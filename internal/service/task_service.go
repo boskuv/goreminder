@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
@@ -652,4 +653,213 @@ func (s *TaskService) taskToMap(task *models.Task) map[string]interface{} {
 	}
 
 	return result
+}
+
+// RescheduleTask reschedules a task by updating its start_date to the next day at the same time
+// It also adds a daily cron expression and publishes to the queue
+// The status remains "scheduled"
+// If queue publishing fails, the task is NOT rescheduled to prevent data loss
+func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) error {
+	ctx, span := s.tracer.Start(ctx, "task_service.RescheduleTask",
+		trace.WithAttributes(
+			attribute.Int64("task.id", task.ID),
+			attribute.Int64("user.id", task.UserID),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Info().
+		Int64("task.id", task.ID).
+		Int64("user.id", task.UserID).
+		Time("old_start_date", task.StartDate).
+		Msg("rescheduling task")
+
+	// Calculate next day at the same time
+	oldStartDate := task.StartDate
+	// Add 24 hours to the start date
+	newStartDate := oldStartDate.Add(24 * time.Hour)
+
+	// Generate daily cron expression based on the task time (MM HH * * *)
+	// Format: minute hour * * * (runs daily at the same time)
+	cronExpression := fmt.Sprintf("%d %d * * *", newStartDate.Minute(), newStartDate.Hour())
+
+	// Store old values for history
+	oldCronExpression := task.CronExpression
+
+	// Store old status
+	oldStatus := task.Status
+
+	// Publish to queue BEFORE updating the task
+	// This ensures we don't lose the task if queue publishing fails
+	if task.MessengerRelatedUserID == nil {
+		err := errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value, cannot reschedule", task.ID))
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", task.ID).
+			Msg("cannot reschedule task without messenger related user")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *task.MessengerRelatedUserID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
+		}
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", task.ID).
+			Int("messenger_related_user.id", *task.MessengerRelatedUserID).
+			Msg("messenger related user not found, cannot reschedule")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.WithStack(err)
+	}
+
+	// Prepare task data for queue with new start date and cron expression
+	taskQueueMessage := map[string]interface{}{
+		"task": "worker.schedule_task",
+		"args": []interface{}{"telegram", messengerRelatedUser.ChatID, task.ID, task.Title, task.Description, newStartDate, &cronExpression},
+	}
+
+	// Publish to queue - if this fails, we don't reschedule
+	log.Info().
+		Int64("task.id", task.ID).
+		Str("cron_expression", cronExpression).
+		Time("new_start_date", newStartDate).
+		Msg("publishing rescheduled task to queue")
+
+	err = s.producer.Publish(ctx, taskQueueMessage)
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", task.ID).
+			Time("new_start_date", newStartDate).
+			Str("cron_expression", cronExpression).
+			Msg("failed to publish rescheduled task to queue - task will not be rescheduled to prevent data loss")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		// Return error so the task is not rescheduled - this prevents data loss
+		return errors.Wrap(err, "failed to publish rescheduled task to queue, task not rescheduled")
+	}
+
+	log.Info().
+		Int64("task.id", task.ID).
+		Msg("task published to queue successfully, proceeding with rescheduling")
+
+	// Update the task's start date and cron expression
+	task.StartDate = newStartDate
+	task.CronExpression = &cronExpression
+	task.Status = string(models.TaskStatusRescheduled)
+
+	// Update the task in the repository
+	err = s.taskRepo.UpdateTask(ctx, task)
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", task.ID).
+			Int64("user.id", task.UserID).
+			Msg("failed to update task after successful queue publishing")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		// Note: Task was already published to queue, but update failed
+		// This is a data inconsistency issue that should be monitored
+		return errors.WithStack(err)
+	}
+
+	// Record history
+	_, historySpan := s.tracer.Start(ctx, "task_service.record_task_rescheduled_history",
+		trace.WithAttributes(
+			attribute.Int64("task.id", task.ID),
+			attribute.Int64("user.id", task.UserID),
+		))
+	oldValue := map[string]interface{}{"start_date": oldStartDate, "status": oldStatus}
+	if oldCronExpression != nil {
+		oldValue["cron_expression"] = *oldCronExpression
+	}
+	history := &models.TaskHistory{
+		TaskID:   task.ID,
+		UserID:   task.UserID,
+		Action:   string(models.TaskHistoryActionUpdated),
+		OldValue: oldValue,
+		NewValue: map[string]interface{}{
+			"start_date":      newStartDate,
+			"cron_expression": cronExpression,
+			"status":          task.Status,
+		},
+	}
+	if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", task.ID).
+			Msg("failed to record task rescheduling history")
+		historySpan.RecordError(err)
+		historySpan.SetStatus(codes.Error, err.Error())
+	} else {
+		historySpan.SetStatus(codes.Ok, "rescheduling history recorded")
+	}
+	historySpan.End()
+
+	log.Info().
+		Int64("task.id", task.ID).
+		Int64("user.id", task.UserID).
+		Time("old_start_date", oldStartDate).
+		Time("new_start_date", newStartDate).
+		Str("cron_expression", cronExpression).
+		Msg("task rescheduled successfully with daily cron expression")
+	span.SetAttributes(
+		attribute.String("old_start_date", oldStartDate.Format(time.RFC3339)),
+		attribute.String("new_start_date", newStartDate.Format(time.RFC3339)),
+		attribute.String("cron_expression", cronExpression),
+	)
+	span.SetStatus(codes.Ok, "task rescheduled successfully")
+	return nil
+}
+
+// RescheduleTasks reschedules multiple tasks that have passed their start date
+func (s *TaskService) RescheduleTasks(ctx context.Context, tasks []*models.Task) error {
+	ctx, span := s.tracer.Start(ctx, "task_service.RescheduleTasks",
+		trace.WithAttributes(
+			attribute.Int("tasks.count", len(tasks)),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Info().
+		Int("tasks.count", len(tasks)).
+		Msg("rescheduling tasks")
+
+	var rescheduledCount int
+	var failedCount int
+
+	for _, task := range tasks {
+		if err := s.RescheduleTask(ctx, task); err != nil {
+			failedCount++
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", task.ID).
+				Msg("failed to reschedule task")
+		} else {
+			rescheduledCount++
+		}
+	}
+
+	log.Info().
+		Int("tasks.count", len(tasks)).
+		Int("rescheduled.count", rescheduledCount).
+		Int("failed.count", failedCount).
+		Msg("task rescheduling completed")
+	span.SetAttributes(
+		attribute.Int("rescheduled.count", rescheduledCount),
+		attribute.Int("failed.count", failedCount),
+	)
+	span.SetStatus(codes.Ok, "tasks rescheduling completed")
+	return nil
 }

@@ -150,6 +150,9 @@ func main() {
 	userService := service.NewUserService(userRepo, taskRepo, messengerRepo, producer, log)
 	messengerService := service.NewMessengerService(messengerRepo, userRepo, log)
 
+	// setup scheduler
+	taskScheduler := service.NewTaskScheduler(taskRepo, taskService, log)
+
 	// initialize handlers
 	taskHandler := handlers.NewTaskHandler(taskService, log)
 	userHandler := handlers.NewUserHandler(userService, log)
@@ -220,6 +223,12 @@ func main() {
 
 	log.Info().Msg("graceful startup")
 
+	// start scheduler in background
+	schedulerCtx, schedulerCancel := context.WithCancel(ctx)
+	defer schedulerCancel()
+	go taskScheduler.StartScheduler(schedulerCtx)
+	log.Info().Msg("task scheduler started (runs at 00:00 and 12:00 UTC)")
+
 	// start server
 	port := cfg.Server.Port
 	// TODO: add default port if not provided
@@ -246,6 +255,10 @@ func main() {
 	// wait for signal
 	<-sigCh
 	log.Info().Msg("shutdown signal received")
+
+	// stop scheduler
+	schedulerCancel()
+	log.Info().Msg("task scheduler stopped")
 
 	// begin graceful shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 10*time.Second)
