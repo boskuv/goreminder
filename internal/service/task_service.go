@@ -533,6 +533,170 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 	return nil
 }
 
+// MarkTaskAsDone marks a task as done and queues worker.delete_task in a transactional manner
+// If queueing fails, the database update is rolled back
+func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models.Task, error) {
+	ctx, span := s.tracer.Start(ctx, "task_service.MarkTaskAsDone",
+		trace.WithAttributes(
+			attribute.Int64("task.id", taskID),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Int64("task.id", taskID).
+		Msg("marking task as done")
+
+	// Check if the task exists (without status filter to allow checking already-done tasks)
+	task, err := s.taskRepo.GetTaskByIDWithoutStatusFilter(ctx, taskID)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to get task for marking as done")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.WithStack(err)
+	}
+
+	// Check if task is already done (idempotent operation)
+	if task.Status == string(models.TaskStatusDone) {
+		log.Debug().
+			Int64("task.id", taskID).
+			Msg("task is already marked as done")
+		// Return the task as-is, consider it idempotent
+		return task, nil
+	}
+
+	// Store old status for history
+	oldStatus := task.Status
+
+	// Get database connection for transaction
+	db := s.taskRepo.GetDB()
+	if db == nil {
+		err := errors.New("database connection not available")
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to get database connection for transaction")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.WithStack(err)
+	}
+
+	// Begin transaction
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to begin transaction")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to begin transaction")
+	}
+
+	// Track if we need to rollback
+	var shouldRollback = true
+	defer func() {
+		if shouldRollback {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				log.Error().
+					Stack().
+					Err(rollbackErr).
+					Int64("task.id", taskID).
+					Msg("failed to rollback transaction")
+			}
+		}
+	}()
+
+	// Update task status to done within transaction
+	task.Status = string(models.TaskStatusDone)
+	err = s.taskRepo.UpdateTaskWithTx(ctx, tx, task)
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to update task status to done in transaction")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.WithStack(err)
+	}
+
+	// Queue delete_task message
+	// If this fails, we'll rollback the transaction
+	taskQueueMessage := map[string]interface{}{
+		"task": "worker.delete_task",
+		"args": []interface{}{task.ID, "telegram"},
+	}
+
+	err = s.producer.Publish(ctx, taskQueueMessage)
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to queue delete_task message, rolling back transaction")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		// Transaction will be rolled back in defer
+		return nil, errors.Wrap(err, "failed to queue delete_task message")
+	}
+
+	// Commit transaction
+	err = tx.Commit()
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to commit transaction")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to commit transaction")
+	}
+
+	// Mark that we've committed, so defer won't rollback
+	shouldRollback = false
+
+	// Record history (outside transaction, as it's not critical if it fails)
+	_, historySpan := s.tracer.Start(ctx, "task_service.record_task_marked_done_history",
+		trace.WithAttributes(
+			attribute.Int64("task.id", taskID),
+			attribute.Int64("user.id", task.UserID),
+			attribute.String("status.old", oldStatus),
+			attribute.String("status.new", task.Status),
+		))
+	statusHistory := &models.TaskHistory{
+		TaskID:   taskID,
+		UserID:   task.UserID,
+		Action:   string(models.TaskHistoryActionStatusChanged),
+		OldValue: map[string]interface{}{"status": oldStatus},
+		NewValue: map[string]interface{}{"status": task.Status},
+	}
+	if err := s.taskHistoryRepo.CreateTaskHistory(ctx, statusHistory); err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to record task marked as done history")
+		historySpan.RecordError(err)
+		historySpan.SetStatus(codes.Error, err.Error())
+	} else {
+		historySpan.SetStatus(codes.Ok, "task marked as done history recorded")
+	}
+	historySpan.End()
+
+	log.Debug().
+		Int64("task.id", taskID).
+		Msg("task marked as done successfully")
+	span.SetStatus(codes.Ok, "task marked as done successfully")
+	return task, nil
+}
+
 // GetTaskHistory implements BL of retrieving task history by task ID
 func (s *TaskService) GetTaskHistory(ctx context.Context, taskID int64) ([]*models.TaskHistory, error) {
 	ctx, span := s.tracer.Start(ctx, "task_service.GetTaskHistory",

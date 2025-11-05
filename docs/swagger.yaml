@@ -48,7 +48,6 @@ definitions:
       finish_date:
         type: string
       id:
-        description: 'TODO: db?'
         type: integer
       messenger_related_user_id:
         type: integer
@@ -542,6 +541,47 @@ paths:
               type: string
             type: object
       summary: Update a task
+      tags:
+      - Tasks
+  /api/v1/tasks/{id}/done:
+    post:
+      consumes:
+      - application/json
+      description: Marks a task as done, updates it in the database, and queues worker.delete_task
+        in a transactional manner. If queueing fails, the database update is rolled
+        back.
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task marked as done successfully
+          schema:
+            $ref: '#/definitions/models.Task'
+        "400":
+          description: Invalid task ID parameter
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Task not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error or transaction failure
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Mark task as done
       tags:
       - Tasks
   /api/v1/tasks/{id}/history:

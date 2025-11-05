@@ -18,6 +18,7 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 		api.GET("/users/:user_id/tasks", taskHandler.GetUserTasks)
 		api.GET("/users/:user_id/tasks/history", taskHandler.GetUserTaskHistory)
 		api.PUT("/tasks/:id", taskHandler.UpdateTask)
+		api.POST("/tasks/:id/done", taskHandler.MarkTaskAsDone)
 		api.DELETE("/tasks/:id", taskHandler.DeleteTask)
 
 		// User routes

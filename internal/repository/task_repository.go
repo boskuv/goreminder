@@ -22,10 +22,13 @@ import (
 type TaskRepository interface {
 	CreateTask(ctx context.Context, task *models.Task) (int64, error)
 	GetTaskByID(ctx context.Context, id int64) (*models.Task, error)
+	GetTaskByIDWithoutStatusFilter(ctx context.Context, id int64) (*models.Task, error)
 	GetTasksByUserID(ctx context.Context, userID int64) ([]*models.Task, error)
 	UpdateTask(ctx context.Context, task *models.Task) error
+	UpdateTaskWithTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) error
 	DeleteTask(ctx context.Context, id int64) error
 	GetTasksNeedingRescheduling(ctx context.Context) ([]*models.Task, error)
+	GetDB() *sqlx.DB
 }
 
 type taskRepository struct {
@@ -143,6 +146,67 @@ func (r *taskRepository) GetTaskByID(ctx context.Context, id int64) (*models.Tas
 	return &task, nil
 }
 
+// GetTaskByIDWithoutStatusFilter retrieves a task by its ID without filtering by status
+// This is useful for operations that need to check task status regardless of current state
+func (r *taskRepository) GetTaskByIDWithoutStatusFilter(ctx context.Context, id int64) (*models.Task, error) {
+	ctx, span := r.tracer.Start(ctx, "task_repository.GetTaskByIDWithoutStatusFilter",
+		trace.WithAttributes(
+			attribute.Int64("task.id", id),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("task.id", id).
+		Msg("getting task by id from database (without status filter)")
+
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "start_date", "finish_date", "cron_expression", "status", "created_at").
+		From("tasks").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to build query while getting task by id")
+	}
+
+	var task models.Task
+	err = r.db.GetContext(ctx, &task, query, args...)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			err = errors.Wrap(errs.ErrNotFound, "no task found for passed id")
+			log.Debug().
+				Err(err).
+				Int64("task.id", id).
+				Msg("task not found")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
+		}
+
+		log.Debug().
+			Err(err).
+			Int64("task.id", id).
+			Msg("failed to get task by id from database")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to get task by id")
+	}
+
+	log.Debug().
+		Int64("task.id", id).
+		Int64("user.id", task.UserID).
+		Str("task.status", task.Status).
+		Msg("task retrieved successfully from database")
+	span.SetAttributes(
+		attribute.Int64("user.id", task.UserID),
+		attribute.String("task.status", task.Status),
+	)
+	span.SetStatus(codes.Ok, "task retrieved successfully")
+	return &task, nil
+}
+
 // GetTasksByUserID retrieves a task by user ID
 // Returns task entities for passed user ID and an error if occurred
 func (r *taskRepository) GetTasksByUserID(ctx context.Context, userID int64) ([]*models.Task, error) {
@@ -239,6 +303,63 @@ func (r *taskRepository) UpdateTask(ctx context.Context, task *models.Task) erro
 		Msg("task updated successfully in database")
 	span.SetStatus(codes.Ok, "task updated successfully")
 	return nil
+}
+
+// UpdateTaskWithTx updates task within a transaction
+// It sets the updated_at to the current time
+func (r *taskRepository) UpdateTaskWithTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) error {
+	ctx, span := r.tracer.Start(ctx, "task_repository.UpdateTaskWithTx",
+		trace.WithAttributes(
+			attribute.Int64("task.id", task.ID),
+			attribute.String("task.status", task.Status),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("task.id", task.ID).
+		Str("task.status", task.Status).
+		Msg("updating task in database within transaction")
+
+	query, args, err := r.sb.Update("tasks").
+		Set("title", task.Title).
+		Set("description", task.Description).
+		Set("status", task.Status).
+		Set("start_date", task.StartDate).
+		Set("finish_date", task.FinishDate).
+		Set("cron_expression", task.CronExpression).
+		Set("updated_at", time.Now().UTC()).
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"id": task.ID}).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "failed to build query while updating task")
+	}
+
+	_, err = tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", task.ID).
+			Msg("failed to update task in database within transaction")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "failed to execute update query for task")
+	}
+
+	log.Debug().
+		Int64("task.id", task.ID).
+		Msg("task updated successfully in database within transaction")
+	span.SetStatus(codes.Ok, "task updated successfully")
+	return nil
+}
+
+// GetDB returns the underlying database connection
+// This is needed for transaction management at the service level
+func (r *taskRepository) GetDB() *sqlx.DB {
+	return r.db
 }
 
 // DeleteTask soft deletes task by its id

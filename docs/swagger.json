@@ -695,6 +695,65 @@
                 }
             }
         },
+        "/api/v1/tasks/{id}/done": {
+            "post": {
+                "description": "Marks a task as done, updates it in the database, and queues worker.delete_task in a transactional manner. If queueing fails, the database update is rolled back.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tasks"
+                ],
+                "summary": "Mark task as done",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Task marked as done successfully",
+                        "schema": {
+                            "$ref": "#/definitions/models.Task"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid task ID parameter",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Task not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error or transaction failure",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/tasks/{id}/history": {
             "get": {
                 "description": "Retrieves history entries for a specific task",
@@ -1258,7 +1317,6 @@
                     "type": "string"
                 },
                 "id": {
-                    "description": "TODO: db?",
                     "type": "integer"
                 },
                 "messenger_related_user_id": {

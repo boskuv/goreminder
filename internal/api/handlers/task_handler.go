@@ -396,6 +396,61 @@ func (h *TaskHandler) QueueTask(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("task with id `%d` has been successfully enqueued", scheduledTask.TaskID)})
 }
 
+// @Summary Mark task as done
+// @Description Marks a task as done, updates it in the database, and queues worker.delete_task in a transactional manner. If queueing fails, the database update is rolled back.
+// @Tags Tasks
+// @Accept json
+// @Produce json
+// @Param id path int true "Task ID"
+// @Success 200 {object} models.Task "Task marked as done successfully"
+// @Failure 400 {object} map[string]string "Invalid task ID parameter"
+// @Failure 404 {object} map[string]string "Task not found"
+// @Failure 500 {object} map[string]string "Internal server error or transaction failure"
+// @Router /api/v1/tasks/{id}/done [post]
+func (h *TaskHandler) MarkTaskAsDone(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
+	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		log.Info().
+			Err(err).
+			Str("task_id_param", c.Param("id")).
+			Msg("invalid task ID parameter")
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	log.Info().
+		Int64("task.id", taskID).
+		Msg("marking task as done")
+
+	task, err := h.taskService.MarkTaskAsDone(ctx, taskID)
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("error while marking task as done")
+
+		if errors.Is(err, errs.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": fmt.Sprintf("task with id `%d` not found", taskID),
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	log.Info().
+		Int64("task.id", taskID).
+		Msg("task marked as done successfully")
+
+	c.JSON(http.StatusOK, task)
+}
+
 // @Summary Get task history by task ID
 // @Description Retrieves history entries for a specific task
 // @Tags Tasks
