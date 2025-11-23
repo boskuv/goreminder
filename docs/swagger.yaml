@@ -128,6 +128,57 @@ definitions:
         example: telegram
         type: string
     type: object
+  dto.PaginatedMessengerRelatedUsersResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/dto.MessengerRelatedUserResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/dto.PaginationResponse'
+    type: object
+  dto.PaginatedMessengersResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/dto.MessengerResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/dto.PaginationResponse'
+    type: object
+  dto.PaginatedTasksResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/dto.TaskResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/dto.PaginationResponse'
+    type: object
+  dto.PaginatedUsersResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/dto.UserResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/dto.PaginationResponse'
+    type: object
+  dto.PaginationResponse:
+    properties:
+      page:
+        example: 1
+        type: integer
+      page_size:
+        example: 50
+        type: integer
+      total_count:
+        example: 500
+        type: integer
+      total_pages:
+        example: 10
+        type: integer
+    type: object
   dto.QueueTaskRequest:
     properties:
       action:
@@ -437,7 +488,88 @@ paths:
       summary: Get a userID by messengerUserID
       tags:
       - Messengers
+  /api/v1/messengerRelatedUsers/all:
+    get:
+      description: Retrieves all messenger-related users with pagination and ordering
+      parameters:
+      - default: 1
+        description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: 'Page size (default: 50)'
+        in: query
+        name: page_size
+        type: integer
+      - default: created_at DESC
+        description: 'Order by field (default: created_at DESC)'
+        in: query
+        name: order_by
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Paginated list of messenger-related users
+          schema:
+            $ref: '#/definitions/dto.PaginatedMessengerRelatedUsersResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get all messenger-related users
+      tags:
+      - Messengers
   /api/v1/messengers:
+    get:
+      description: Retrieves all messengers with pagination and ordering
+      parameters:
+      - default: 1
+        description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: 'Page size (default: 50)'
+        in: query
+        name: page_size
+        type: integer
+      - default: created_at DESC
+        description: 'Order by field (default: created_at DESC)'
+        in: query
+        name: order_by
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Paginated list of messengers
+          schema:
+            $ref: '#/definitions/dto.PaginatedMessengersResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get all messengers
+      tags:
+      - Messengers
     post:
       consumes:
       - application/json
@@ -550,6 +682,64 @@ paths:
       tags:
       - Messengers
   /api/v1/tasks:
+    get:
+      description: Retrieves all tasks with pagination, ordering, and filtering (by
+        status, start_date_from, start_date_to, user_id)
+      parameters:
+      - default: 1
+        description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: 'Page size (default: 50)'
+        in: query
+        name: page_size
+        type: integer
+      - default: created_at DESC
+        description: 'Order by field (default: created_at DESC)'
+        in: query
+        name: order_by
+        type: string
+      - description: Filter by status (pending, scheduled, done, rescheduled, postponed,
+          deleted)
+        in: query
+        name: status
+        type: string
+      - description: Filter by start_date from (RFC3339 format, inclusive)
+        in: query
+        name: start_date_from
+        type: string
+      - description: Filter by start_date to (RFC3339 format, inclusive)
+        in: query
+        name: start_date_to
+        type: string
+      - description: Filter by user_id
+        in: query
+        name: user_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Paginated list of tasks
+          schema:
+            $ref: '#/definitions/dto.PaginatedTasksResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get all tasks
+      tags:
+      - Tasks
     post:
       consumes:
       - application/json
@@ -843,6 +1033,46 @@ paths:
       tags:
       - Tasks
   /api/v1/users:
+    get:
+      description: Retrieves all users with pagination and ordering
+      parameters:
+      - default: 1
+        description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: 'Page size (default: 50)'
+        in: query
+        name: page_size
+        type: integer
+      - default: created_at DESC
+        description: 'Order by field (default: created_at DESC)'
+        in: query
+        name: order_by
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Paginated list of users
+          schema:
+            $ref: '#/definitions/dto.PaginatedUsersResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get all users
+      tags:
+      - Users
     post:
       consumes:
       - application/json
