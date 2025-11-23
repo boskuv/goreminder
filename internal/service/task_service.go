@@ -298,7 +298,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	if updateRequest.FinishDate != nil {
 		oldTask.FinishDate = updateRequest.FinishDate
 	}
-	// TODO: check if cron expression is valid
+	// TODO: check if cron expression is valid -> remove UpdateModel -> TaskModel
 	if updateRequest.CronExpression != nil {
 		oldTask.CronExpression = updateRequest.CronExpression
 	}
