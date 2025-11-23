@@ -29,7 +29,7 @@ type TaskRepository interface {
 	DeleteTask(ctx context.Context, id int64) error
 	GetTasksNeedingRescheduling(ctx context.Context) ([]*models.Task, error)
 	GetDB() *sqlx.DB
-	GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, startDate *time.Time, userID *int64) ([]*models.Task, int, error)
+	GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64) ([]*models.Task, int, error)
 }
 
 type taskRepository struct {
@@ -452,7 +452,7 @@ func (r *taskRepository) GetTasksNeedingRescheduling(ctx context.Context) ([]*mo
 }
 
 // GetAllTasks retrieves all tasks with pagination, ordering, and filtering
-func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, startDate *time.Time, userID *int64) ([]*models.Task, int, error) {
+func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64) ([]*models.Task, int, error) {
 	ctx, span := r.tracer.Start(ctx, "task_repository.GetAllTasks",
 		trace.WithAttributes(
 			attribute.Int("page", page),
@@ -489,9 +489,13 @@ func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, or
 		countBuilder = countBuilder.Where(squirrel.Eq{"status": *status})
 		span.SetAttributes(attribute.String("filter.status", *status))
 	}
-	if startDate != nil {
-		countBuilder = countBuilder.Where(squirrel.GtOrEq{"start_date": *startDate})
-		span.SetAttributes(attribute.String("filter.start_date", startDate.Format(time.RFC3339)))
+	if startDateFrom != nil {
+		countBuilder = countBuilder.Where(squirrel.GtOrEq{"start_date": *startDateFrom})
+		span.SetAttributes(attribute.String("filter.start_date_from", startDateFrom.Format(time.RFC3339)))
+	}
+	if startDateTo != nil {
+		countBuilder = countBuilder.Where(squirrel.LtOrEq{"start_date": *startDateTo})
+		span.SetAttributes(attribute.String("filter.start_date_to", startDateTo.Format(time.RFC3339)))
 	}
 	if userID != nil {
 		countBuilder = countBuilder.Where(squirrel.Eq{"user_id": *userID})
@@ -522,8 +526,11 @@ func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, or
 	if status != nil && *status != "" {
 		dataBuilder = dataBuilder.Where(squirrel.Eq{"status": *status})
 	}
-	if startDate != nil {
-		dataBuilder = dataBuilder.Where(squirrel.GtOrEq{"start_date": *startDate})
+	if startDateFrom != nil {
+		dataBuilder = dataBuilder.Where(squirrel.GtOrEq{"start_date": *startDateFrom})
+	}
+	if startDateTo != nil {
+		dataBuilder = dataBuilder.Where(squirrel.LtOrEq{"start_date": *startDateTo})
 	}
 	if userID != nil {
 		dataBuilder = dataBuilder.Where(squirrel.Eq{"user_id": *userID})

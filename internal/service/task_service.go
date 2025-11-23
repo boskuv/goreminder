@@ -1031,7 +1031,7 @@ func (s *TaskService) RescheduleTasks(ctx context.Context, tasks []*models.Task)
 }
 
 // GetAllTasks implements BL of retrieving all tasks with pagination, ordering, and filtering
-func (s *TaskService) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, startDate *time.Time, userID *int64) ([]*models.Task, int, error) {
+func (s *TaskService) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64) ([]*models.Task, int, error) {
 	ctx, span := s.tracer.Start(ctx, "task_service.GetAllTasks",
 		trace.WithAttributes(
 			attribute.Int("page", page),
@@ -1051,16 +1051,20 @@ func (s *TaskService) GetAllTasks(ctx context.Context, page, pageSize int, order
 		span.SetAttributes(attribute.String("filter.status", *status))
 		log = log.With().Str("filter.status", *status).Logger()
 	}
-	if startDate != nil {
-		span.SetAttributes(attribute.String("filter.start_date", startDate.Format(time.RFC3339)))
-		log = log.With().Time("filter.start_date", *startDate).Logger()
+	if startDateFrom != nil {
+		span.SetAttributes(attribute.String("filter.start_date_from", startDateFrom.Format(time.RFC3339)))
+		log = log.With().Time("filter.start_date_from", *startDateFrom).Logger()
+	}
+	if startDateTo != nil {
+		span.SetAttributes(attribute.String("filter.start_date_to", startDateTo.Format(time.RFC3339)))
+		log = log.With().Time("filter.start_date_to", *startDateTo).Logger()
 	}
 	if userID != nil {
 		span.SetAttributes(attribute.Int64("filter.user_id", *userID))
 		log = log.With().Int64("filter.user_id", *userID).Logger()
 	}
 
-	tasks, totalCount, err := s.taskRepo.GetAllTasks(ctx, page, pageSize, orderBy, status, startDate, userID)
+	tasks, totalCount, err := s.taskRepo.GetAllTasks(ctx, page, pageSize, orderBy, status, startDateFrom, startDateTo, userID)
 	if err != nil {
 		log.Debug().
 			Err(err).

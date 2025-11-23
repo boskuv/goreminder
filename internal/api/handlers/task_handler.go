@@ -604,14 +604,15 @@ func (h *TaskHandler) GetUserTaskHistory(c *gin.Context) {
 }
 
 // @Summary Get all tasks
-// @Description Retrieves all tasks with pagination, ordering, and filtering (by status, start_date, user_id)
+// @Description Retrieves all tasks with pagination, ordering, and filtering (by status, start_date_from, start_date_to, user_id)
 // @Tags Tasks
 // @Produce json
 // @Param page query int false "Page number (default: 1)" default(1)
 // @Param page_size query int false "Page size (default: 50)" default(50)
 // @Param order_by query string false "Order by field (default: created_at DESC)" default(created_at DESC)
 // @Param status query string false "Filter by status (pending, scheduled, done, rescheduled, postponed, deleted)"
-// @Param start_date query string false "Filter by start_date (RFC3339 format)"
+// @Param start_date_from query string false "Filter by start_date from (RFC3339 format, inclusive)"
+// @Param start_date_to query string false "Filter by start_date to (RFC3339 format, inclusive)"
 // @Param user_id query int false "Filter by user_id"
 // @Success 200 {object} dto.PaginatedTasksResponse "Paginated list of tasks"
 // @Failure 400 {object} map[string]string "Bad request"
@@ -657,9 +658,16 @@ func (h *TaskHandler) GetAllTasks(c *gin.Context) {
 		statusPtr = &status
 	}
 
-	startDate, err := validation.ValidateOptionalTimeQuery(c, "start_date")
+	startDateFrom, err := validation.ValidateOptionalTimeQuery(c, "start_date_from")
 	if err != nil {
-		log.Info().Err(err).Msg("invalid start_date query parameter")
+		log.Info().Err(err).Msg("invalid start_date_from query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	startDateTo, err := validation.ValidateOptionalTimeQuery(c, "start_date_to")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid start_date_to query parameter")
 		validation.HandleValidationError(c, err)
 		return
 	}
@@ -677,7 +685,7 @@ func (h *TaskHandler) GetAllTasks(c *gin.Context) {
 		Str("order_by", orderBy).
 		Msg("getting all tasks")
 
-	tasks, totalCount, err := h.taskService.GetAllTasks(ctx, int(page), int(pageSize), orderBy, statusPtr, startDate, userID)
+	tasks, totalCount, err := h.taskService.GetAllTasks(ctx, int(page), int(pageSize), orderBy, statusPtr, startDateFrom, startDateTo, userID)
 	if err != nil {
 		log.Error().
 			Stack().
