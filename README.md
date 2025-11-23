@@ -9,7 +9,6 @@
 - **Task Management**: Create, fetch, update, and delete tasks with soft delete support
 - **User Management**: Create, fetch, update, and delete users with soft delete support
 - **Messenger Integration**: Support for multiple messaging platforms (Telegram, etc.)
-- **PostgreSQL with PgBouncer**: Efficient connection pooling for high performance
 - **RESTful API**: Built with Gin framework for fast HTTP routing
 - **Swagger API Documentation**: Auto-generated interactive API documentation
 - **Pagination**: Built-in pagination support for list endpoints with page, page_size, and total_pages
@@ -186,7 +185,6 @@ make run
 
 ### 6. Verify Services
 - **PostgreSQL**: `localhost:5432`
-- **PgBouncer**: `localhost:6432`
 - **API Server**: `localhost:8080`
 - **Swagger UI**: `http://localhost:8080/swagger/index.html`
 - **Metrics**: `http://localhost:9191/metrics`
