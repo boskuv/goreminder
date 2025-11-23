@@ -12,8 +12,10 @@ package mock_repository
 import (
         context "context"
         reflect "reflect"
+        time "time"
 
         models "github.com/boskuv/goreminder/internal/models"
+        sqlx "github.com/jmoiron/sqlx"
         gomock "go.uber.org/mock/gomock"
 )
 
@@ -70,6 +72,36 @@ func (mr *MockTaskRepositoryMockRecorder) DeleteTask(ctx, id any) *gomock.Call {
         return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTask", reflect.TypeOf((*MockTaskRepository)(nil).DeleteTask), ctx, id)
 }
 
+// GetAllTasks mocks base method.
+func (m *MockTaskRepository) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, startDateFrom, startDateTo *time.Time, userID *int64) ([]*models.Task, int, error) {
+        m.ctrl.T.Helper()
+        ret := m.ctrl.Call(m, "GetAllTasks", ctx, page, pageSize, orderBy, status, startDateFrom, startDateTo, userID)
+        ret0, _ := ret[0].([]*models.Task)
+        ret1, _ := ret[1].(int)
+        ret2, _ := ret[2].(error)
+        return ret0, ret1, ret2
+}
+
+// GetAllTasks indicates an expected call of GetAllTasks.
+func (mr *MockTaskRepositoryMockRecorder) GetAllTasks(ctx, page, pageSize, orderBy, status, startDateFrom, startDateTo, userID any) *gomock.Call {
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllTasks", reflect.TypeOf((*MockTaskRepository)(nil).GetAllTasks), ctx, page, pageSize, orderBy, status, startDateFrom, startDateTo, userID)
+}
+
+// GetDB mocks base method.
+func (m *MockTaskRepository) GetDB() *sqlx.DB {
+        m.ctrl.T.Helper()
+        ret := m.ctrl.Call(m, "GetDB")
+        ret0, _ := ret[0].(*sqlx.DB)
+        return ret0
+}
+
+// GetDB indicates an expected call of GetDB.
+func (mr *MockTaskRepositoryMockRecorder) GetDB() *gomock.Call {
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDB", reflect.TypeOf((*MockTaskRepository)(nil).GetDB))
+}
+
 // GetTaskByID mocks base method.
 func (m *MockTaskRepository) GetTaskByID(ctx context.Context, id int64) (*models.Task, error) {
         m.ctrl.T.Helper()
@@ -83,6 +115,21 @@ func (m *MockTaskRepository) GetTaskByID(ctx context.Context, id int64) (*models
 func (mr *MockTaskRepositoryMockRecorder) GetTaskByID(ctx, id any) *gomock.Call {
         mr.mock.ctrl.T.Helper()
         return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskByID", reflect.TypeOf((*MockTaskRepository)(nil).GetTaskByID), ctx, id)
+}
+
+// GetTaskByIDWithoutStatusFilter mocks base method.
+func (m *MockTaskRepository) GetTaskByIDWithoutStatusFilter(ctx context.Context, id int64) (*models.Task, error) {
+        m.ctrl.T.Helper()
+        ret := m.ctrl.Call(m, "GetTaskByIDWithoutStatusFilter", ctx, id)
+        ret0, _ := ret[0].(*models.Task)
+        ret1, _ := ret[1].(error)
+        return ret0, ret1
+}
+
+// GetTaskByIDWithoutStatusFilter indicates an expected call of GetTaskByIDWithoutStatusFilter.
+func (mr *MockTaskRepositoryMockRecorder) GetTaskByIDWithoutStatusFilter(ctx, id any) *gomock.Call {
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskByIDWithoutStatusFilter", reflect.TypeOf((*MockTaskRepository)(nil).GetTaskByIDWithoutStatusFilter), ctx, id)
 }
 
 // GetTasksByUserID mocks base method.
@@ -100,6 +147,21 @@ func (mr *MockTaskRepositoryMockRecorder) GetTasksByUserID(ctx, userID any) *gom
         return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTasksByUserID", reflect.TypeOf((*MockTaskRepository)(nil).GetTasksByUserID), ctx, userID)
 }
 
+// GetTasksNeedingRescheduling mocks base method.
+func (m *MockTaskRepository) GetTasksNeedingRescheduling(ctx context.Context) ([]*models.Task, error) {
+        m.ctrl.T.Helper()
+        ret := m.ctrl.Call(m, "GetTasksNeedingRescheduling", ctx)
+        ret0, _ := ret[0].([]*models.Task)
+        ret1, _ := ret[1].(error)
+        return ret0, ret1
+}
+
+// GetTasksNeedingRescheduling indicates an expected call of GetTasksNeedingRescheduling.
+func (mr *MockTaskRepositoryMockRecorder) GetTasksNeedingRescheduling(ctx any) *gomock.Call {
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTasksNeedingRescheduling", reflect.TypeOf((*MockTaskRepository)(nil).GetTasksNeedingRescheduling), ctx)
+}
+
 // UpdateTask mocks base method.
 func (m *MockTaskRepository) UpdateTask(ctx context.Context, task *models.Task) error {
         m.ctrl.T.Helper()
@@ -112,4 +174,18 @@ func (m *MockTaskRepository) UpdateTask(ctx context.Context, task *models.Task) 
 func (mr *MockTaskRepositoryMockRecorder) UpdateTask(ctx, task any) *gomock.Call {
         mr.mock.ctrl.T.Helper()
         return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTask", reflect.TypeOf((*MockTaskRepository)(nil).UpdateTask), ctx, task)
+}
+
+// UpdateTaskWithTx mocks base method.
+func (m *MockTaskRepository) UpdateTaskWithTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) error {
+        m.ctrl.T.Helper()
+        ret := m.ctrl.Call(m, "UpdateTaskWithTx", ctx, tx, task)
+        ret0, _ := ret[0].(error)
+        return ret0
+}
+
+// UpdateTaskWithTx indicates an expected call of UpdateTaskWithTx.
+func (mr *MockTaskRepositoryMockRecorder) UpdateTaskWithTx(ctx, tx, task any) *gomock.Call {
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskWithTx", reflect.TypeOf((*MockTaskRepository)(nil).UpdateTaskWithTx), ctx, tx, task)
 }
