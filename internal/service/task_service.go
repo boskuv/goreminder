@@ -614,6 +614,8 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 
 	// Update task status to done within transaction
 	task.Status = string(models.TaskStatusDone)
+	now := time.Now().UTC()
+	task.FinishDate = &now
 	err = s.taskRepo.UpdateTaskWithTx(ctx, tx, task)
 	if err != nil {
 		log.Error().
