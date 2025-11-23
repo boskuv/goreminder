@@ -70,7 +70,7 @@ type Task struct {
 	FinishDate             *time.Time `db:"finish_date" json:"finish_date,omitempty"`
 	CronExpression         *string    `db:"cron_expression" json:"cron_expression,omitempty"`
 	Status                 string     `db:"status" json:"status"`
-	CreatedAt              time.Time  `db:"created_at" json:"created_at"` // TODO: json:"-"`
+	CreatedAt              time.Time  `db:"created_at" json:"created_at"`
 	DeletedAt              time.Time  `db:"deleted_at" json:"-"`
 }
 
