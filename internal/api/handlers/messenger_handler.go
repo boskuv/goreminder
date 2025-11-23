@@ -60,7 +60,7 @@ func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, messengerID)
+	c.JSON(http.StatusCreated, gin.H{"id": messengerID})
 }
 
 // @Summary Get messenger by ID
@@ -128,7 +128,7 @@ func (h *MessengerHandler) GetMessengerIDByName(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, messengerID)
+	c.JSON(http.StatusOK, gin.H{"id": messengerID})
 }
 
 // @Summary Сreate a new messenger-related user
@@ -169,7 +169,7 @@ func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, messengerRelatedUserID)
+	c.JSON(http.StatusCreated, gin.H{"id": messengerRelatedUserID})
 }
 
 // @Summary Get messenger-related user by chatID, messengerUserID, userID and messengerID
@@ -190,23 +190,25 @@ func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 	chatID := c.Query("chat_id")
 	messengerUserID := c.Query("messenger_user_id")
 
-	userIDQuery, err := strconv.ParseInt(c.Query("user_id"), 10, 64)
-	if err != nil {
-		//h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("Error while processing request with id parameter")
-		//c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid user ID", http.StatusBadRequest))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	var userID *int64
+	if userIDStr := c.Query("user_id"); userIDStr != "" {
+		userIDQuery, err := strconv.ParseInt(userIDStr, 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id parameter"})
+			return
+		}
+		userID = &userIDQuery
 	}
-	userID := &userIDQuery
 
-	messengerIDQuery, err := strconv.ParseInt(c.Query("messenger_id"), 10, 64)
-	if err != nil {
-		//h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse messengerID")).Msg("Error while processing request with id parameter")
-		//c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid messenger ID", http.StatusBadRequest))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	var messengerID *int64
+	if messengerIDStr := c.Query("messenger_id"); messengerIDStr != "" {
+		messengerIDQuery, err := strconv.ParseInt(messengerIDStr, 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid messenger_id parameter"})
+			return
+		}
+		messengerID = &messengerIDQuery
 	}
-	messengerID := &messengerIDQuery
 
 	messengerRelatedUser, err := h.messengerService.GetMessengerRelatedUser(c.Request.Context(), chatID, messengerUserID, userID, messengerID)
 	if err != nil {
@@ -255,5 +257,5 @@ func (h *MessengerHandler) GetUserID(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, userID)
+	c.JSON(http.StatusOK, gin.H{"user_id": userID})
 }

@@ -60,7 +60,7 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, userID)
+	c.JSON(http.StatusCreated, gin.H{"id": userID})
 }
 
 // @Summary Get user by userID
@@ -148,6 +148,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 		}
 
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
 	c.JSON(http.StatusOK, updatedUser)

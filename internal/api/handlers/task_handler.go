@@ -88,7 +88,7 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 		Int64("user.id", task.UserID).
 		Msg("task created successfully")
 
-	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("task with id `%d` has been successfully added", taskID)})
+	c.JSON(http.StatusCreated, gin.H{"id": taskID})
 }
 
 // @Summary Get task by ID
@@ -393,7 +393,7 @@ func (h *TaskHandler) QueueTask(c *gin.Context) {
 		Str("action", scheduledTask.Action).
 		Msg("task queued successfully")
 
-	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("task with id `%d` has been successfully enqueued", scheduledTask.TaskID)})
+	c.JSON(http.StatusCreated, gin.H{"id": scheduledTask.TaskID})
 }
 
 // @Summary Mark task as done
