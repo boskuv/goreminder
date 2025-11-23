@@ -55,13 +55,13 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Messenger-related user details",
                         "schema": {
-                            "$ref": "#/definitions/models.MessengerRelatedUser"
+                            "$ref": "#/definitions/dto.MessengerRelatedUserResponse"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -70,7 +70,7 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Messenger-related user not found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -79,7 +79,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity",
+                        "description": "Unprocessable entity",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -88,7 +88,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -99,7 +99,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Сreates a new messenger-related user",
+                "description": "Creates a new messenger-related user",
                 "consumes": [
                     "application/json"
                 ],
@@ -109,7 +109,7 @@ const docTemplate = `{
                 "tags": [
                     "Messengers"
                 ],
-                "summary": "Сreate a new messenger-related user",
+                "summary": "Create a new messenger-related user",
                 "parameters": [
                     {
                         "description": "MessengerRelatedUser to create",
@@ -117,13 +117,13 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.MessengerRelatedUser"
+                            "$ref": "#/definitions/dto.CreateMessengerRelatedUserRequest"
                         }
                     }
                 ],
                 "responses": {
                     "201": {
-                        "description": "Created",
+                        "description": "Created messenger-related user ID",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -132,7 +132,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -141,7 +141,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity",
+                        "description": "Unprocessable entity",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -150,7 +150,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -182,7 +182,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "User ID",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -191,7 +191,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -200,7 +200,7 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "User not found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -209,7 +209,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -240,13 +240,13 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.Messenger"
+                            "$ref": "#/definitions/dto.CreateMessengerRequest"
                         }
                     }
                 ],
                 "responses": {
                     "201": {
-                        "description": "Created",
+                        "description": "Created messenger ID",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -255,7 +255,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -264,7 +264,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -296,13 +296,16 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Messenger ID",
                         "schema": {
-                            "$ref": "#/definitions/models.Messenger"
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "integer"
+                            }
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -311,7 +314,7 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Messenger not found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -320,7 +323,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -352,13 +355,13 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Messenger details",
                         "schema": {
-                            "$ref": "#/definitions/models.Messenger"
+                            "$ref": "#/definitions/dto.MessengerResponse"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -367,7 +370,7 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Messenger not found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -376,7 +379,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -407,13 +410,13 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.Task"
+                            "$ref": "#/definitions/dto.CreateTaskRequest"
                         }
                     }
                 ],
                 "responses": {
                     "201": {
-                        "description": "Created",
+                        "description": "Created task ID",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -422,7 +425,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -431,7 +434,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity",
+                        "description": "Unprocessable entity",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -440,7 +443,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -471,19 +474,22 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.ScheduledTask"
+                            "$ref": "#/definitions/dto.QueueTaskRequest"
                         }
                     }
                 ],
                 "responses": {
                     "201": {
-                        "description": "Created",
+                        "description": "Task ID",
                         "schema": {
-                            "$ref": "#/definitions/models.Task"
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "integer"
+                            }
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -492,7 +498,7 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Task not found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -501,7 +507,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity",
+                        "description": "Unprocessable entity",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -510,7 +516,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -542,13 +548,13 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Task details",
                         "schema": {
-                            "$ref": "#/definitions/models.Task"
+                            "$ref": "#/definitions/dto.TaskResponse"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -557,7 +563,7 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Task not found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -566,7 +572,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -602,19 +608,19 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.TaskUpdateRequest"
+                            "$ref": "#/definitions/dto.UpdateTaskRequest"
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Updated task",
                         "schema": {
-                            "$ref": "#/definitions/models.Task"
+                            "$ref": "#/definitions/dto.TaskResponse"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -623,7 +629,7 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Task not found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -632,7 +638,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity",
+                        "description": "Unprocessable entity",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -641,7 +647,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -732,7 +738,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Task marked as done successfully",
                         "schema": {
-                            "$ref": "#/definitions/models.Task"
+                            "$ref": "#/definitions/dto.TaskResponse"
                         }
                     },
                     "400": {
@@ -786,16 +792,16 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Task history entries",
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.TaskHistory"
+                                "$ref": "#/definitions/dto.TaskHistoryResponse"
                             }
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -804,7 +810,7 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Task not found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -813,7 +819,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -844,13 +850,13 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.User"
+                            "$ref": "#/definitions/dto.CreateUserRequest"
                         }
                     }
                 ],
                 "responses": {
                     "201": {
-                        "description": "Created",
+                        "description": "Created user ID",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -859,7 +865,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -868,7 +874,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -900,13 +906,13 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "User details",
                         "schema": {
-                            "$ref": "#/definitions/models.User"
+                            "$ref": "#/definitions/dto.UserResponse"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -915,7 +921,7 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "User not found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -924,7 +930,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -960,19 +966,19 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.UserUpdateRequest"
+                            "$ref": "#/definitions/dto.UpdateUserRequest"
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Updated user",
                         "schema": {
-                            "$ref": "#/definitions/models.User"
+                            "$ref": "#/definitions/dto.UserResponse"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -981,7 +987,7 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "User not found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -990,7 +996,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity",
+                        "description": "Unprocessable entity",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -999,7 +1005,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1032,10 +1038,10 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "204": {
-                        "description": "No Content"
+                        "description": "No content"
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1044,7 +1050,7 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "User not found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1053,7 +1059,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1085,16 +1091,16 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "List of tasks",
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.Task"
+                                "$ref": "#/definitions/dto.TaskResponse"
                             }
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1103,7 +1109,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity",
+                        "description": "Unprocessable entity",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1112,7 +1118,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1158,16 +1164,16 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Task history entries",
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.TaskHistory"
+                                "$ref": "#/definitions/dto.TaskHistoryResponse"
                             }
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1176,7 +1182,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity",
+                        "description": "Unprocessable entity",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1185,7 +1191,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1257,107 +1263,228 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "models.Messenger": {
+        "dto.CreateMessengerRelatedUserRequest": {
             "type": "object",
+            "required": [
+                "chat_id",
+                "messenger_id",
+                "messenger_user_id",
+                "user_id"
+            ],
             "properties": {
-                "created_at": {
-                    "type": "string"
+                "chat_id": {
+                    "type": "string",
+                    "example": "-1001234567890"
                 },
-                "name": {
-                    "type": "string"
+                "messenger_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "messenger_user_id": {
+                    "type": "string",
+                    "example": "123456789"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
                 }
             }
         },
-        "models.MessengerRelatedUser": {
+        "dto.CreateMessengerRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "example": "telegram"
+                }
+            }
+        },
+        "dto.CreateTaskRequest": {
+            "type": "object",
+            "required": [
+                "title",
+                "user_id"
+            ],
+            "properties": {
+                "cron_expression": {
+                    "type": "string",
+                    "example": "0 9 * * *"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Write comprehensive documentation for the API"
+                },
+                "finish_date": {
+                    "type": "string",
+                    "example": "2024-01-20T18:00:00Z"
+                },
+                "messenger_related_user_id": {
+                    "type": "integer",
+                    "example": 123
+                },
+                "start_date": {
+                    "type": "string",
+                    "example": "2024-01-15T10:00:00Z"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "pending",
+                        "scheduled",
+                        "done",
+                        "rescheduled",
+                        "postponed",
+                        "deleted"
+                    ],
+                    "example": "pending"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Complete project documentation"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "dto.CreateUserRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "name",
+                "password_hash"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "john.doe@example.com"
+                },
+                "language_code": {
+                    "type": "string",
+                    "example": "en"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "password_hash": {
+                    "type": "string",
+                    "example": "$2a$10$N9qo8uLOickgx2ZMRZoMye"
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "admin"
+                    ],
+                    "example": "user"
+                },
+                "timezone": {
+                    "type": "string",
+                    "example": "UTC"
+                }
+            }
+        },
+        "dto.MessengerRelatedUserResponse": {
             "type": "object",
             "properties": {
                 "chat_id": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "-1001234567890"
                 },
                 "created_at": {
-                    "type": "string"
+                    "description": "ISO 8601 format",
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 1
                 },
                 "messenger_id": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 1
                 },
                 "messenger_user_id": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "123456789"
                 },
                 "updated_at": {
-                    "type": "string"
+                    "description": "ISO 8601 format",
+                    "type": "string",
+                    "example": "2024-01-15T10:00:00Z"
                 },
                 "user_id": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 1
                 }
             }
         },
-        "models.ScheduledTask": {
+        "dto.MessengerResponse": {
             "type": "object",
+            "properties": {
+                "created_at": {
+                    "description": "ISO 8601 format",
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "telegram"
+                }
+            }
+        },
+        "dto.QueueTaskRequest": {
+            "type": "object",
+            "required": [
+                "action",
+                "queue_name",
+                "task_id"
+            ],
             "properties": {
                 "action": {
                     "type": "string",
+                    "enum": [
+                        "schedule",
+                        "delete"
+                    ],
                     "example": "schedule"
                 },
                 "queue_name": {
-                    "description": "MessengerName string ` + "`" + `json:\"messenger_name\" example:\"telegram\"` + "`" + ` TODO",
                     "type": "string",
                     "example": "celery"
                 },
                 "task_id": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 1
                 }
             }
         },
-        "models.Task": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "description": "TODO: json:\"-\"` + "`" + `",
-                    "type": "string"
-                },
-                "cron_expression": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "finish_date": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "messenger_related_user_id": {
-                    "type": "integer"
-                },
-                "start_date": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
-                },
-                "title": {
-                    "type": "string"
-                },
-                "user_id": {
-                    "type": "integer"
-                }
-            }
-        },
-        "models.TaskHistory": {
+        "dto.TaskHistoryResponse": {
             "type": "object",
             "properties": {
                 "action": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "created",
+                        "updated",
+                        "deleted",
+                        "status_changed"
+                    ],
+                    "example": "created"
                 },
                 "created_at": {
-                    "type": "string"
+                    "description": "ISO 8601 format",
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 1
                 },
                 "new_value": {
                     "type": "object",
@@ -1368,85 +1495,173 @@ const docTemplate = `{
                     "additionalProperties": true
                 },
                 "task_id": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 1
                 },
                 "user_id": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 1
                 }
             }
         },
-        "models.TaskUpdateRequest": {
+        "dto.TaskResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
+                },
+                "cron_expression": {
+                    "type": "string",
+                    "example": "0 9 * * *"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Write comprehensive documentation for the API"
+                },
+                "finish_date": {
+                    "type": "string",
+                    "example": "2024-01-20T18:00:00Z"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "messenger_related_user_id": {
+                    "type": "integer",
+                    "example": 123
+                },
+                "start_date": {
+                    "type": "string",
+                    "example": "2024-01-15T10:00:00Z"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "pending",
+                        "scheduled",
+                        "done",
+                        "rescheduled",
+                        "postponed",
+                        "deleted"
+                    ],
+                    "example": "pending"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Complete project documentation"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "dto.UpdateTaskRequest": {
             "type": "object",
             "properties": {
                 "cron_expression": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "0 9 * * *"
                 },
                 "description": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Updated task description"
                 },
                 "finish_date": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "2024-01-20T18:00:00Z"
                 },
                 "start_date": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "2024-01-15T10:00:00Z"
                 },
                 "status": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "pending",
+                        "scheduled",
+                        "done",
+                        "rescheduled",
+                        "postponed",
+                        "deleted"
+                    ],
+                    "example": "done"
                 },
                 "title": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Updated task title"
                 }
             }
         },
-        "models.User": {
-            "type": "object",
-            "properties": {
-                "createdAt": {
-                    "type": "string"
-                },
-                "email": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "language_code": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "passwordHash": {
-                    "type": "string"
-                },
-                "role": {
-                    "type": "string"
-                },
-                "timezone": {
-                    "type": "string"
-                }
-            }
-        },
-        "models.UserUpdateRequest": {
+        "dto.UpdateUserRequest": {
             "type": "object",
             "properties": {
                 "email": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "jane.doe@example.com"
                 },
                 "language_code": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "ru"
                 },
                 "name": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Jane Doe"
                 },
                 "password_hash": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "$2a$10$N9qo8uLOickgx2ZMRZoMye"
                 },
                 "role": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "admin"
+                    ],
+                    "example": "admin"
                 },
                 "timezone": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "America/New_York"
+                }
+            }
+        },
+        "dto.UserResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "description": "ISO 8601 format",
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
+                },
+                "email": {
+                    "type": "string",
+                    "example": "john.doe@example.com"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "language_code": {
+                    "type": "string",
+                    "example": "en"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "admin"
+                    ],
+                    "example": "user"
+                },
+                "timezone": {
+                    "type": "string",
+                    "example": "UTC"
                 }
             }
         }

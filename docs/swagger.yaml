@@ -1,72 +1,168 @@
 definitions:
-  models.Messenger:
-    properties:
-      created_at:
-        type: string
-      name:
-        type: string
-    type: object
-  models.MessengerRelatedUser:
+  dto.CreateMessengerRelatedUserRequest:
     properties:
       chat_id:
+        example: "-1001234567890"
         type: string
-      created_at:
-        type: string
-      id:
-        type: integer
       messenger_id:
+        example: 1
         type: integer
       messenger_user_id:
-        type: string
-      updated_at:
+        example: "123456789"
         type: string
       user_id:
+        example: 1
+        type: integer
+    required:
+    - chat_id
+    - messenger_id
+    - messenger_user_id
+    - user_id
+    type: object
+  dto.CreateMessengerRequest:
+    properties:
+      name:
+        example: telegram
+        type: string
+    required:
+    - name
+    type: object
+  dto.CreateTaskRequest:
+    properties:
+      cron_expression:
+        example: 0 9 * * *
+        type: string
+      description:
+        example: Write comprehensive documentation for the API
+        type: string
+      finish_date:
+        example: "2024-01-20T18:00:00Z"
+        type: string
+      messenger_related_user_id:
+        example: 123
+        type: integer
+      start_date:
+        example: "2024-01-15T10:00:00Z"
+        type: string
+      status:
+        enum:
+        - pending
+        - scheduled
+        - done
+        - rescheduled
+        - postponed
+        - deleted
+        example: pending
+        type: string
+      title:
+        example: Complete project documentation
+        type: string
+      user_id:
+        example: 1
+        type: integer
+    required:
+    - title
+    - user_id
+    type: object
+  dto.CreateUserRequest:
+    properties:
+      email:
+        example: john.doe@example.com
+        type: string
+      language_code:
+        example: en
+        type: string
+      name:
+        example: John Doe
+        type: string
+      password_hash:
+        example: $2a$10$N9qo8uLOickgx2ZMRZoMye
+        type: string
+      role:
+        enum:
+        - user
+        - admin
+        example: user
+        type: string
+      timezone:
+        example: UTC
+        type: string
+    required:
+    - email
+    - name
+    - password_hash
+    type: object
+  dto.MessengerRelatedUserResponse:
+    properties:
+      chat_id:
+        example: "-1001234567890"
+        type: string
+      created_at:
+        description: ISO 8601 format
+        example: "2024-01-10T08:00:00Z"
+        type: string
+      id:
+        example: 1
+        type: integer
+      messenger_id:
+        example: 1
+        type: integer
+      messenger_user_id:
+        example: "123456789"
+        type: string
+      updated_at:
+        description: ISO 8601 format
+        example: "2024-01-15T10:00:00Z"
+        type: string
+      user_id:
+        example: 1
         type: integer
     type: object
-  models.ScheduledTask:
+  dto.MessengerResponse:
+    properties:
+      created_at:
+        description: ISO 8601 format
+        example: "2024-01-10T08:00:00Z"
+        type: string
+      name:
+        example: telegram
+        type: string
+    type: object
+  dto.QueueTaskRequest:
     properties:
       action:
+        enum:
+        - schedule
+        - delete
         example: schedule
         type: string
       queue_name:
-        description: MessengerName string `json:"messenger_name" example:"telegram"`
-          TODO
         example: celery
         type: string
       task_id:
+        example: 1
         type: integer
+    required:
+    - action
+    - queue_name
+    - task_id
     type: object
-  models.Task:
-    properties:
-      created_at:
-        description: 'TODO: json:"-"`'
-        type: string
-      cron_expression:
-        type: string
-      description:
-        type: string
-      finish_date:
-        type: string
-      id:
-        type: integer
-      messenger_related_user_id:
-        type: integer
-      start_date:
-        type: string
-      status:
-        type: string
-      title:
-        type: string
-      user_id:
-        type: integer
-    type: object
-  models.TaskHistory:
+  dto.TaskHistoryResponse:
     properties:
       action:
+        enum:
+        - created
+        - updated
+        - deleted
+        - status_changed
+        example: created
         type: string
       created_at:
+        description: ISO 8601 format
+        example: "2024-01-10T08:00:00Z"
         type: string
       id:
+        example: 1
         type: integer
       new_value:
         additionalProperties: true
@@ -75,57 +171,130 @@ definitions:
         additionalProperties: true
         type: object
       task_id:
+        example: 1
         type: integer
       user_id:
+        example: 1
         type: integer
     type: object
-  models.TaskUpdateRequest:
+  dto.TaskResponse:
     properties:
+      created_at:
+        example: "2024-01-10T08:00:00Z"
+        type: string
       cron_expression:
+        example: 0 9 * * *
         type: string
       description:
+        example: Write comprehensive documentation for the API
         type: string
       finish_date:
-        type: string
-      start_date:
-        type: string
-      status:
-        type: string
-      title:
-        type: string
-    type: object
-  models.User:
-    properties:
-      createdAt:
-        type: string
-      email:
+        example: "2024-01-20T18:00:00Z"
         type: string
       id:
+        example: 1
         type: integer
-      language_code:
+      messenger_related_user_id:
+        example: 123
+        type: integer
+      start_date:
+        example: "2024-01-15T10:00:00Z"
         type: string
-      name:
+      status:
+        enum:
+        - pending
+        - scheduled
+        - done
+        - rescheduled
+        - postponed
+        - deleted
+        example: pending
         type: string
-      passwordHash:
+      title:
+        example: Complete project documentation
         type: string
-      role:
+      user_id:
+        example: 1
+        type: integer
+    type: object
+  dto.UpdateTaskRequest:
+    properties:
+      cron_expression:
+        example: 0 9 * * *
         type: string
-      timezone:
+      description:
+        example: Updated task description
+        type: string
+      finish_date:
+        example: "2024-01-20T18:00:00Z"
+        type: string
+      start_date:
+        example: "2024-01-15T10:00:00Z"
+        type: string
+      status:
+        enum:
+        - pending
+        - scheduled
+        - done
+        - rescheduled
+        - postponed
+        - deleted
+        example: done
+        type: string
+      title:
+        example: Updated task title
         type: string
     type: object
-  models.UserUpdateRequest:
+  dto.UpdateUserRequest:
     properties:
       email:
+        example: jane.doe@example.com
         type: string
       language_code:
+        example: ru
         type: string
       name:
+        example: Jane Doe
         type: string
       password_hash:
+        example: $2a$10$N9qo8uLOickgx2ZMRZoMye
         type: string
       role:
+        enum:
+        - user
+        - admin
+        example: admin
         type: string
       timezone:
+        example: America/New_York
+        type: string
+    type: object
+  dto.UserResponse:
+    properties:
+      created_at:
+        description: ISO 8601 format
+        example: "2024-01-10T08:00:00Z"
+        type: string
+      email:
+        example: john.doe@example.com
+        type: string
+      id:
+        example: 1
+        type: integer
+      language_code:
+        example: en
+        type: string
+      name:
+        example: John Doe
+        type: string
+      role:
+        enum:
+        - user
+        - admin
+        example: user
+        type: string
+      timezone:
+        example: UTC
         type: string
     type: object
 info:
@@ -158,29 +327,29 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Messenger-related user details
           schema:
-            $ref: '#/definitions/models.MessengerRelatedUser'
+            $ref: '#/definitions/dto.MessengerRelatedUserResponse'
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "404":
-          description: Not Found
+          description: Messenger-related user not found
           schema:
             additionalProperties:
               type: string
             type: object
         "422":
-          description: Unprocessable Entity
+          description: Unprocessable entity
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
@@ -191,42 +360,42 @@ paths:
     post:
       consumes:
       - application/json
-      description: Сreates a new messenger-related user
+      description: Creates a new messenger-related user
       parameters:
       - description: MessengerRelatedUser to create
         in: body
         name: messenger
         required: true
         schema:
-          $ref: '#/definitions/models.MessengerRelatedUser'
+          $ref: '#/definitions/dto.CreateMessengerRelatedUserRequest'
       produces:
       - application/json
       responses:
         "201":
-          description: Created
+          description: Created messenger-related user ID
           schema:
             additionalProperties:
               type: integer
             type: object
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "422":
-          description: Unprocessable Entity
+          description: Unprocessable entity
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
             type: object
-      summary: Сreate a new messenger-related user
+      summary: Create a new messenger-related user
       tags:
       - Messengers
   /api/v1/messengerRelatedUsers/{messenger_user_id}/user:
@@ -242,25 +411,25 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: User ID
           schema:
             additionalProperties:
               type: integer
             type: object
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "404":
-          description: Not Found
+          description: User not found
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
@@ -279,24 +448,24 @@ paths:
         name: messenger
         required: true
         schema:
-          $ref: '#/definitions/models.Messenger'
+          $ref: '#/definitions/dto.CreateMessengerRequest'
       produces:
       - application/json
       responses:
         "201":
-          description: Created
+          description: Created messenger ID
           schema:
             additionalProperties:
               type: integer
             type: object
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
@@ -317,23 +486,23 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Messenger details
           schema:
-            $ref: '#/definitions/models.Messenger'
+            $ref: '#/definitions/dto.MessengerResponse'
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "404":
-          description: Not Found
+          description: Messenger not found
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
@@ -354,23 +523,25 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Messenger ID
           schema:
-            $ref: '#/definitions/models.Messenger'
+            additionalProperties:
+              type: integer
+            type: object
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "404":
-          description: Not Found
+          description: Messenger not found
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
@@ -389,30 +560,30 @@ paths:
         name: task
         required: true
         schema:
-          $ref: '#/definitions/models.Task'
+          $ref: '#/definitions/dto.CreateTaskRequest'
       produces:
       - application/json
       responses:
         "201":
-          description: Created
+          description: Created task ID
           schema:
             additionalProperties:
               type: integer
             type: object
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "422":
-          description: Unprocessable Entity
+          description: Unprocessable entity
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
@@ -469,23 +640,23 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Task details
           schema:
-            $ref: '#/definitions/models.Task'
+            $ref: '#/definitions/dto.TaskResponse'
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "404":
-          description: Not Found
+          description: Task not found
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
@@ -508,34 +679,34 @@ paths:
         name: task
         required: true
         schema:
-          $ref: '#/definitions/models.TaskUpdateRequest'
+          $ref: '#/definitions/dto.UpdateTaskRequest'
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Updated task
           schema:
-            $ref: '#/definitions/models.Task'
+            $ref: '#/definitions/dto.TaskResponse'
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "404":
-          description: Not Found
+          description: Task not found
           schema:
             additionalProperties:
               type: string
             type: object
         "422":
-          description: Unprocessable Entity
+          description: Unprocessable entity
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
@@ -562,7 +733,7 @@ paths:
         "200":
           description: Task marked as done successfully
           schema:
-            $ref: '#/definitions/models.Task'
+            $ref: '#/definitions/dto.TaskResponse'
         "400":
           description: Invalid task ID parameter
           schema:
@@ -597,25 +768,25 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Task history entries
           schema:
             items:
-              $ref: '#/definitions/models.TaskHistory'
+              $ref: '#/definitions/dto.TaskHistoryResponse'
             type: array
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "404":
-          description: Not Found
+          description: Task not found
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
@@ -634,34 +805,36 @@ paths:
         name: task
         required: true
         schema:
-          $ref: '#/definitions/models.ScheduledTask'
+          $ref: '#/definitions/dto.QueueTaskRequest'
       produces:
       - application/json
       responses:
         "201":
-          description: Created
+          description: Task ID
           schema:
-            $ref: '#/definitions/models.Task'
+            additionalProperties:
+              type: integer
+            type: object
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "404":
-          description: Not Found
+          description: Task not found
           schema:
             additionalProperties:
               type: string
             type: object
         "422":
-          description: Unprocessable Entity
+          description: Unprocessable entity
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
@@ -680,24 +853,24 @@ paths:
         name: user
         required: true
         schema:
-          $ref: '#/definitions/models.User'
+          $ref: '#/definitions/dto.CreateUserRequest'
       produces:
       - application/json
       responses:
         "201":
-          description: Created
+          description: Created user ID
           schema:
             additionalProperties:
               type: integer
             type: object
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
@@ -720,21 +893,21 @@ paths:
       - application/json
       responses:
         "204":
-          description: No Content
+          description: No content
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "404":
-          description: Not Found
+          description: User not found
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
@@ -754,23 +927,23 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: User details
           schema:
-            $ref: '#/definitions/models.User'
+            $ref: '#/definitions/dto.UserResponse'
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "404":
-          description: Not Found
+          description: User not found
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
@@ -793,34 +966,34 @@ paths:
         name: user
         required: true
         schema:
-          $ref: '#/definitions/models.UserUpdateRequest'
+          $ref: '#/definitions/dto.UpdateUserRequest'
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Updated user
           schema:
-            $ref: '#/definitions/models.User'
+            $ref: '#/definitions/dto.UserResponse'
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "404":
-          description: Not Found
+          description: User not found
           schema:
             additionalProperties:
               type: string
             type: object
         "422":
-          description: Unprocessable Entity
+          description: Unprocessable entity
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
@@ -841,25 +1014,25 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: List of tasks
           schema:
             items:
-              $ref: '#/definitions/models.Task'
+              $ref: '#/definitions/dto.TaskResponse'
             type: array
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "422":
-          description: Unprocessable Entity
+          description: Unprocessable entity
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
@@ -890,25 +1063,25 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Task history entries
           schema:
             items:
-              $ref: '#/definitions/models.TaskHistory'
+              $ref: '#/definitions/dto.TaskHistoryResponse'
             type: array
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
             additionalProperties:
               type: string
             type: object
         "422":
-          description: Unprocessable Entity
+          description: Unprocessable entity
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
             additionalProperties:
               type: string
