@@ -9,8 +9,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
+	"github.com/boskuv/goreminder/internal/api/dto"
+	"github.com/boskuv/goreminder/internal/api/dto/mapper"
 	errs "github.com/boskuv/goreminder/internal/errors"
-	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/service"
 	"github.com/boskuv/goreminder/pkg/logger"
 )
@@ -34,17 +35,17 @@ func NewMessengerHandler(messengerService *service.MessengerService, logger zero
 // @Tags Messengers
 // @Accept json
 // @Produce json
-// @Param messenger body models.Messenger true "Messenger to create"
-// @Success 201 {object} map[string]int64
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Param messenger body dto.CreateMessengerRequest true "Messenger to create"
+// @Success 201 {object} map[string]int64 "Created messenger ID"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/messengers [post]
 func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
 	ctx := c.Request.Context()
 	log := logger.WithTraceContext(ctx, h.logger)
 
-	var messenger models.Messenger
-	if err := c.ShouldBindJSON(&messenger); err != nil {
+	var req dto.CreateMessengerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Error().
 			Err(err).
 			Msg("invalid request payload for messenger creation")
@@ -52,7 +53,10 @@ func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
 		return
 	}
 
-	messengerID, err := h.messengerService.CreateMessenger(c.Request.Context(), &messenger)
+	// Convert DTO to model for service
+	messengerModel := mapper.CreateMessengerRequestToModel(&req)
+
+	messengerID, err := h.messengerService.CreateMessenger(c.Request.Context(), messengerModel)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while adding new messenger type")
 
@@ -68,16 +72,14 @@ func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
 // @Tags Messengers
 // @Produce json
 // @Param id path int true "Messenger ID"
-// @Success 200 {object} models.Messenger
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Success 200 {object} dto.MessengerResponse "Messenger details"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 404 {object} map[string]string "Messenger not found"
+// @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/messengers/{messenger_id} [get]
 func (h *MessengerHandler) GetMessenger(c *gin.Context) {
 	messengerID, err := strconv.ParseInt(c.Param("messenger_id"), 10, 64)
 	if err != nil {
-		//h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse messengerID")).Msg("Error while processing request with id parameter")
-		//c.JSON(http.StatusBadRequest, models.NewAPIError("Invalid messenger ID", http.StatusBadRequest))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -97,7 +99,9 @@ func (h *MessengerHandler) GetMessenger(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, messenger)
+	// Convert model to response DTO
+	response := mapper.MessengerModelToResponse(messenger)
+	c.JSON(http.StatusOK, response)
 }
 
 // @Summary Get messenger ID by name
@@ -105,10 +109,10 @@ func (h *MessengerHandler) GetMessenger(c *gin.Context) {
 // @Tags Messengers
 // @Produce json
 // @Param messenger_name path string true "Messenger name"
-// @Success 200 {object} models.Messenger
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Success 200 {object} map[string]int64 "Messenger ID"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 404 {object} map[string]string "Messenger not found"
+// @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/messengers/by-name/{messenger_name} [get]
 func (h *MessengerHandler) GetMessengerIDByName(c *gin.Context) {
 	messengerName := c.Param("messenger_name")
@@ -131,23 +135,23 @@ func (h *MessengerHandler) GetMessengerIDByName(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"id": messengerID})
 }
 
-// @Summary Сreate a new messenger-related user
-// @Description Сreates a new messenger-related user
+// @Summary Create a new messenger-related user
+// @Description Creates a new messenger-related user
 // @Tags Messengers
 // @Accept json
 // @Produce json
-// @Param messenger body models.MessengerRelatedUser true "MessengerRelatedUser to create"
-// @Success 201 {object} map[string]int64
-// @Failure 400 {object} map[string]string
-// @Failure 422 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Param messenger body dto.CreateMessengerRelatedUserRequest true "MessengerRelatedUser to create"
+// @Success 201 {object} map[string]int64 "Created messenger-related user ID"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 422 {object} map[string]string "Unprocessable entity"
+// @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/messengerRelatedUsers [post]
 func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
 	ctx := c.Request.Context()
 	log := logger.WithTraceContext(ctx, h.logger)
 
-	var messengerRelatedUser models.MessengerRelatedUser
-	if err := c.ShouldBindJSON(&messengerRelatedUser); err != nil {
+	var req dto.CreateMessengerRelatedUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Error().
 			Err(err).
 			Msg("invalid request payload for messenger-related user creation")
@@ -156,7 +160,10 @@ func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
 		return
 	}
 
-	messengerRelatedUserID, err := h.messengerService.CreateMessengerRelatedUser(c.Request.Context(), &messengerRelatedUser)
+	// Convert DTO to model for service
+	messengerRelatedUserModel := mapper.CreateMessengerRelatedUserRequestToModel(&req)
+
+	messengerRelatedUserID, err := h.messengerService.CreateMessengerRelatedUser(c.Request.Context(), messengerRelatedUserModel)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while creating a messenger-related user")
 
@@ -180,11 +187,11 @@ func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
 // @Param messenger_user_id query string true "Messenger User ID"
 // @Param user_id query int false "User ID"
 // @Param messenger_id query int false "Messenger ID"
-// @Success 200 {object} models.MessengerRelatedUser
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 422 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Success 200 {object} dto.MessengerRelatedUserResponse "Messenger-related user details"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 404 {object} map[string]string "Messenger-related user not found"
+// @Failure 422 {object} map[string]string "Unprocessable entity"
+// @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/messengerRelatedUsers [get]
 func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 	chatID := c.Query("chat_id")
@@ -227,7 +234,9 @@ func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, messengerRelatedUser)
+	// Convert model to response DTO
+	response := mapper.MessengerRelatedUserModelToResponse(messengerRelatedUser)
+	c.JSON(http.StatusOK, response)
 }
 
 // GetUserID retrieves a userID user by messengerUserID
@@ -236,10 +245,10 @@ func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 // @Tags Messengers
 // @Produce json
 // @Param messenger_user_id path string true "Messenger UserID"
-// @Success 200 {object} map[string]int64
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Success 200 {object} map[string]int64 "User ID"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 404 {object} map[string]string "User not found"
+// @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/messengerRelatedUsers/{messenger_user_id}/user [get]
 func (h *MessengerHandler) GetUserID(c *gin.Context) {
 	messengerUserID := c.Param("messenger_user_id")

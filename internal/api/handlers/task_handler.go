@@ -9,8 +9,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
+	"github.com/boskuv/goreminder/internal/api/dto"
+	"github.com/boskuv/goreminder/internal/api/dto/mapper"
 	errs "github.com/boskuv/goreminder/internal/errors"
-	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/service"
 	"github.com/boskuv/goreminder/pkg/logger"
 )
@@ -34,18 +35,18 @@ func NewTaskHandler(taskService *service.TaskService, logger zerolog.Logger) *Ta
 // @Tags Tasks
 // @Accept json
 // @Produce json
-// @Param task body models.Task true "Task to create"
-// @Success 201 {object} map[string]int64
-// @Failure 400 {object} map[string]string
-// @Failure 422 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Param task body dto.CreateTaskRequest true "Task to create"
+// @Success 201 {object} map[string]int64 "Created task ID"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 422 {object} map[string]string "Unprocessable entity"
+// @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/tasks [post]
 func (h *TaskHandler) CreateTask(c *gin.Context) {
 	ctx := c.Request.Context()
 	log := logger.WithTraceContext(ctx, h.logger)
 
-	var task models.Task // TODO: separate struct
-	if err := c.ShouldBindJSON(&task); err != nil {
+	var req dto.CreateTaskRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Info().
 			Err(err).
 			Msg("invalid request payload for task creation")
@@ -54,16 +55,19 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 	}
 
 	log.Info().
-		Int64("user.id", task.UserID).
-		Str("task.title", task.Title).
+		Int64("user.id", req.UserID).
+		Str("task.title", req.Title).
 		Msg("creating task")
 
-	taskID, err := h.taskService.CreateTask(ctx, &task)
+	// Convert DTO to model for service
+	taskModel := mapper.CreateTaskRequestToModel(&req)
+
+	taskID, err := h.taskService.CreateTask(ctx, taskModel)
 	if err != nil {
 		log.Error().
 			Stack().
 			Err(err).
-			Int64("user.id", task.UserID).
+			Int64("user.id", req.UserID).
 			Msg("error while adding new task")
 
 		if errors.Is(err, errs.ErrValidation) {
@@ -85,7 +89,7 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 
 	log.Info().
 		Int64("task.id", taskID).
-		Int64("user.id", task.UserID).
+		Int64("user.id", req.UserID).
 		Msg("task created successfully")
 
 	c.JSON(http.StatusCreated, gin.H{"id": taskID})
@@ -96,10 +100,10 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 // @Tags Tasks
 // @Produce json
 // @Param id path int true "Task ID"
-// @Success 200 {object} models.Task
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Success 200 {object} dto.TaskResponse "Task details"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 404 {object} map[string]string "Task not found"
+// @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/tasks/{id} [get]
 func (h *TaskHandler) GetTask(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -142,7 +146,9 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 		Int64("task.id", taskID).
 		Msg("task retrieved successfully")
 
-	c.JSON(http.StatusOK, task)
+	// Convert model to response DTO
+	response := mapper.TaskModelToResponse(task)
+	c.JSON(http.StatusOK, response)
 }
 
 // @Summary Get all user's tasks by userID
@@ -150,10 +156,10 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 // @Tags Tasks
 // @Produce json
 // @Param user_id path int true "User ID"
-// @Success 200 {object} []models.Task
-// @Failure 400 {object} map[string]string
-// @Failure 422 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Success 200 {array} dto.TaskResponse "List of tasks"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 422 {object} map[string]string "Unprocessable entity"
+// @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/users/{user_id}/tasks [get]
 func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -196,7 +202,9 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		Int("tasks.count", len(tasks)).
 		Msg("user tasks retrieved successfully")
 
-	c.JSON(http.StatusOK, tasks)
+	// Convert models to response DTOs
+	responses := mapper.TasksModelToResponse(tasks)
+	c.JSON(http.StatusOK, responses)
 }
 
 // @Summary Update a task
@@ -205,12 +213,12 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Task ID"
-// @Param task body models.TaskUpdateRequest true "Task update details"
-// @Success 200 {object} models.Task
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 422 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Param task body dto.UpdateTaskRequest true "Task update details"
+// @Success 200 {object} dto.TaskResponse "Updated task"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 404 {object} map[string]string "Task not found"
+// @Failure 422 {object} map[string]string "Unprocessable entity"
+// @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/tasks/{id} [put]
 func (h *TaskHandler) UpdateTask(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -226,8 +234,8 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 		return
 	}
 
-	var taskUpdateRequest models.TaskUpdateRequest
-	if err := c.ShouldBindJSON(&taskUpdateRequest); err != nil {
+	var req dto.UpdateTaskRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Info().
 			Err(err).
 			Int64("task.id", taskID).
@@ -240,7 +248,10 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 		Int64("task.id", taskID).
 		Msg("updating task")
 
-	updatedTask, err := h.taskService.UpdateTask(ctx, taskID, &taskUpdateRequest)
+	// Convert DTO to model update request
+	updateRequest := mapper.UpdateTaskRequestToModel(&req)
+
+	updatedTask, err := h.taskService.UpdateTask(ctx, taskID, updateRequest)
 	if err != nil {
 		log.Error().
 			Stack().
@@ -275,7 +286,9 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 		Int64("task.id", taskID).
 		Msg("task updated successfully")
 
-	c.JSON(http.StatusOK, updatedTask)
+	// Convert model to response DTO
+	response := mapper.TaskModelToResponse(updatedTask)
+	c.JSON(http.StatusOK, response)
 }
 
 // @Summary Soft delete a task
@@ -338,19 +351,19 @@ func (h *TaskHandler) DeleteTask(c *gin.Context) {
 // @Tags Tasks
 // @Accept json
 // @Produce json
-// @Param task body models.ScheduledTask true "Task to enqueue"
-// @Success 201 {object} models.Task
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 422 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Param task body dto.QueueTaskRequest true "Task to enqueue"
+// @Success 201 {object} map[string]int64 "Task ID"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 404 {object} map[string]string "Task not found"
+// @Failure 422 {object} map[string]string "Unprocessable entity"
+// @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/tasks/queue [post]
 func (h *TaskHandler) QueueTask(c *gin.Context) {
 	ctx := c.Request.Context()
 	log := logger.WithTraceContext(ctx, h.logger)
 
-	var scheduledTask models.ScheduledTask
-	if err := c.ShouldBindJSON(&scheduledTask); err != nil {
+	var req dto.QueueTaskRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Info().
 			Err(err).
 			Msg("invalid request payload for task queue")
@@ -359,16 +372,19 @@ func (h *TaskHandler) QueueTask(c *gin.Context) {
 	}
 
 	log.Info().
-		Int64("task.id", scheduledTask.TaskID).
-		Str("action", scheduledTask.Action).
+		Int64("task.id", req.TaskID).
+		Str("action", req.Action).
 		Msg("queuing task")
 
-	err := h.taskService.QueueTask(ctx, &scheduledTask)
+	// Convert DTO to model for service
+	scheduledModel := mapper.QueueTaskRequestToModel(&req)
+
+	err := h.taskService.QueueTask(ctx, scheduledModel)
 	if err != nil {
 		log.Error().
 			Stack().
 			Err(err).
-			Int64("task.id", scheduledTask.TaskID).
+			Int64("task.id", req.TaskID).
 			Msg("error while enqueuing task")
 
 		if errors.Is(err, errs.ErrNotFound) {
@@ -389,11 +405,11 @@ func (h *TaskHandler) QueueTask(c *gin.Context) {
 	}
 
 	log.Info().
-		Int64("task.id", scheduledTask.TaskID).
-		Str("action", scheduledTask.Action).
+		Int64("task.id", req.TaskID).
+		Str("action", req.Action).
 		Msg("task queued successfully")
 
-	c.JSON(http.StatusCreated, gin.H{"id": scheduledTask.TaskID})
+	c.JSON(http.StatusCreated, gin.H{"id": req.TaskID})
 }
 
 // @Summary Mark task as done
@@ -402,7 +418,7 @@ func (h *TaskHandler) QueueTask(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Task ID"
-// @Success 200 {object} models.Task "Task marked as done successfully"
+// @Success 200 {object} dto.TaskResponse "Task marked as done successfully"
 // @Failure 400 {object} map[string]string "Invalid task ID parameter"
 // @Failure 404 {object} map[string]string "Task not found"
 // @Failure 500 {object} map[string]string "Internal server error or transaction failure"
@@ -448,7 +464,9 @@ func (h *TaskHandler) MarkTaskAsDone(c *gin.Context) {
 		Int64("task.id", taskID).
 		Msg("task marked as done successfully")
 
-	c.JSON(http.StatusOK, task)
+	// Convert model to response DTO
+	response := mapper.TaskModelToResponse(task)
+	c.JSON(http.StatusOK, response)
 }
 
 // @Summary Get task history by task ID
@@ -456,10 +474,10 @@ func (h *TaskHandler) MarkTaskAsDone(c *gin.Context) {
 // @Tags Tasks
 // @Produce json
 // @Param id path int true "Task ID"
-// @Success 200 {object} []models.TaskHistory
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Success 200 {array} dto.TaskHistoryResponse "Task history entries"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 404 {object} map[string]string "Task not found"
+// @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/tasks/{id}/history [get]
 func (h *TaskHandler) GetTaskHistory(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -503,7 +521,9 @@ func (h *TaskHandler) GetTaskHistory(c *gin.Context) {
 		Int("history.count", len(histories)).
 		Msg("task history retrieved successfully")
 
-	c.JSON(http.StatusOK, histories)
+	// Convert models to response DTOs
+	responses := mapper.TaskHistoriesModelToResponse(histories)
+	c.JSON(http.StatusOK, responses)
 }
 
 // @Summary Get task history by user ID
@@ -513,10 +533,10 @@ func (h *TaskHandler) GetTaskHistory(c *gin.Context) {
 // @Param user_id path int true "User ID"
 // @Param limit query int false "Limit (default: 50)" default(50)
 // @Param offset query int false "Offset (default: 0)" default(0)
-// @Success 200 {object} []models.TaskHistory
-// @Failure 400 {object} map[string]string
-// @Failure 422 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Success 200 {array} dto.TaskHistoryResponse "Task history entries"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 422 {object} map[string]string "Unprocessable entity"
+// @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/users/{user_id}/tasks/history [get]
 func (h *TaskHandler) GetUserTaskHistory(c *gin.Context) {
 	ctx := c.Request.Context()
