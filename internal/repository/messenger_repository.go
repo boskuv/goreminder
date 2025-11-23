@@ -28,6 +28,8 @@ type MessengerRepository interface {
 	GetUserID(ctx context.Context, messengerUserID string) (int64, error)
 	GetMessengerRelatedUserByID(ctx context.Context, messengerUserID int) (*models.MessengerRelatedUser, error)
 	DeleteMessengerRelatedUserByUserID(ctx context.Context, userID int64) error
+	GetAllMessengers(ctx context.Context, page, pageSize int, orderBy string) ([]*models.Messenger, int, error)
+	GetAllMessengerRelatedUsers(ctx context.Context, page, pageSize int, orderBy string) ([]*models.MessengerRelatedUser, int, error)
 }
 
 type messengerRepository struct {
@@ -493,4 +495,170 @@ func (r *messengerRepository) DeleteMessengerRelatedUserByUserID(ctx context.Con
 		Msg("messenger-related user deleted successfully from database")
 	span.SetStatus(codes.Ok, "messenger-related user deleted successfully")
 	return nil
+}
+
+// GetAllMessengers retrieves all messengers with pagination and ordering
+func (r *messengerRepository) GetAllMessengers(ctx context.Context, page, pageSize int, orderBy string) ([]*models.Messenger, int, error) {
+	ctx, span := r.tracer.Start(ctx, "messenger_repository.GetAllMessengers",
+		trace.WithAttributes(
+			attribute.Int("page", page),
+			attribute.Int("page_size", pageSize),
+			attribute.String("order_by", orderBy),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int("page", page).
+		Int("page_size", pageSize).
+		Str("order_by", orderBy).
+		Msg("getting all messengers from database")
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 50
+	}
+	if orderBy == "" {
+		orderBy = "created_at DESC"
+	}
+
+	offset := (page - 1) * pageSize
+
+	// Get total count
+	countQuery, countArgs, err := r.sb.Select("COUNT(*)").
+		From("messengers").
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to build count query")
+	}
+
+	var totalCount int
+	err = r.db.GetContext(ctx, &totalCount, countQuery, countArgs...)
+	if err != nil {
+		log.Debug().Err(err).Msg("failed to get total count of messengers")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to get total count")
+	}
+
+	// Get paginated data
+	query, args, err := r.sb.Select("id", "name", "created_at").
+		From("messengers").
+		OrderBy(orderBy).
+		Limit(uint64(pageSize)).
+		Offset(uint64(offset)).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to build query")
+	}
+
+	var messengers []*models.Messenger
+	err = r.db.SelectContext(ctx, &messengers, query, args...)
+	if err != nil {
+		log.Debug().Err(err).Msg("failed to get messengers from database")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to get messengers")
+	}
+
+	log.Debug().
+		Int("messengers.count", len(messengers)).
+		Int("total_count", totalCount).
+		Msg("messengers retrieved successfully from database")
+	span.SetAttributes(
+		attribute.Int("messengers.count", len(messengers)),
+		attribute.Int("total_count", totalCount),
+	)
+	span.SetStatus(codes.Ok, "messengers retrieved successfully")
+	return messengers, totalCount, nil
+}
+
+// GetAllMessengerRelatedUsers retrieves all messenger-related users with pagination and ordering
+func (r *messengerRepository) GetAllMessengerRelatedUsers(ctx context.Context, page, pageSize int, orderBy string) ([]*models.MessengerRelatedUser, int, error) {
+	ctx, span := r.tracer.Start(ctx, "messenger_repository.GetAllMessengerRelatedUsers",
+		trace.WithAttributes(
+			attribute.Int("page", page),
+			attribute.Int("page_size", pageSize),
+			attribute.String("order_by", orderBy),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int("page", page).
+		Int("page_size", pageSize).
+		Str("order_by", orderBy).
+		Msg("getting all messenger-related users from database")
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 50
+	}
+	if orderBy == "" {
+		orderBy = "created_at DESC"
+	}
+
+	offset := (page - 1) * pageSize
+
+	// Get total count
+	countQuery, countArgs, err := r.sb.Select("COUNT(*)").
+		From("user_messengers").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to build count query")
+	}
+
+	var totalCount int
+	err = r.db.GetContext(ctx, &totalCount, countQuery, countArgs...)
+	if err != nil {
+		log.Debug().Err(err).Msg("failed to get total count of messenger-related users")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to get total count")
+	}
+
+	// Get paginated data
+	query, args, err := r.sb.Select("id", "user_id", "messenger_id", "messenger_user_id", "chat_id", "created_at", "updated_at").
+		From("user_messengers").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		OrderBy(orderBy).
+		Limit(uint64(pageSize)).
+		Offset(uint64(offset)).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to build query")
+	}
+
+	var messengerRelatedUsers []*models.MessengerRelatedUser
+	err = r.db.SelectContext(ctx, &messengerRelatedUsers, query, args...)
+	if err != nil {
+		log.Debug().Err(err).Msg("failed to get messenger-related users from database")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to get messenger-related users")
+	}
+
+	log.Debug().
+		Int("messenger_related_users.count", len(messengerRelatedUsers)).
+		Int("total_count", totalCount).
+		Msg("messenger-related users retrieved successfully from database")
+	span.SetAttributes(
+		attribute.Int("messenger_related_users.count", len(messengerRelatedUsers)),
+		attribute.Int("total_count", totalCount),
+	)
+	span.SetStatus(codes.Ok, "messenger-related users retrieved successfully")
+	return messengerRelatedUsers, totalCount, nil
 }

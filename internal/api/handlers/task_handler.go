@@ -602,3 +602,118 @@ func (h *TaskHandler) GetUserTaskHistory(c *gin.Context) {
 
 	c.JSON(http.StatusOK, histories)
 }
+
+// @Summary Get all tasks
+// @Description Retrieves all tasks with pagination, ordering, and filtering (by status, start_date, user_id)
+// @Tags Tasks
+// @Produce json
+// @Param page query int false "Page number (default: 1)" default(1)
+// @Param page_size query int false "Page size (default: 50)" default(50)
+// @Param order_by query string false "Order by field (default: created_at DESC)" default(created_at DESC)
+// @Param status query string false "Filter by status (pending, scheduled, done, rescheduled, postponed, deleted)"
+// @Param start_date query string false "Filter by start_date (RFC3339 format)"
+// @Param user_id query int false "Filter by user_id"
+// @Success 200 {object} dto.PaginatedTasksResponse "Paginated list of tasks"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /api/v1/tasks [get]
+func (h *TaskHandler) GetAllTasks(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
+	page, err := validation.ValidateInt64Query(c, "page", 1, 1)
+	if err != nil {
+		log.Info().Err(err).Msg("invalid page query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	pageSize, err := validation.ValidateInt64Query(c, "page_size", 50, 1)
+	if err != nil {
+		log.Info().Err(err).Msg("invalid page_size query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	orderBy, err := validation.ValidateOptionalStringQuery(c, "order_by")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid order_by query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	if orderBy == "" {
+		orderBy = "created_at DESC"
+	}
+
+	// Optional filters
+	status, err := validation.ValidateOptionalStringQuery(c, "status")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid status query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	var statusPtr *string
+	if status != "" {
+		statusPtr = &status
+	}
+
+	startDate, err := validation.ValidateOptionalTimeQuery(c, "start_date")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid start_date query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	userID, err := validation.ValidateOptionalInt64Query(c, "user_id", 1)
+	if err != nil {
+		log.Info().Err(err).Msg("invalid user_id query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	log.Info().
+		Int64("page", page).
+		Int64("page_size", pageSize).
+		Str("order_by", orderBy).
+		Msg("getting all tasks")
+
+	tasks, totalCount, err := h.taskService.GetAllTasks(ctx, int(page), int(pageSize), orderBy, statusPtr, startDate, userID)
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Msg("error while getting all tasks")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Calculate total pages
+	totalPages := (totalCount + int(pageSize) - 1) / int(pageSize)
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	// Convert models to response DTOs
+	responsesPtr := mapper.TasksModelToResponse(tasks)
+	responses := make([]dto.TaskResponse, len(responsesPtr))
+	for i, resp := range responsesPtr {
+		responses[i] = *resp
+	}
+
+	response := dto.PaginatedTasksResponse{
+		Data: responses,
+		Pagination: dto.PaginationResponse{
+			Page:       int(page),
+			PageSize:   int(pageSize),
+			TotalPages: totalPages,
+			TotalCount: totalCount,
+		},
+	}
+
+	log.Info().
+		Int("tasks.count", len(tasks)).
+		Int("total_count", totalCount).
+		Msg("tasks retrieved successfully")
+
+	c.JSON(http.StatusOK, response)
+}

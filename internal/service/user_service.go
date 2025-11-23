@@ -275,3 +275,42 @@ func (s *UserService) DeleteUser(ctx context.Context, userID int64) error {
 	span.SetStatus(codes.Ok, "user deleted successfully")
 	return nil
 }
+
+// GetAllUsers implements BL of retrieving all users with pagination and ordering
+func (s *UserService) GetAllUsers(ctx context.Context, page, pageSize int, orderBy string) ([]*models.User, int, error) {
+	ctx, span := s.tracer.Start(ctx, "user_service.GetAllUsers",
+		trace.WithAttributes(
+			attribute.Int("page", page),
+			attribute.Int("page_size", pageSize),
+			attribute.String("order_by", orderBy),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Int("page", page).
+		Int("page_size", pageSize).
+		Str("order_by", orderBy).
+		Msg("getting all users")
+
+	users, totalCount, err := s.userRepo.GetAllUsers(ctx, page, pageSize, orderBy)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Msg("failed to get all users")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.WithStack(err)
+	}
+
+	log.Debug().
+		Int("users.count", len(users)).
+		Int("total_count", totalCount).
+		Msg("users retrieved successfully")
+	span.SetAttributes(
+		attribute.Int("users.count", len(users)),
+		attribute.Int("total_count", totalCount),
+	)
+	span.SetStatus(codes.Ok, "users retrieved successfully")
+	return users, totalCount, nil
+}

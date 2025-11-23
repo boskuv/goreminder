@@ -277,3 +277,167 @@ func (h *MessengerHandler) GetUserID(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"user_id": userID})
 }
+
+// @Summary Get all messengers
+// @Description Retrieves all messengers with pagination and ordering
+// @Tags Messengers
+// @Produce json
+// @Param page query int false "Page number (default: 1)" default(1)
+// @Param page_size query int false "Page size (default: 50)" default(50)
+// @Param order_by query string false "Order by field (default: created_at DESC)" default(created_at DESC)
+// @Success 200 {object} dto.PaginatedMessengersResponse "Paginated list of messengers"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /api/v1/messengers [get]
+func (h *MessengerHandler) GetAllMessengers(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
+	page, err := validation.ValidateInt64Query(c, "page", 1, 1)
+	if err != nil {
+		log.Info().Err(err).Msg("invalid page query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	pageSize, err := validation.ValidateInt64Query(c, "page_size", 50, 1)
+	if err != nil {
+		log.Info().Err(err).Msg("invalid page_size query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	orderBy, err := validation.ValidateOptionalStringQuery(c, "order_by")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid order_by query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	if orderBy == "" {
+		orderBy = "created_at DESC"
+	}
+
+	log.Info().
+		Int64("page", page).
+		Int64("page_size", pageSize).
+		Str("order_by", orderBy).
+		Msg("getting all messengers")
+
+	messengers, totalCount, err := h.messengerService.GetAllMessengers(ctx, int(page), int(pageSize), orderBy)
+	if err != nil {
+		h.logger.Error().Stack().Err(err).Msg("error while getting all messengers")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Calculate total pages
+	totalPages := (totalCount + int(pageSize) - 1) / int(pageSize)
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	// Convert models to response DTOs
+	responses := make([]dto.MessengerResponse, len(messengers))
+	for i, messenger := range messengers {
+		responses[i] = *mapper.MessengerModelToResponse(messenger)
+	}
+
+	response := dto.PaginatedMessengersResponse{
+		Data: responses,
+		Pagination: dto.PaginationResponse{
+			Page:       int(page),
+			PageSize:   int(pageSize),
+			TotalPages: totalPages,
+			TotalCount: totalCount,
+		},
+	}
+
+	log.Info().
+		Int("messengers.count", len(messengers)).
+		Int("total_count", totalCount).
+		Msg("messengers retrieved successfully")
+
+	c.JSON(http.StatusOK, response)
+}
+
+// @Summary Get all messenger-related users
+// @Description Retrieves all messenger-related users with pagination and ordering
+// @Tags Messengers
+// @Produce json
+// @Param page query int false "Page number (default: 1)" default(1)
+// @Param page_size query int false "Page size (default: 50)" default(50)
+// @Param order_by query string false "Order by field (default: created_at DESC)" default(created_at DESC)
+// @Success 200 {object} dto.PaginatedMessengerRelatedUsersResponse "Paginated list of messenger-related users"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /api/v1/messengerRelatedUsers/all [get]
+func (h *MessengerHandler) GetAllMessengerRelatedUsers(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
+	page, err := validation.ValidateInt64Query(c, "page", 1, 1)
+	if err != nil {
+		log.Info().Err(err).Msg("invalid page query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	pageSize, err := validation.ValidateInt64Query(c, "page_size", 50, 1)
+	if err != nil {
+		log.Info().Err(err).Msg("invalid page_size query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	orderBy, err := validation.ValidateOptionalStringQuery(c, "order_by")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid order_by query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	if orderBy == "" {
+		orderBy = "created_at DESC"
+	}
+
+	log.Info().
+		Int64("page", page).
+		Int64("page_size", pageSize).
+		Str("order_by", orderBy).
+		Msg("getting all messenger-related users")
+
+	messengerRelatedUsers, totalCount, err := h.messengerService.GetAllMessengerRelatedUsers(ctx, int(page), int(pageSize), orderBy)
+	if err != nil {
+		h.logger.Error().Stack().Err(err).Msg("error while getting all messenger-related users")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Calculate total pages
+	totalPages := (totalCount + int(pageSize) - 1) / int(pageSize)
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	// Convert models to response DTOs
+	responses := make([]dto.MessengerRelatedUserResponse, len(messengerRelatedUsers))
+	for i, mru := range messengerRelatedUsers {
+		responses[i] = *mapper.MessengerRelatedUserModelToResponse(mru)
+	}
+
+	response := dto.PaginatedMessengerRelatedUsersResponse{
+		Data: responses,
+		Pagination: dto.PaginationResponse{
+			Page:       int(page),
+			PageSize:   int(pageSize),
+			TotalPages: totalPages,
+			TotalCount: totalCount,
+		},
+	}
+
+	log.Info().
+		Int("messenger_related_users.count", len(messengerRelatedUsers)).
+		Int("total_count", totalCount).
+		Msg("messenger-related users retrieved successfully")
+
+	c.JSON(http.StatusOK, response)
+}

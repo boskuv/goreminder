@@ -24,6 +24,7 @@ type UserRepository interface {
 	GetUserByID(ctx context.Context, id int64) (*models.User, error)
 	UpdateUser(ctx context.Context, user *models.User) error
 	DeleteUser(ctx context.Context, id int64) error
+	GetAllUsers(ctx context.Context, page, pageSize int, orderBy string) ([]*models.User, int, error)
 }
 
 type userRepository struct {
@@ -229,4 +230,88 @@ func (r *userRepository) DeleteUser(ctx context.Context, id int64) error {
 		Msg("user deleted successfully from database")
 	span.SetStatus(codes.Ok, "user deleted successfully")
 	return nil
+}
+
+// GetAllUsers retrieves all users with pagination and ordering
+func (r *userRepository) GetAllUsers(ctx context.Context, page, pageSize int, orderBy string) ([]*models.User, int, error) {
+	ctx, span := r.tracer.Start(ctx, "user_repository.GetAllUsers",
+		trace.WithAttributes(
+			attribute.Int("page", page),
+			attribute.Int("page_size", pageSize),
+			attribute.String("order_by", orderBy),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int("page", page).
+		Int("page_size", pageSize).
+		Str("order_by", orderBy).
+		Msg("getting all users from database")
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 50
+	}
+	if orderBy == "" {
+		orderBy = "created_at DESC"
+	}
+
+	offset := (page - 1) * pageSize
+
+	// Get total count
+	countQuery, countArgs, err := r.sb.Select("COUNT(*)").
+		From("users").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to build count query")
+	}
+
+	var totalCount int
+	err = r.db.GetContext(ctx, &totalCount, countQuery, countArgs...)
+	if err != nil {
+		log.Debug().Err(err).Msg("failed to get total count of users")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to get total count")
+	}
+
+	// Get paginated data
+	query, args, err := r.sb.Select("id", "name", "email", "password_hash", "created_at", "timezone", "language_code", "role").
+		From("users").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		OrderBy(orderBy).
+		Limit(uint64(pageSize)).
+		Offset(uint64(offset)).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to build query")
+	}
+
+	var users []*models.User
+	err = r.db.SelectContext(ctx, &users, query, args...)
+	if err != nil {
+		log.Debug().Err(err).Msg("failed to get users from database")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to get users")
+	}
+
+	log.Debug().
+		Int("users.count", len(users)).
+		Int("total_count", totalCount).
+		Msg("users retrieved successfully from database")
+	span.SetAttributes(
+		attribute.Int("users.count", len(users)),
+		attribute.Int("total_count", totalCount),
+	)
+	span.SetStatus(codes.Ok, "users retrieved successfully")
+	return users, totalCount, nil
 }

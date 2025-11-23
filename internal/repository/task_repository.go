@@ -29,6 +29,7 @@ type TaskRepository interface {
 	DeleteTask(ctx context.Context, id int64) error
 	GetTasksNeedingRescheduling(ctx context.Context) ([]*models.Task, error)
 	GetDB() *sqlx.DB
+	GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, startDate *time.Time, userID *int64) ([]*models.Task, int, error)
 }
 
 type taskRepository struct {
@@ -448,4 +449,114 @@ func (r *taskRepository) GetTasksNeedingRescheduling(ctx context.Context) ([]*mo
 	span.SetAttributes(attribute.Int("tasks.count", len(tasks)))
 	span.SetStatus(codes.Ok, "tasks needing rescheduling retrieved successfully")
 	return tasks, nil
+}
+
+// GetAllTasks retrieves all tasks with pagination, ordering, and filtering
+func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, startDate *time.Time, userID *int64) ([]*models.Task, int, error) {
+	ctx, span := r.tracer.Start(ctx, "task_repository.GetAllTasks",
+		trace.WithAttributes(
+			attribute.Int("page", page),
+			attribute.Int("page_size", pageSize),
+			attribute.String("order_by", orderBy),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int("page", page).
+		Int("page_size", pageSize).
+		Str("order_by", orderBy).
+		Msg("getting all tasks from database")
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 50
+	}
+	if orderBy == "" {
+		orderBy = "created_at DESC"
+	}
+
+	offset := (page - 1) * pageSize
+
+	// Build count query with filters
+	countBuilder := r.sb.Select("COUNT(*)").
+		From("tasks").
+		Where(squirrel.Eq{"deleted_at": nil})
+
+	if status != nil && *status != "" {
+		countBuilder = countBuilder.Where(squirrel.Eq{"status": *status})
+		span.SetAttributes(attribute.String("filter.status", *status))
+	}
+	if startDate != nil {
+		countBuilder = countBuilder.Where(squirrel.GtOrEq{"start_date": *startDate})
+		span.SetAttributes(attribute.String("filter.start_date", startDate.Format(time.RFC3339)))
+	}
+	if userID != nil {
+		countBuilder = countBuilder.Where(squirrel.Eq{"user_id": *userID})
+		span.SetAttributes(attribute.Int64("filter.user_id", *userID))
+	}
+
+	countQuery, countArgs, err := countBuilder.ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to build count query")
+	}
+
+	var totalCount int
+	err = r.db.GetContext(ctx, &totalCount, countQuery, countArgs...)
+	if err != nil {
+		log.Debug().Err(err).Msg("failed to get total count of tasks")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to get total count")
+	}
+
+	// Build data query with filters
+	dataBuilder := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "start_date", "finish_date", "cron_expression", "status", "created_at").
+		From("tasks").
+		Where(squirrel.Eq{"deleted_at": nil})
+
+	if status != nil && *status != "" {
+		dataBuilder = dataBuilder.Where(squirrel.Eq{"status": *status})
+	}
+	if startDate != nil {
+		dataBuilder = dataBuilder.Where(squirrel.GtOrEq{"start_date": *startDate})
+	}
+	if userID != nil {
+		dataBuilder = dataBuilder.Where(squirrel.Eq{"user_id": *userID})
+	}
+
+	query, args, err := dataBuilder.
+		OrderBy(orderBy).
+		Limit(uint64(pageSize)).
+		Offset(uint64(offset)).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to build query")
+	}
+
+	var tasks []*models.Task
+	err = r.db.SelectContext(ctx, &tasks, query, args...)
+	if err != nil {
+		log.Debug().Err(err).Msg("failed to get tasks from database")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to get tasks")
+	}
+
+	log.Debug().
+		Int("tasks.count", len(tasks)).
+		Int("total_count", totalCount).
+		Msg("tasks retrieved successfully from database")
+	span.SetAttributes(
+		attribute.Int("tasks.count", len(tasks)),
+		attribute.Int("total_count", totalCount),
+	)
+	span.SetStatus(codes.Ok, "tasks retrieved successfully")
+	return tasks, totalCount, nil
 }

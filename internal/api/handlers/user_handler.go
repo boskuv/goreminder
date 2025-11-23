@@ -196,3 +196,85 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 
 	c.Status(http.StatusNoContent)
 }
+
+// @Summary Get all users
+// @Description Retrieves all users with pagination and ordering
+// @Tags Users
+// @Produce json
+// @Param page query int false "Page number (default: 1)" default(1)
+// @Param page_size query int false "Page size (default: 50)" default(50)
+// @Param order_by query string false "Order by field (default: created_at DESC)" default(created_at DESC)
+// @Success 200 {object} dto.PaginatedUsersResponse "Paginated list of users"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /api/v1/users [get]
+func (h *UserHandler) GetAllUsers(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
+	page, err := validation.ValidateInt64Query(c, "page", 1, 1)
+	if err != nil {
+		log.Info().Err(err).Msg("invalid page query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	pageSize, err := validation.ValidateInt64Query(c, "page_size", 50, 1)
+	if err != nil {
+		log.Info().Err(err).Msg("invalid page_size query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	orderBy, err := validation.ValidateOptionalStringQuery(c, "order_by")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid order_by query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	if orderBy == "" {
+		orderBy = "created_at DESC"
+	}
+
+	log.Info().
+		Int64("page", page).
+		Int64("page_size", pageSize).
+		Str("order_by", orderBy).
+		Msg("getting all users")
+
+	users, totalCount, err := h.userService.GetAllUsers(ctx, int(page), int(pageSize), orderBy)
+	if err != nil {
+		h.logger.Error().Stack().Err(err).Msg("error while getting all users")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Calculate total pages
+	totalPages := (totalCount + int(pageSize) - 1) / int(pageSize)
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	// Convert models to response DTOs
+	responses := make([]dto.UserResponse, len(users))
+	for i, user := range users {
+		responses[i] = *mapper.UserModelToResponse(user)
+	}
+
+	response := dto.PaginatedUsersResponse{
+		Data: responses,
+		Pagination: dto.PaginationResponse{
+			Page:       int(page),
+			PageSize:   int(pageSize),
+			TotalPages: totalPages,
+			TotalCount: totalCount,
+		},
+	}
+
+	log.Info().
+		Int("users.count", len(users)).
+		Int("total_count", totalCount).
+		Msg("users retrieved successfully")
+
+	c.JSON(http.StatusOK, response)
+}

@@ -323,3 +323,81 @@ func (s *MessengerService) GetUserID(ctx context.Context, messengerUserID string
 	span.SetStatus(codes.Ok, "user ID retrieved successfully")
 	return userID, nil
 }
+
+// GetAllMessengers implements BL of retrieving all messengers with pagination and ordering
+func (s *MessengerService) GetAllMessengers(ctx context.Context, page, pageSize int, orderBy string) ([]*models.Messenger, int, error) {
+	ctx, span := s.tracer.Start(ctx, "messenger_service.GetAllMessengers",
+		trace.WithAttributes(
+			attribute.Int("page", page),
+			attribute.Int("page_size", pageSize),
+			attribute.String("order_by", orderBy),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Int("page", page).
+		Int("page_size", pageSize).
+		Str("order_by", orderBy).
+		Msg("getting all messengers")
+
+	messengers, totalCount, err := s.messengerRepo.GetAllMessengers(ctx, page, pageSize, orderBy)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Msg("failed to get all messengers")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.WithStack(err)
+	}
+
+	log.Debug().
+		Int("messengers.count", len(messengers)).
+		Int("total_count", totalCount).
+		Msg("messengers retrieved successfully")
+	span.SetAttributes(
+		attribute.Int("messengers.count", len(messengers)),
+		attribute.Int("total_count", totalCount),
+	)
+	span.SetStatus(codes.Ok, "messengers retrieved successfully")
+	return messengers, totalCount, nil
+}
+
+// GetAllMessengerRelatedUsers implements BL of retrieving all messenger-related users with pagination and ordering
+func (s *MessengerService) GetAllMessengerRelatedUsers(ctx context.Context, page, pageSize int, orderBy string) ([]*models.MessengerRelatedUser, int, error) {
+	ctx, span := s.tracer.Start(ctx, "messenger_service.GetAllMessengerRelatedUsers",
+		trace.WithAttributes(
+			attribute.Int("page", page),
+			attribute.Int("page_size", pageSize),
+			attribute.String("order_by", orderBy),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Int("page", page).
+		Int("page_size", pageSize).
+		Str("order_by", orderBy).
+		Msg("getting all messenger-related users")
+
+	messengerRelatedUsers, totalCount, err := s.messengerRepo.GetAllMessengerRelatedUsers(ctx, page, pageSize, orderBy)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Msg("failed to get all messenger-related users")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.WithStack(err)
+	}
+
+	log.Debug().
+		Int("messenger_related_users.count", len(messengerRelatedUsers)).
+		Int("total_count", totalCount).
+		Msg("messenger-related users retrieved successfully")
+	span.SetAttributes(
+		attribute.Int("messenger_related_users.count", len(messengerRelatedUsers)),
+		attribute.Int("total_count", totalCount),
+	)
+	span.SetStatus(codes.Ok, "messenger-related users retrieved successfully")
+	return messengerRelatedUsers, totalCount, nil
+}

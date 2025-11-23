@@ -1029,3 +1029,55 @@ func (s *TaskService) RescheduleTasks(ctx context.Context, tasks []*models.Task)
 	span.SetStatus(codes.Ok, "tasks rescheduling completed")
 	return nil
 }
+
+// GetAllTasks implements BL of retrieving all tasks with pagination, ordering, and filtering
+func (s *TaskService) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, startDate *time.Time, userID *int64) ([]*models.Task, int, error) {
+	ctx, span := s.tracer.Start(ctx, "task_service.GetAllTasks",
+		trace.WithAttributes(
+			attribute.Int("page", page),
+			attribute.Int("page_size", pageSize),
+			attribute.String("order_by", orderBy),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Debug().
+		Int("page", page).
+		Int("page_size", pageSize).
+		Str("order_by", orderBy).
+		Msg("getting all tasks")
+
+	if status != nil {
+		span.SetAttributes(attribute.String("filter.status", *status))
+		log = log.With().Str("filter.status", *status).Logger()
+	}
+	if startDate != nil {
+		span.SetAttributes(attribute.String("filter.start_date", startDate.Format(time.RFC3339)))
+		log = log.With().Time("filter.start_date", *startDate).Logger()
+	}
+	if userID != nil {
+		span.SetAttributes(attribute.Int64("filter.user_id", *userID))
+		log = log.With().Int64("filter.user_id", *userID).Logger()
+	}
+
+	tasks, totalCount, err := s.taskRepo.GetAllTasks(ctx, page, pageSize, orderBy, status, startDate, userID)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Msg("failed to get all tasks")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.WithStack(err)
+	}
+
+	log.Debug().
+		Int("tasks.count", len(tasks)).
+		Int("total_count", totalCount).
+		Msg("tasks retrieved successfully")
+	span.SetAttributes(
+		attribute.Int("tasks.count", len(tasks)),
+		attribute.Int("total_count", totalCount),
+	)
+	span.SetStatus(codes.Ok, "tasks retrieved successfully")
+	return tasks, totalCount, nil
+}

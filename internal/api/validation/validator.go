@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/gin-gonic/gin"
@@ -178,4 +179,28 @@ func HandleValidationError(c *gin.Context, err error) {
 	c.JSON(http.StatusBadRequest, gin.H{
 		"error": err.Error(),
 	})
+}
+
+// ValidateOptionalStringQuery validates an optional query parameter as string
+func ValidateOptionalStringQuery(c *gin.Context, paramName string) (string, error) {
+	paramValue := c.Query(paramName)
+	if paramValue != "" && !govalidator.IsPrintableASCII(paramValue) {
+		return "", fmt.Errorf("query parameter '%s' contains invalid characters", paramName)
+	}
+	return paramValue, nil
+}
+
+// ValidateOptionalTimeQuery validates an optional query parameter as time.Time
+func ValidateOptionalTimeQuery(c *gin.Context, paramName string) (*time.Time, error) {
+	paramValue := c.Query(paramName)
+	if paramValue == "" {
+		return nil, nil
+	}
+
+	parsedTime, err := time.Parse(time.RFC3339, paramValue)
+	if err != nil {
+		return nil, fmt.Errorf("query parameter '%s' must be a valid RFC3339 time format: %w", paramName, err)
+	}
+
+	return &parsedTime, nil
 }
