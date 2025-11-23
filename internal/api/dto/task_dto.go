@@ -10,8 +10,8 @@ type CreateTaskRequest struct {
 	MessengerRelatedUserID *int       `json:"messenger_related_user_id,omitempty" example:"123"`
 	StartDate              time.Time  `json:"start_date" example:"2024-01-15T10:00:00Z"`
 	FinishDate             *time.Time `json:"finish_date,omitempty" example:"2024-01-20T18:00:00Z"`
-	CronExpression         *string    `json:"cron_expression,omitempty" example:"0 9 * * *"`
-	Status                 string     `json:"status,omitempty" example:"pending" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
+	CronExpression         *string    `json:"cron_expression,omitempty" binding:"omitempty,cron" example:"0 9 * * *"`
+	Status                 string     `json:"status,omitempty" binding:"omitempty,task_status" example:"pending" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
 }
 
 // UpdateTaskRequest represents the request DTO for updating a task
@@ -19,10 +19,10 @@ type CreateTaskRequest struct {
 type UpdateTaskRequest struct {
 	Title          *string    `json:"title,omitempty" example:"Updated task title"`
 	Description    *string    `json:"description,omitempty" example:"Updated task description"`
-	Status         *string    `json:"status,omitempty" example:"done" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
+	Status         *string    `json:"status,omitempty" binding:"omitempty,task_status" example:"done" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
 	StartDate      *time.Time `json:"start_date,omitempty" example:"2024-01-15T10:00:00Z"`
 	FinishDate     *time.Time `json:"finish_date,omitempty" example:"2024-01-20T18:00:00Z"`
-	CronExpression *string    `json:"cron_expression,omitempty" example:"0 9 * * *"`
+	CronExpression *string    `json:"cron_expression,omitempty" binding:"omitempty,cron" example:"0 9 * * *"`
 }
 
 // TaskResponse represents the response DTO for a task

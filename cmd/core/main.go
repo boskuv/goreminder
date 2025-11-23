@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog"
 	swaggerFiles "github.com/swaggo/files" // Swagger embedded files
@@ -21,6 +22,7 @@ import (
 	_ "github.com/boskuv/goreminder/internal/api/handlers"
 	"github.com/boskuv/goreminder/internal/api/middleware"
 	"github.com/boskuv/goreminder/internal/api/routes"
+	"github.com/boskuv/goreminder/internal/api/validation"
 	"github.com/boskuv/goreminder/internal/repository"
 	"github.com/boskuv/goreminder/internal/service"
 	"github.com/boskuv/goreminder/pkg/args"
@@ -29,6 +31,7 @@ import (
 	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/observability"
 	"github.com/boskuv/goreminder/pkg/queue"
+	"github.com/go-playground/validator/v10"
 )
 
 func main() {
@@ -167,6 +170,13 @@ func main() {
 
 	// setup router
 	router := gin.Default()
+
+	// Register custom validators
+	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
+		if err := validation.RegisterCustomValidators(v); err != nil {
+			log.Warn().Err(err).Msg("failed to register custom validators")
+		}
+	}
 
 	// Register Swagger handler
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

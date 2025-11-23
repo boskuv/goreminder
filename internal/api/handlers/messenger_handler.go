@@ -3,7 +3,6 @@ package handlers
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/boskuv/goreminder/internal/api/dto"
 	"github.com/boskuv/goreminder/internal/api/dto/mapper"
+	"github.com/boskuv/goreminder/internal/api/validation"
 	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/service"
 	"github.com/boskuv/goreminder/pkg/logger"
@@ -78,9 +78,9 @@ func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/messengers/{messenger_id} [get]
 func (h *MessengerHandler) GetMessenger(c *gin.Context) {
-	messengerID, err := strconv.ParseInt(c.Param("messenger_id"), 10, 64)
+	messengerID, err := validation.ValidateInt64Param(c, "messenger_id")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		validation.HandleValidationError(c, err)
 		return
 	}
 
@@ -115,7 +115,11 @@ func (h *MessengerHandler) GetMessenger(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/messengers/by-name/{messenger_name} [get]
 func (h *MessengerHandler) GetMessengerIDByName(c *gin.Context) {
-	messengerName := c.Param("messenger_name")
+	messengerName, err := validation.ValidateStringParam(c, "messenger_name", true)
+	if err != nil {
+		validation.HandleValidationError(c, err)
+		return
+	}
 
 	messengerID, err := h.messengerService.GetMessengerIDByName(c.Request.Context(), messengerName)
 	if err != nil {
@@ -194,27 +198,28 @@ func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/messengerRelatedUsers [get]
 func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
-	chatID := c.Query("chat_id")
-	messengerUserID := c.Query("messenger_user_id")
-
-	var userID *int64
-	if userIDStr := c.Query("user_id"); userIDStr != "" {
-		userIDQuery, err := strconv.ParseInt(userIDStr, 10, 64)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id parameter"})
-			return
-		}
-		userID = &userIDQuery
+	chatID, err := validation.ValidateStringQuery(c, "chat_id", true)
+	if err != nil {
+		validation.HandleValidationError(c, err)
+		return
 	}
 
-	var messengerID *int64
-	if messengerIDStr := c.Query("messenger_id"); messengerIDStr != "" {
-		messengerIDQuery, err := strconv.ParseInt(messengerIDStr, 10, 64)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid messenger_id parameter"})
-			return
-		}
-		messengerID = &messengerIDQuery
+	messengerUserID, err := validation.ValidateStringQuery(c, "messenger_user_id", true)
+	if err != nil {
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	userID, err := validation.ValidateOptionalInt64Query(c, "user_id", 1)
+	if err != nil {
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	messengerID, err := validation.ValidateOptionalInt64Query(c, "messenger_id", 1)
+	if err != nil {
+		validation.HandleValidationError(c, err)
+		return
 	}
 
 	messengerRelatedUser, err := h.messengerService.GetMessengerRelatedUser(c.Request.Context(), chatID, messengerUserID, userID, messengerID)
@@ -251,7 +256,11 @@ func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/messengerRelatedUsers/{messenger_user_id}/user [get]
 func (h *MessengerHandler) GetUserID(c *gin.Context) {
-	messengerUserID := c.Param("messenger_user_id")
+	messengerUserID, err := validation.ValidateStringParam(c, "messenger_user_id", true)
+	if err != nil {
+		validation.HandleValidationError(c, err)
+		return
+	}
 
 	userID, err := h.messengerService.GetUserID(c.Request.Context(), messengerUserID)
 	if err != nil {

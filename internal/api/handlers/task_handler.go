@@ -3,7 +3,6 @@ package handlers
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/boskuv/goreminder/internal/api/dto"
 	"github.com/boskuv/goreminder/internal/api/dto/mapper"
+	"github.com/boskuv/goreminder/internal/api/validation"
 	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/service"
 	"github.com/boskuv/goreminder/pkg/logger"
@@ -50,7 +50,7 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 		log.Info().
 			Err(err).
 			Msg("invalid request payload for task creation")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		validation.HandleValidationError(c, err)
 		return
 	}
 
@@ -109,13 +109,13 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 	ctx := c.Request.Context()
 	log := logger.WithTraceContext(ctx, h.logger)
 
-	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	taskID, err := validation.ValidateInt64Param(c, "id")
 	if err != nil {
 		log.Info().
 			Err(err).
 			Str("task_id_param", c.Param("id")).
 			Msg("invalid task ID parameter")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		validation.HandleValidationError(c, err)
 		return
 	}
 
@@ -165,13 +165,13 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 	ctx := c.Request.Context()
 	log := logger.WithTraceContext(ctx, h.logger)
 
-	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	userID, err := validation.ValidateInt64Param(c, "user_id")
 	if err != nil {
 		log.Info().
 			Err(err).
 			Str("user_id_param", c.Param("user_id")).
 			Msg("invalid user ID parameter")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		validation.HandleValidationError(c, err)
 		return
 	}
 
@@ -224,13 +224,13 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 	ctx := c.Request.Context()
 	log := logger.WithTraceContext(ctx, h.logger)
 
-	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	taskID, err := validation.ValidateInt64Param(c, "id")
 	if err != nil {
 		log.Info().
 			Err(err).
 			Str("task_id_param", c.Param("id")).
 			Msg("invalid task ID parameter")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		validation.HandleValidationError(c, err)
 		return
 	}
 
@@ -240,7 +240,7 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 			Err(err).
 			Int64("task.id", taskID).
 			Msg("invalid request payload for task update")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		validation.HandleValidationError(c, err)
 		return
 	}
 
@@ -306,13 +306,13 @@ func (h *TaskHandler) DeleteTask(c *gin.Context) {
 	ctx := c.Request.Context()
 	log := logger.WithTraceContext(ctx, h.logger)
 
-	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	taskID, err := validation.ValidateInt64Param(c, "id")
 	if err != nil {
 		log.Info().
-			Err(errors.Wrap(err, "failed to parse taskID")).
+			Err(err).
 			Str("task_id_param", c.Param("id")).
 			Msg("invalid task ID parameter")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		validation.HandleValidationError(c, err)
 		return
 	}
 
@@ -367,7 +367,7 @@ func (h *TaskHandler) QueueTask(c *gin.Context) {
 		log.Info().
 			Err(err).
 			Msg("invalid request payload for task queue")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		validation.HandleValidationError(c, err)
 		return
 	}
 
@@ -427,13 +427,13 @@ func (h *TaskHandler) MarkTaskAsDone(c *gin.Context) {
 	ctx := c.Request.Context()
 	log := logger.WithTraceContext(ctx, h.logger)
 
-	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	taskID, err := validation.ValidateInt64Param(c, "id")
 	if err != nil {
 		log.Info().
 			Err(err).
 			Str("task_id_param", c.Param("id")).
 			Msg("invalid task ID parameter")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		validation.HandleValidationError(c, err)
 		return
 	}
 
@@ -483,13 +483,13 @@ func (h *TaskHandler) GetTaskHistory(c *gin.Context) {
 	ctx := c.Request.Context()
 	log := logger.WithTraceContext(ctx, h.logger)
 
-	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	taskID, err := validation.ValidateInt64Param(c, "id")
 	if err != nil {
 		log.Info().
 			Err(err).
 			Str("task_id_param", c.Param("id")).
 			Msg("invalid task ID parameter")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		validation.HandleValidationError(c, err)
 		return
 	}
 
@@ -542,38 +542,41 @@ func (h *TaskHandler) GetUserTaskHistory(c *gin.Context) {
 	ctx := c.Request.Context()
 	log := logger.WithTraceContext(ctx, h.logger)
 
-	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	userID, err := validation.ValidateInt64Param(c, "user_id")
 	if err != nil {
 		log.Info().
 			Err(err).
 			Str("user_id_param", c.Param("user_id")).
 			Msg("invalid user ID parameter")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		validation.HandleValidationError(c, err)
 		return
 	}
 
-	limit := 50
-	offset := 0
-
-	if limitStr := c.Query("limit"); limitStr != "" {
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
-			limit = parsedLimit
-		}
+	limit, err := validation.ValidateInt64Query(c, "limit", 50, 1)
+	if err != nil {
+		log.Info().
+			Err(err).
+			Msg("invalid limit query parameter")
+		validation.HandleValidationError(c, err)
+		return
 	}
 
-	if offsetStr := c.Query("offset"); offsetStr != "" {
-		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset >= 0 {
-			offset = parsedOffset
-		}
+	offset, err := validation.ValidateInt64Query(c, "offset", 0, 0)
+	if err != nil {
+		log.Info().
+			Err(err).
+			Msg("invalid offset query parameter")
+		validation.HandleValidationError(c, err)
+		return
 	}
 
 	log.Info().
 		Int64("user.id", userID).
-		Int("limit", limit).
-		Int("offset", offset).
+		Int64("limit", limit).
+		Int64("offset", offset).
 		Msg("getting user task history")
 
-	histories, err := h.taskService.GetUserTaskHistory(ctx, userID, limit, offset)
+	histories, err := h.taskService.GetUserTaskHistory(ctx, userID, int(limit), int(offset))
 	if err != nil {
 		log.Error().
 			Stack().

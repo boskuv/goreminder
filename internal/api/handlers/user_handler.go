@@ -3,7 +3,6 @@ package handlers
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/boskuv/goreminder/internal/api/dto"
 	"github.com/boskuv/goreminder/internal/api/dto/mapper"
+	"github.com/boskuv/goreminder/internal/api/validation"
 	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/service"
 	"github.com/boskuv/goreminder/pkg/logger"
@@ -79,9 +79,9 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/users/{user_id} [get]
 func (h *UserHandler) GetUser(c *gin.Context) {
-	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	userID, err := validation.ValidateInt64Param(c, "user_id")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		validation.HandleValidationError(c, err)
 		return
 	}
 
@@ -119,9 +119,9 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/users/{user_id} [put]
 func (h *UserHandler) UpdateUser(c *gin.Context) {
-	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	userID, err := validation.ValidateInt64Param(c, "user_id")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		validation.HandleValidationError(c, err)
 		return
 	}
 
@@ -172,10 +172,10 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/users/{user_id} [delete]
 func (h *UserHandler) DeleteUser(c *gin.Context) {
-	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	userID, err := validation.ValidateInt64Param(c, "user_id")
 	if err != nil {
-		h.logger.Error().Stack().Err(errors.Wrap(err, "failed to parse userID")).Msg("error while processing request with userID parameter")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.logger.Error().Stack().Err(err).Msg("error while processing request with userID parameter")
+		validation.HandleValidationError(c, err)
 		return
 	}
 
