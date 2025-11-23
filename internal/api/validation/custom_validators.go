@@ -3,6 +3,7 @@ package validation
 import (
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/robfig/cron/v3"
@@ -20,6 +21,11 @@ func RegisterCustomValidators(v *validator.Validate) error {
 	// Register task status validator
 	if err := v.RegisterValidation("task_status", validateTaskStatus); err != nil {
 		return fmt.Errorf("failed to register task_status validator: %w", err)
+	}
+
+	// Register future date validator
+	if err := v.RegisterValidation("future_date", validateFutureDate); err != nil {
+		return fmt.Errorf("failed to register future_date validator: %w", err)
 	}
 
 	return nil
@@ -95,4 +101,60 @@ func validateTaskStatus(fl validator.FieldLevel) bool {
 
 	// Validate status using models.ValidateTaskStatus
 	return models.ValidateTaskStatus(status) == nil
+}
+
+// validateFutureDate validates that a date is in the future (not in the past) in UTC
+// It accepts both time.Time and *time.Time (pointer) types
+// For zero values (not provided), validation is skipped (returns true)
+// This allows the "required" validator to handle required fields
+func validateFutureDate(fl validator.FieldLevel) bool {
+	var date time.Time
+
+	field := fl.Field()
+	kind := field.Kind()
+
+	switch kind {
+	case reflect.Struct:
+		// Check if it's time.Time
+		if timeType, ok := field.Interface().(time.Time); ok {
+			date = timeType
+			// For non-pointer fields, zero value means field was not provided in JSON
+			// Skip validation for zero values - let "required" validator handle required fields
+			if date.IsZero() {
+				return true
+			}
+		} else {
+			return false
+		}
+	case reflect.Ptr:
+		if field.IsNil() {
+			// nil pointer is valid for optional fields
+			return true
+		}
+		elem := field.Elem()
+		if elem.Kind() == reflect.Struct {
+			if timeType, ok := elem.Interface().(time.Time); ok {
+				date = timeType
+				// For pointer types, if not nil but zero, it's still considered provided
+				// So we validate it (zero date will fail validation)
+			} else {
+				return false
+			}
+		} else {
+			return false
+		}
+	default:
+		return false
+	}
+
+	// Check if date is zero (uninitialized time.Time)
+	// For pointer types that are not nil, zero means invalid
+	if date.IsZero() {
+		return false
+	}
+
+	// Check if date is in the future (after current UTC time)
+	// Allow current time or future time (>= now)
+	now := time.Now().UTC()
+	return date.After(now) || date.Equal(now)
 }

@@ -150,6 +150,8 @@ func GetValidationErrors(err error) string {
 				msg = fmt.Sprintf("field '%s' must be a valid cron expression", field)
 			case "task_status":
 				msg = fmt.Sprintf("field '%s' must be a valid task status (pending, scheduled, done, rescheduled, postponed, deleted)", field)
+			case "future_date":
+				msg = fmt.Sprintf("field '%s' must be a date in the future (UTC)", field)
 			case "email":
 				msg = fmt.Sprintf("field '%s' must be a valid email address", field)
 			case "min":
