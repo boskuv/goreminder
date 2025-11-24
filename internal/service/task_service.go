@@ -803,10 +803,11 @@ func (s *TaskService) GetUserTaskHistory(ctx context.Context, userID int64, limi
 // taskToMap converts a task to a map for history storage
 func (s *TaskService) taskToMap(task *models.Task) map[string]interface{} {
 	result := map[string]interface{}{
-		"id":          task.ID,
-		"title":       task.Title,
-		"description": task.Description,
-		"status":      task.Status,
+		"id":                    task.ID,
+		"title":                 task.Title,
+		"description":           task.Description,
+		"status":                task.Status,
+		"requires_confirmation": task.RequiresConfirmation,
 	}
 
 	if !task.StartDate.IsZero() {
