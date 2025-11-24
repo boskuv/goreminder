@@ -15,6 +15,7 @@ func CreateTaskRequestToModel(req *dto.CreateTaskRequest) *models.Task {
 		StartDate:              req.StartDate,
 		FinishDate:             req.FinishDate,
 		CronExpression:         req.CronExpression,
+		RequiresConfirmation:   req.RequiresConfirmation,
 		Status:                 req.Status,
 	}
 	if task.Status == "" {
@@ -26,12 +27,13 @@ func CreateTaskRequestToModel(req *dto.CreateTaskRequest) *models.Task {
 // UpdateTaskRequestToModel converts UpdateTaskRequest DTO to models.TaskUpdateRequest
 func UpdateTaskRequestToModel(req *dto.UpdateTaskRequest) *models.TaskUpdateRequest {
 	return &models.TaskUpdateRequest{
-		Title:          req.Title,
-		Description:    req.Description,
-		Status:         req.Status,
-		StartDate:      req.StartDate,
-		FinishDate:     req.FinishDate,
-		CronExpression: req.CronExpression,
+		Title:                req.Title,
+		Description:          req.Description,
+		Status:               req.Status,
+		StartDate:            req.StartDate,
+		FinishDate:           req.FinishDate,
+		CronExpression:       req.CronExpression,
+		RequiresConfirmation: req.RequiresConfirmation,
 	}
 }
 
@@ -46,6 +48,7 @@ func TaskModelToResponse(task *models.Task) *dto.TaskResponse {
 		StartDate:              task.StartDate,
 		FinishDate:             task.FinishDate,
 		CronExpression:         task.CronExpression,
+		RequiresConfirmation:   task.RequiresConfirmation,
 		Status:                 task.Status,
 		CreatedAt:              task.CreatedAt,
 	}

@@ -303,6 +303,10 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		oldTask.CronExpression = updateRequest.CronExpression
 	}
 
+	if updateRequest.RequiresConfirmation != nil {
+		oldTask.RequiresConfirmation = *updateRequest.RequiresConfirmation
+	}
+
 	err = s.taskRepo.UpdateTask(ctx, oldTask)
 	if err != nil {
 		log.Debug().
@@ -342,7 +346,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	// Record general update history (if other fields changed, not just status)
 	hasOtherChanges := updateRequest.Title != nil || updateRequest.Description != nil ||
 		updateRequest.StartDate != nil || updateRequest.FinishDate != nil ||
-		updateRequest.CronExpression != nil
+		updateRequest.CronExpression != nil || updateRequest.RequiresConfirmation != nil
 
 	if hasOtherChanges || (updateRequest.Status != nil && !statusChanged) {
 		_, updateHistorySpan := s.tracer.Start(ctx, "task_service.record_task_updated_history",
