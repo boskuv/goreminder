@@ -1587,6 +1587,10 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 123
                 },
+                "requires_confirmation": {
+                    "type": "boolean",
+                    "example": true
+                },
                 "start_date": {
                     "type": "string",
                     "example": "2024-01-15T10:00:00Z"
@@ -1870,6 +1874,10 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 123
                 },
+                "requires_confirmation": {
+                    "type": "boolean",
+                    "example": true
+                },
                 "start_date": {
                     "type": "string",
                     "example": "2024-01-15T10:00:00Z"
@@ -1910,6 +1918,10 @@ const docTemplate = `{
                 "finish_date": {
                     "type": "string",
                     "example": "2024-01-20T18:00:00Z"
+                },
+                "requires_confirmation": {
+                    "type": "boolean",
+                    "example": true
                 },
                 "start_date": {
                     "type": "string",
