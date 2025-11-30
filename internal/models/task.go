@@ -66,6 +66,7 @@ type Task struct {
 	Description            string     `db:"description" json:"description"`
 	UserID                 int64      `db:"user_id" json:"user_id"`
 	MessengerRelatedUserID *int       `db:"messenger_related_user_id" json:"messenger_related_user_id,omitempty"`
+	ParentID               *int64     `db:"parent_id" json:"parent_id,omitempty"`
 	StartDate              time.Time  `db:"start_date" json:"start_date,omitempty"`
 	FinishDate             *time.Time `db:"finish_date" json:"finish_date,omitempty"`
 	CronExpression         *string    `db:"cron_expression" json:"cron_expression,omitempty"`
