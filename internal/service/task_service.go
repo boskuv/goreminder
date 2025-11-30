@@ -10,6 +10,7 @@ import (
 	"github.com/boskuv/goreminder/internal/repository"
 	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/queue"
+	"github.com/gorhill/cronexpr"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -151,6 +152,50 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 		historySpan.SetStatus(codes.Ok, "history recorded")
 	}
 	historySpan.End()
+
+	// If task has cron_expression and requires_confirmation, create a child task
+	if task.CronExpression != nil && task.RequiresConfirmation {
+		log.Debug().
+			Int64("task.id", taskID).
+			Str("cron_expression", *task.CronExpression).
+			Msg("creating child task for cron task with confirmation")
+
+		// Calculate next execution time from cron expression
+		nextTime := cronexpr.MustParse(*task.CronExpression).Next(time.Now())
+
+		// Create child task
+		childTask := &models.Task{
+			Title:                  task.Title,
+			Description:            task.Description,
+			UserID:                 task.UserID,
+			MessengerRelatedUserID: task.MessengerRelatedUserID,
+			ParentID:               &taskID,
+			StartDate:              nextTime,
+			FinishDate:             task.FinishDate,
+			CronExpression:         nil, // Child tasks don't have cron expression
+			RequiresConfirmation:   task.RequiresConfirmation,
+			Status:                 string(models.TaskStatusPending),
+		}
+
+		childTaskID, err := s.taskRepo.CreateTask(ctx, childTask)
+		if err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Msg("failed to create child task")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			// Don't fail the main task creation, just log the error
+		} else {
+			log.Debug().
+				Int64("task.id", taskID).
+				Int64("child_task.id", childTaskID).
+				Time("child_start_date", nextTime).
+				Msg("child task created successfully")
+			span.SetAttributes(attribute.Int64("child_task.id", childTaskID))
+		}
+	}
 
 	log.Debug().
 		Int64("task.id", taskID).
@@ -391,7 +436,7 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		Int64("task.id", taskID).
 		Msg("deleting task")
 
-	task, err := s.taskRepo.GetTaskByID(ctx, taskID)
+	task, err := s.taskRepo.GetTaskByIDWithoutStatusFilter(ctx, taskID)
 	if err != nil {
 		log.Debug().
 			Err(err).
@@ -400,6 +445,27 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
+	}
+
+	// If task has cron_expression, it's a parent task - delete all child tasks first
+	if task.CronExpression != nil {
+		log.Debug().
+			Int64("task.id", taskID).
+			Msg("deleting child tasks for parent task")
+		err = s.taskRepo.DeleteChildTasks(ctx, taskID)
+		if err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Msg("failed to delete child tasks")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return errors.WithStack(err)
+		}
+		log.Debug().
+			Int64("task.id", taskID).
+			Msg("child tasks deleted successfully")
 	}
 
 	err = s.taskRepo.DeleteTask(ctx, taskID)
@@ -822,6 +888,9 @@ func (s *TaskService) taskToMap(task *models.Task) map[string]interface{} {
 	if task.MessengerRelatedUserID != nil {
 		result["messenger_related_user_id"] = *task.MessengerRelatedUserID
 	}
+	if task.ParentID != nil {
+		result["parent_id"] = *task.ParentID
+	}
 
 	return result
 }
@@ -850,12 +919,46 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 	// Add 24 hours to the start date
 	newStartDate := oldStartDate.Add(24 * time.Hour)
 
-	// Generate daily cron expression based on the task time (MM HH * * *)
-	// Format: minute hour * * * (runs daily at the same time)
-	cronExpression := fmt.Sprintf("%d %d * * *", newStartDate.Minute(), newStartDate.Hour())
+	// If task has parent_id, check if newStartDate conflicts with parent's next execution
+	if task.ParentID != nil {
+		parentTask, err := s.taskRepo.GetTaskByIDWithoutStatusFilter(ctx, *task.ParentID)
+		if err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", task.ID).
+				Int64("parent.id", *task.ParentID).
+				Msg("failed to get parent task for conflict check")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return errors.WithStack(err)
+		}
 
-	// Store old values for history
-	oldCronExpression := task.CronExpression
+		if parentTask.CronExpression != nil {
+			// Calculate parent's next execution time from newStartDate
+			parentNextTime := cronexpr.MustParse(*parentTask.CronExpression).Next(newStartDate)
+
+			// Check if newStartDate falls on the same day as parent's next execution
+			// If they are on the same day, don't reschedule (parent will handle it)
+			newStartDateDay := time.Date(newStartDate.Year(), newStartDate.Month(), newStartDate.Day(), 0, 0, 0, 0, newStartDate.Location())
+			parentNextTimeDay := time.Date(parentNextTime.Year(), parentNextTime.Month(), parentNextTime.Day(), 0, 0, 0, 0, parentNextTime.Location())
+
+			if newStartDateDay.Equal(parentNextTimeDay) {
+				log.Info().
+					Int64("task.id", task.ID).
+					Int64("parent.id", *task.ParentID).
+					Time("new_start_date", newStartDate).
+					Time("parent_next_time", parentNextTime).
+					Msg("rescheduling skipped: new start date conflicts with parent task execution")
+				span.SetAttributes(
+					attribute.String("skip_reason", "conflict_with_parent"),
+					attribute.String("parent_next_time", parentNextTime.Format(time.RFC3339)),
+				)
+				span.SetStatus(codes.Ok, "rescheduling skipped due to parent conflict")
+				return nil // Don't reschedule, parent will handle it
+			}
+		}
+	}
 
 	// Store old status
 	oldStatus := task.Status
@@ -893,13 +996,12 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 	// Prepare task data for queue with new start date and cron expression
 	taskQueueMessage := map[string]interface{}{
 		"task": "worker.schedule_task",
-		"args": []interface{}{"telegram", messengerRelatedUser.ChatID, task.ID, task.Title, task.Description, newStartDate, &cronExpression},
+		"args": []interface{}{"telegram", messengerRelatedUser.ChatID, task.ID, task.Title, task.Description, newStartDate, nil},
 	}
 
 	// Publish to queue - if this fails, we don't reschedule
 	log.Info().
 		Int64("task.id", task.ID).
-		Str("cron_expression", cronExpression).
 		Time("new_start_date", newStartDate).
 		Msg("publishing rescheduled task to queue")
 
@@ -910,7 +1012,6 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 			Err(err).
 			Int64("task.id", task.ID).
 			Time("new_start_date", newStartDate).
-			Str("cron_expression", cronExpression).
 			Msg("failed to publish rescheduled task to queue - task will not be rescheduled to prevent data loss")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -924,7 +1025,6 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 
 	// Update the task's start date and cron expression
 	task.StartDate = newStartDate
-	task.CronExpression = &cronExpression
 	task.Status = string(models.TaskStatusRescheduled)
 
 	// Update the task in the repository
@@ -950,18 +1050,14 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 			attribute.Int64("user.id", task.UserID),
 		))
 	oldValue := map[string]interface{}{"start_date": oldStartDate, "status": oldStatus}
-	if oldCronExpression != nil {
-		oldValue["cron_expression"] = *oldCronExpression
-	}
 	history := &models.TaskHistory{
 		TaskID:   task.ID,
 		UserID:   task.UserID,
 		Action:   string(models.TaskHistoryActionUpdated),
 		OldValue: oldValue,
 		NewValue: map[string]interface{}{
-			"start_date":      newStartDate,
-			"cron_expression": cronExpression,
-			"status":          task.Status,
+			"start_date": newStartDate,
+			"status":     task.Status,
 		},
 	}
 	if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
@@ -982,12 +1078,10 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 		Int64("user.id", task.UserID).
 		Time("old_start_date", oldStartDate).
 		Time("new_start_date", newStartDate).
-		Str("cron_expression", cronExpression).
 		Msg("task rescheduled successfully with daily cron expression")
 	span.SetAttributes(
 		attribute.String("old_start_date", oldStartDate.Format(time.RFC3339)),
 		attribute.String("new_start_date", newStartDate.Format(time.RFC3339)),
-		attribute.String("cron_expression", cronExpression),
 	)
 	span.SetStatus(codes.Ok, "task rescheduled successfully")
 	return nil
