@@ -24,6 +24,7 @@ type TaskRepository interface {
 	GetTaskByID(ctx context.Context, id int64) (*models.Task, error)
 	GetTaskByIDWithoutStatusFilter(ctx context.Context, id int64) (*models.Task, error)
 	GetTasksByUserID(ctx context.Context, userID int64) ([]*models.Task, error)
+	GetChildTasksByParentID(ctx context.Context, parentID int64) ([]*models.Task, error)
 	UpdateTask(ctx context.Context, task *models.Task) error
 	UpdateTaskWithTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) error
 	DeleteTask(ctx context.Context, id int64) error
@@ -253,6 +254,52 @@ func (r *taskRepository) GetTasksByUserID(ctx context.Context, userID int64) ([]
 		Msg("tasks retrieved successfully from database")
 	span.SetAttributes(attribute.Int("tasks.count", len(tasks)))
 	span.SetStatus(codes.Ok, "tasks retrieved successfully")
+	return tasks, nil
+}
+
+// GetChildTasksByParentID retrieves all child tasks by parent ID
+// Returns child task entities for passed parent ID and an error if occurred
+func (r *taskRepository) GetChildTasksByParentID(ctx context.Context, parentID int64) ([]*models.Task, error) {
+	ctx, span := r.tracer.Start(ctx, "task_repository.GetChildTasksByParentID",
+		trace.WithAttributes(
+			attribute.Int64("parent.id", parentID),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("parent.id", parentID).
+		Msg("getting child tasks by parent id from database")
+
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "status", "created_at", "requires_confirmation").
+		From("tasks").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"parent_id": parentID}).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to build query while getting child tasks by parent id")
+	}
+
+	var tasks []*models.Task
+	err = r.db.SelectContext(ctx, &tasks, query, args...)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("parent.id", parentID).
+			Msg("failed to get child tasks by parent id from database")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to get child tasks by parent id")
+	}
+
+	log.Debug().
+		Int64("parent.id", parentID).
+		Int("tasks.count", len(tasks)).
+		Msg("child tasks retrieved successfully from database")
+	span.SetAttributes(attribute.Int("tasks.count", len(tasks)))
+	span.SetStatus(codes.Ok, "child tasks retrieved successfully")
 	return tasks, nil
 }
 
