@@ -28,7 +28,9 @@ type TaskRepository interface {
 	UpdateTask(ctx context.Context, task *models.Task) error
 	UpdateTaskWithTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) error
 	DeleteTask(ctx context.Context, id int64) error
+	DeleteTaskWithTx(ctx context.Context, tx *sqlx.Tx, id int64) error
 	DeleteChildTasks(ctx context.Context, parentID int64) error
+	DeleteChildTasksWithTx(ctx context.Context, tx *sqlx.Tx, parentID int64) error
 	GetTasksNeedingRescheduling(ctx context.Context) ([]*models.Task, error)
 	GetDB() *sqlx.DB
 	GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64) ([]*models.Task, int, error)
@@ -459,6 +461,50 @@ func (r *taskRepository) DeleteTask(ctx context.Context, id int64) error {
 	return nil
 }
 
+// DeleteTaskWithTx soft deletes task by its id within a transaction
+// It sets the deleted_at timestamp to the current time
+func (r *taskRepository) DeleteTaskWithTx(ctx context.Context, tx *sqlx.Tx, id int64) error {
+	ctx, span := r.tracer.Start(ctx, "task_repository.DeleteTaskWithTx",
+		trace.WithAttributes(
+			attribute.Int64("task.id", id),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("task.id", id).
+		Msg("deleting task from database within transaction")
+
+	query, args, err := r.sb.Update("tasks").
+		Set("deleted_at", time.Now().UTC()).
+		Set("status", "deleted").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "failed to build query while soft deleting task")
+	}
+
+	_, err = tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("task.id", id).
+			Msg("failed to delete task from database within transaction")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "failed to execute soft delete query for task")
+	}
+
+	log.Debug().
+		Int64("task.id", id).
+		Msg("task deleted successfully from database within transaction")
+	span.SetStatus(codes.Ok, "task deleted successfully")
+	return nil
+}
+
 // DeleteChildTasks soft deletes all child tasks by parent id
 // It sets the deleted_at timestamp to the current time for all child tasks
 func (r *taskRepository) DeleteChildTasks(ctx context.Context, parentID int64) error {
@@ -501,6 +547,53 @@ func (r *taskRepository) DeleteChildTasks(ctx context.Context, parentID int64) e
 		Int64("parent.id", parentID).
 		Int64("rows_affected", rowsAffected).
 		Msg("child tasks deleted successfully from database")
+	span.SetAttributes(attribute.Int64("rows_affected", rowsAffected))
+	span.SetStatus(codes.Ok, "child tasks deleted successfully")
+	return nil
+}
+
+// DeleteChildTasksWithTx soft deletes all child tasks by parent id within a transaction
+// It sets the deleted_at timestamp to the current time for all child tasks
+func (r *taskRepository) DeleteChildTasksWithTx(ctx context.Context, tx *sqlx.Tx, parentID int64) error {
+	ctx, span := r.tracer.Start(ctx, "task_repository.DeleteChildTasksWithTx",
+		trace.WithAttributes(
+			attribute.Int64("parent.id", parentID),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("parent.id", parentID).
+		Msg("deleting child tasks from database within transaction")
+
+	query, args, err := r.sb.Update("tasks").
+		Set("deleted_at", time.Now().UTC()).
+		Set("status", "deleted").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"parent_id": parentID}).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "failed to build query while soft deleting child tasks")
+	}
+
+	result, err := tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("parent.id", parentID).
+			Msg("failed to delete child tasks from database within transaction")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "failed to execute soft delete query for child tasks")
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	log.Debug().
+		Int64("parent.id", parentID).
+		Int64("rows_affected", rowsAffected).
+		Msg("child tasks deleted successfully from database within transaction")
 	span.SetAttributes(attribute.Int64("rows_affected", rowsAffected))
 	span.SetStatus(codes.Ok, "child tasks deleted successfully")
 	return nil
