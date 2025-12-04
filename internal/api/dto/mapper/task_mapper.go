@@ -45,6 +45,7 @@ func TaskModelToResponse(task *models.Task) *dto.TaskResponse {
 		Description:            task.Description,
 		UserID:                 task.UserID,
 		MessengerRelatedUserID: task.MessengerRelatedUserID,
+		ParentID:               task.ParentID,
 		StartDate:              task.StartDate,
 		FinishDate:             task.FinishDate,
 		CronExpression:         task.CronExpression,

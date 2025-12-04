@@ -34,6 +34,7 @@ type TaskResponse struct {
 	Description            string     `json:"description" example:"Write comprehensive documentation for the API"`
 	UserID                 int64      `json:"user_id" example:"1"`
 	MessengerRelatedUserID *int       `json:"messenger_related_user_id,omitempty" example:"123"`
+	ParentID               *int64     `json:"parent_id,omitempty" example:"5"`
 	StartDate              time.Time  `json:"start_date" example:"2024-01-15T10:00:00Z"`
 	FinishDate             *time.Time `json:"finish_date,omitempty" example:"2024-01-20T18:00:00Z"`
 	CronExpression         *string    `json:"cron_expression,omitempty" example:"0 9 * * *"`

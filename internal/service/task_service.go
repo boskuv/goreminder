@@ -10,6 +10,8 @@ import (
 	"github.com/boskuv/goreminder/internal/repository"
 	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/queue"
+	"github.com/gorhill/cronexpr"
+	"github.com/jmoiron/sqlx"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -152,6 +154,50 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 	}
 	historySpan.End()
 
+	// If task has cron_expression and requires_confirmation, create a child task
+	if task.CronExpression != nil && task.RequiresConfirmation {
+		log.Debug().
+			Int64("task.id", taskID).
+			Str("cron_expression", *task.CronExpression).
+			Msg("creating child task for cron task with confirmation")
+
+		// Calculate next execution time from cron expression
+		nextTime := cronexpr.MustParse(*task.CronExpression).Next(time.Now())
+
+		// Create child task
+		childTask := &models.Task{
+			Title:                  task.Title,
+			Description:            task.Description,
+			UserID:                 task.UserID,
+			MessengerRelatedUserID: task.MessengerRelatedUserID,
+			ParentID:               &taskID,
+			StartDate:              nextTime,
+			FinishDate:             task.FinishDate,
+			CronExpression:         nil, // Child tasks don't have cron expression
+			RequiresConfirmation:   task.RequiresConfirmation,
+			Status:                 string(models.TaskStatusPending),
+		}
+
+		childTaskID, err := s.taskRepo.CreateTask(ctx, childTask)
+		if err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Msg("failed to create child task")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			// Don't fail the main task creation, just log the error
+		} else {
+			log.Debug().
+				Int64("task.id", taskID).
+				Int64("child_task.id", childTaskID).
+				Time("child_start_date", nextTime).
+				Msg("child task created successfully")
+			span.SetAttributes(attribute.Int64("child_task.id", childTaskID))
+		}
+	}
+
 	log.Debug().
 		Int64("task.id", taskID).
 		Int64("user.id", task.UserID).
@@ -269,6 +315,17 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	oldStatus := oldTask.Status
 	statusChanged := false
 
+	// Save old values for comparison (before updating)
+	oldTitle := oldTask.Title
+	oldDescription := oldTask.Description
+	oldStartDate := oldTask.StartDate
+	oldCronExpression := oldTask.CronExpression
+	oldRequiresConfirmation := oldTask.RequiresConfirmation
+	oldFinishDate := oldTask.FinishDate
+
+	// Check if this is a parent task (has cron_expression)
+	isParentTask := oldTask.CronExpression != nil
+
 	// update the task fields (partial update)
 	if updateRequest.Title != nil {
 		oldTask.Title = *updateRequest.Title
@@ -307,6 +364,52 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		oldTask.RequiresConfirmation = *updateRequest.RequiresConfirmation
 	}
 
+	// Get database connection for transaction if we need to update child tasks
+	var db *sqlx.DB
+	var tx *sqlx.Tx
+	var shouldRollback = false
+	if isParentTask {
+		db = s.taskRepo.GetDB()
+		if db == nil {
+			err := errors.New("database connection not available")
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Msg("failed to get database connection for transaction")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, errors.WithStack(err)
+		}
+
+		// Begin transaction for child tasks updates
+		tx, err = db.BeginTxx(ctx, nil)
+		if err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Msg("failed to begin transaction for child tasks update")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, errors.Wrap(err, "failed to begin transaction")
+		}
+
+		shouldRollback = true
+		defer func() {
+			if shouldRollback {
+				if rollbackErr := tx.Rollback(); rollbackErr != nil {
+					log.Error().
+						Stack().
+						Err(rollbackErr).
+						Int64("task.id", taskID).
+						Msg("failed to rollback transaction")
+				}
+			}
+		}()
+	}
+
+	// Update parent task first
 	err = s.taskRepo.UpdateTask(ctx, oldTask)
 	if err != nil {
 		log.Debug().
@@ -316,6 +419,213 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
+	}
+
+	// Handle child tasks synchronization if this is a parent task
+	if isParentTask {
+		// Get all child tasks
+		childTasks, err := s.taskRepo.GetChildTasksByParentID(ctx, taskID)
+		if err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Msg("failed to get child tasks for synchronization")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, errors.WithStack(err)
+		}
+
+		// Check if requires_confirmation was removed (true -> false)
+		requiresConfirmationRemoved := oldRequiresConfirmation && !oldTask.RequiresConfirmation
+
+		if requiresConfirmationRemoved {
+			// Delete all child tasks from queue and database
+			log.Debug().
+				Int64("task.id", taskID).
+				Msg("requires_confirmation removed, deleting all child tasks")
+
+			if len(childTasks) > 0 {
+				// Delete all child tasks in transaction
+				err = s.taskRepo.DeleteChildTasksWithTx(ctx, tx, taskID)
+				if err != nil {
+					log.Error().
+						Stack().
+						Err(err).
+						Int64("task.id", taskID).
+						Msg("failed to delete child tasks in transaction")
+					span.RecordError(err)
+					span.SetStatus(codes.Error, err.Error())
+					return nil, errors.WithStack(err)
+				}
+
+				// Queue delete_task message for each child task
+				for _, childTask := range childTasks {
+					childTaskQueueMessage := map[string]interface{}{
+						"task": "worker.delete_task",
+						"args": []interface{}{childTask.ID, "telegram"},
+					}
+
+					err = s.producer.Publish(ctx, childTaskQueueMessage)
+					if err != nil {
+						log.Error().
+							Stack().
+							Err(err).
+							Int64("task.id", taskID).
+							Int64("child_task.id", childTask.ID).
+							Msg("failed to queue delete_task message for child task, rolling back transaction")
+						span.RecordError(err)
+						span.SetStatus(codes.Error, err.Error())
+						return nil, errors.Wrap(err, "failed to queue delete_task message for child task")
+					}
+				}
+
+				log.Debug().
+					Int64("task.id", taskID).
+					Int("child_tasks.count", len(childTasks)).
+					Msg("child tasks deleted and queued successfully")
+			}
+		} else if len(childTasks) > 0 {
+			// Update child tasks based on parent changes
+			titleChanged := updateRequest.Title != nil && *updateRequest.Title != oldTitle
+			descriptionChanged := updateRequest.Description != nil && *updateRequest.Description != oldDescription
+			startDateChanged := updateRequest.StartDate != nil && !updateRequest.StartDate.Equal(oldStartDate)
+			cronExpressionChanged := (updateRequest.CronExpression != nil && oldCronExpression == nil) ||
+				(updateRequest.CronExpression == nil && oldCronExpression != nil) ||
+				(updateRequest.CronExpression != nil && oldCronExpression != nil && *updateRequest.CronExpression != *oldCronExpression)
+			finishDateChanged := (updateRequest.FinishDate != nil && oldFinishDate == nil) ||
+				(updateRequest.FinishDate == nil && oldFinishDate != nil) ||
+				(updateRequest.FinishDate != nil && oldFinishDate != nil && !updateRequest.FinishDate.Equal(*oldFinishDate))
+
+			// Update each child task
+			for _, childTask := range childTasks {
+				childUpdated := false
+
+				// Update title if changed
+				if titleChanged {
+					childTask.Title = oldTask.Title
+					childUpdated = true
+				}
+
+				// Update description if changed
+				if descriptionChanged {
+					childTask.Description = oldTask.Description
+					childUpdated = true
+				}
+
+				// Update finish_date if changed
+				if finishDateChanged {
+					childTask.FinishDate = oldTask.FinishDate
+					childUpdated = true
+				}
+
+				// Recalculate start_date if cron_expression or start_date changed
+				if cronExpressionChanged || startDateChanged {
+					if oldTask.CronExpression != nil {
+						// Calculate next execution time from new cron expression
+						// Use current time or the new start_date as base
+						baseTime := time.Now()
+						if startDateChanged {
+							baseTime = oldTask.StartDate
+						} else if !childTask.StartDate.IsZero() {
+							baseTime = childTask.StartDate
+						}
+						nextTime := cronexpr.MustParse(*oldTask.CronExpression).Next(baseTime)
+						childTask.StartDate = nextTime
+						childUpdated = true
+
+						log.Debug().
+							Int64("task.id", taskID).
+							Int64("child_task.id", childTask.ID).
+							Time("new_start_date", nextTime).
+							Msg("recalculated child task start_date from cron expression")
+					} else if startDateChanged {
+						// If cron expression was removed but start_date changed, update start_date
+						childTask.StartDate = oldTask.StartDate
+						childUpdated = true
+					}
+				}
+
+				// Update child task if any field changed
+				if childUpdated {
+					err = s.taskRepo.UpdateTaskWithTx(ctx, tx, childTask)
+					if err != nil {
+						log.Error().
+							Stack().
+							Err(err).
+							Int64("task.id", taskID).
+							Int64("child_task.id", childTask.ID).
+							Msg("failed to update child task in transaction")
+						span.RecordError(err)
+						span.SetStatus(codes.Error, err.Error())
+						return nil, errors.WithStack(err)
+					}
+				}
+			}
+
+			log.Debug().
+				Int64("task.id", taskID).
+				Int("child_tasks.count", len(childTasks)).
+				Msg("child tasks synchronized successfully")
+		}
+
+		// Commit transaction if we started one
+		if shouldRollback {
+			err = tx.Commit()
+			if err != nil {
+				log.Error().
+					Stack().
+					Err(err).
+					Int64("task.id", taskID).
+					Msg("failed to commit transaction")
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return nil, errors.Wrap(err, "failed to commit transaction")
+			}
+			shouldRollback = false
+		}
+	}
+
+	// If requires_confirmation was added (false -> true) and task has cron_expression, create child tasks
+	if !oldRequiresConfirmation && oldTask.RequiresConfirmation && oldTask.CronExpression != nil {
+		log.Debug().
+			Int64("task.id", taskID).
+			Str("cron_expression", *oldTask.CronExpression).
+			Msg("requires_confirmation added, creating child tasks")
+
+		// Calculate next execution time from cron expression
+		nextTime := cronexpr.MustParse(*oldTask.CronExpression).Next(time.Now())
+
+		// Create child task
+		childTask := &models.Task{
+			Title:                  oldTask.Title,
+			Description:            oldTask.Description,
+			UserID:                 oldTask.UserID,
+			MessengerRelatedUserID: oldTask.MessengerRelatedUserID,
+			ParentID:               &taskID,
+			StartDate:              nextTime,
+			FinishDate:             oldTask.FinishDate,
+			CronExpression:         nil, // Child tasks don't have cron expression
+			RequiresConfirmation:   oldTask.RequiresConfirmation,
+			Status:                 string(models.TaskStatusPending),
+		}
+
+		childTaskID, err := s.taskRepo.CreateTask(ctx, childTask)
+		if err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Msg("failed to create child task after adding requires_confirmation")
+			// Don't fail the operation, just log the error
+		} else {
+			log.Debug().
+				Int64("task.id", taskID).
+				Int64("child_task.id", childTaskID).
+				Time("child_start_date", nextTime).
+				Msg("child task created successfully after adding requires_confirmation")
+			span.SetAttributes(attribute.Int64("child_task.id", childTaskID))
+		}
 	}
 
 	// Record status change separately if status was changed
@@ -379,6 +689,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 }
 
 // DeleteTask implements BL of soft deleting task by id
+// If queueing fails, the database update is rolled back
 func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 	ctx, span := s.tracer.Start(ctx, "task_service.DeleteTask",
 		trace.WithAttributes(
@@ -391,7 +702,7 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		Int64("task.id", taskID).
 		Msg("deleting task")
 
-	task, err := s.taskRepo.GetTaskByID(ctx, taskID)
+	task, err := s.taskRepo.GetTaskByIDWithoutStatusFilter(ctx, taskID)
 	if err != nil {
 		log.Debug().
 			Err(err).
@@ -402,18 +713,161 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		return errors.WithStack(err)
 	}
 
-	err = s.taskRepo.DeleteTask(ctx, taskID)
-	if err != nil {
-		log.Debug().
+	// Get database connection for transaction
+	db := s.taskRepo.GetDB()
+	if db == nil {
+		err := errors.New("database connection not available")
+		log.Error().
+			Stack().
 			Err(err).
 			Int64("task.id", taskID).
-			Msg("failed to delete task")
+			Msg("failed to get database connection for transaction")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
 	}
 
-	// Record history
+	// Begin transaction
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to begin transaction")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "failed to begin transaction")
+	}
+
+	// Track if we need to rollback
+	var shouldRollback = true
+	defer func() {
+		if shouldRollback {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				log.Error().
+					Stack().
+					Err(rollbackErr).
+					Int64("task.id", taskID).
+					Msg("failed to rollback transaction")
+			}
+		}
+	}()
+
+	// If task has cron_expression, it's a parent task - delete all child tasks first
+	if task.CronExpression != nil {
+		log.Debug().
+			Int64("task.id", taskID).
+			Msg("deleting child tasks for parent task")
+
+		// Get all child tasks
+		childTasks, err := s.taskRepo.GetChildTasksByParentID(ctx, taskID)
+		if err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Msg("failed to get child tasks for deletion")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return errors.WithStack(err)
+		}
+
+		if len(childTasks) > 0 {
+			// Delete all child tasks in transaction
+			err = s.taskRepo.DeleteChildTasksWithTx(ctx, tx, taskID)
+			if err != nil {
+				log.Error().
+					Stack().
+					Err(err).
+					Int64("task.id", taskID).
+					Msg("failed to delete child tasks in transaction")
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return errors.WithStack(err)
+			}
+
+			// Queue delete_task message for each child task
+			// If this fails, we'll rollback the transaction
+			for _, childTask := range childTasks {
+				childTaskQueueMessage := map[string]interface{}{
+					"task": "worker.delete_task",
+					"args": []interface{}{childTask.ID, "telegram"},
+				}
+
+				err = s.producer.Publish(ctx, childTaskQueueMessage)
+				if err != nil {
+					log.Error().
+						Stack().
+						Err(err).
+						Int64("task.id", taskID).
+						Int64("child_task.id", childTask.ID).
+						Msg("failed to queue delete_task message for child task, rolling back transaction")
+					span.RecordError(err)
+					span.SetStatus(codes.Error, err.Error())
+					// Transaction will be rolled back in defer
+					return errors.Wrap(err, "failed to queue delete_task message for child task")
+				}
+			}
+
+			log.Debug().
+				Int64("task.id", taskID).
+				Int("child_tasks.count", len(childTasks)).
+				Msg("child tasks deleted and queued successfully")
+			span.SetAttributes(attribute.Int("child_tasks.count", len(childTasks)))
+		}
+	}
+
+	// Delete the task in transaction
+	err = s.taskRepo.DeleteTaskWithTx(ctx, tx, taskID)
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to delete task in transaction")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.WithStack(err)
+	}
+
+	// Queue delete_task message for the task
+	// If this fails, we'll rollback the transaction
+	taskQueueMessage := map[string]interface{}{
+		"task": "worker.delete_task",
+		"args": []interface{}{task.ID, "telegram"},
+	}
+
+	err = s.producer.Publish(ctx, taskQueueMessage)
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to queue delete_task message, rolling back transaction")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		// Transaction will be rolled back in defer
+		return errors.Wrap(err, "failed to queue delete_task message")
+	}
+
+	// Commit transaction
+	err = tx.Commit()
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to commit transaction")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "failed to commit transaction")
+	}
+
+	// Mark that we've committed, so defer won't rollback
+	shouldRollback = false
+
+	// Record history (outside transaction, as it's not critical if it fails)
 	_, deleteHistorySpan := s.tracer.Start(ctx, "task_service.record_task_deleted_history",
 		trace.WithAttributes(
 			attribute.Int64("task.id", taskID),
@@ -426,9 +880,13 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		OldValue: s.taskToMap(task),
 	}
 	if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to record task deleted history")
 		deleteHistorySpan.RecordError(err)
 		deleteHistorySpan.SetStatus(codes.Error, err.Error())
-		// TODO: log error
 	} else {
 		deleteHistorySpan.SetStatus(codes.Ok, "delete history recorded")
 	}
@@ -668,6 +1126,183 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 	// Mark that we've committed, so defer won't rollback
 	shouldRollback = false
 
+	// Handle child task logic after transaction commit
+	// If this is a child task and parent is not done, create next child task
+	if task.ParentID != nil {
+		parentTask, err := s.taskRepo.GetTaskByIDWithoutStatusFilter(ctx, *task.ParentID)
+		if err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Int64("parent.id", *task.ParentID).
+				Msg("failed to get parent task for child task logic")
+			// Don't fail the operation, just log the error
+		} else if parentTask.Status != string(models.TaskStatusDone) && parentTask.CronExpression != nil {
+			// Parent is not done and has cron expression - create next child task
+			log.Debug().
+				Int64("task.id", taskID).
+				Int64("parent.id", *task.ParentID).
+				Str("cron_expression", *parentTask.CronExpression).
+				Msg("creating next child task for parent with cron expression")
+
+			// Calculate next execution time from cron expression
+			nextTime := cronexpr.MustParse(*parentTask.CronExpression).Next(time.Now())
+
+			// Create child task
+			childTask := &models.Task{
+				Title:                  parentTask.Title,
+				Description:            parentTask.Description,
+				UserID:                 parentTask.UserID,
+				MessengerRelatedUserID: parentTask.MessengerRelatedUserID,
+				ParentID:               task.ParentID,
+				StartDate:              nextTime,
+				FinishDate:             parentTask.FinishDate,
+				CronExpression:         nil, // Child tasks don't have cron expression
+				RequiresConfirmation:   parentTask.RequiresConfirmation,
+				Status:                 string(models.TaskStatusPending),
+			}
+
+			childTaskID, err := s.taskRepo.CreateTask(ctx, childTask)
+			if err != nil {
+				log.Error().
+					Stack().
+					Err(err).
+					Int64("task.id", taskID).
+					Int64("parent.id", *task.ParentID).
+					Msg("failed to create next child task")
+				// Don't fail the operation, just log the error
+			} else {
+				log.Debug().
+					Int64("task.id", taskID).
+					Int64("parent.id", *task.ParentID).
+					Int64("child_task.id", childTaskID).
+					Time("child_start_date", nextTime).
+					Msg("next child task created successfully")
+				span.SetAttributes(attribute.Int64("child_task.id", childTaskID))
+			}
+		}
+	}
+
+	// If this is a parent task (has cron_expression), mark all child tasks as done
+	if task.CronExpression != nil {
+		log.Debug().
+			Int64("task.id", taskID).
+			Msg("parent task marked as done, marking all child tasks as done")
+
+		// Get all child tasks
+		childTasks, err := s.taskRepo.GetChildTasksByParentID(ctx, taskID)
+		if err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Msg("failed to get child tasks for parent")
+			// Don't fail the operation, just log the error
+		} else if len(childTasks) > 0 {
+			// Begin new transaction for child tasks
+			childDB := s.taskRepo.GetDB()
+			if childDB == nil {
+				log.Error().
+					Stack().
+					Int64("task.id", taskID).
+					Msg("database connection not available for child tasks transaction")
+				// Don't fail the operation, just log the error
+			} else {
+				tx, err := childDB.BeginTxx(ctx, nil)
+				if err != nil {
+					log.Error().
+						Stack().
+						Err(err).
+						Int64("task.id", taskID).
+						Msg("failed to begin transaction for child tasks")
+					// Don't fail the operation, just log the error
+				} else {
+					var childRollback = true
+					defer func() {
+						if childRollback {
+							if rollbackErr := tx.Rollback(); rollbackErr != nil {
+								log.Error().
+									Stack().
+									Err(rollbackErr).
+									Int64("task.id", taskID).
+									Msg("failed to rollback child tasks transaction")
+							}
+						}
+					}()
+
+					// Mark all child tasks as done and queue delete_task for each
+					now := time.Now().UTC()
+					for _, childTask := range childTasks {
+						if childTask.Status == string(models.TaskStatusDone) {
+							continue // Skip already done tasks
+						}
+
+						// Update child task status to done
+						childTask.Status = string(models.TaskStatusDone)
+						childTask.FinishDate = &now
+						err = s.taskRepo.UpdateTaskWithTx(ctx, tx, childTask)
+						if err != nil {
+							log.Error().
+								Stack().
+								Err(err).
+								Int64("task.id", taskID).
+								Int64("child_task.id", childTask.ID).
+								Msg("failed to update child task status to done")
+							// Rollback and break
+							childRollback = true
+							break
+						}
+
+						// Queue delete_task message for child task
+						childTaskQueueMessage := map[string]interface{}{
+							"task": "worker.delete_task",
+							"args": []interface{}{childTask.ID, "telegram"},
+						}
+
+						err = s.producer.Publish(ctx, childTaskQueueMessage)
+						if err != nil {
+							log.Error().
+								Stack().
+								Err(err).
+								Int64("task.id", taskID).
+								Int64("child_task.id", childTask.ID).
+								Msg("failed to queue delete_task message for child task, rolling back transaction")
+							// Rollback and break
+							childRollback = true
+							break
+						}
+					}
+
+					// Commit transaction if no errors
+					if childRollback {
+						// Transaction will be rolled back in defer
+						log.Error().
+							Int64("task.id", taskID).
+							Msg("failed to mark all child tasks as done, transaction rolled back")
+					} else {
+						err = tx.Commit()
+						if err != nil {
+							log.Error().
+								Stack().
+								Err(err).
+								Int64("task.id", taskID).
+								Msg("failed to commit child tasks transaction")
+							childRollback = true
+						} else {
+							childRollback = false
+							log.Debug().
+								Int64("task.id", taskID).
+								Int("child_tasks.count", len(childTasks)).
+								Msg("all child tasks marked as done successfully")
+							span.SetAttributes(attribute.Int("child_tasks.count", len(childTasks)))
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// Record history (outside transaction, as it's not critical if it fails)
 	_, historySpan := s.tracer.Start(ctx, "task_service.record_task_marked_done_history",
 		trace.WithAttributes(
@@ -822,6 +1457,9 @@ func (s *TaskService) taskToMap(task *models.Task) map[string]interface{} {
 	if task.MessengerRelatedUserID != nil {
 		result["messenger_related_user_id"] = *task.MessengerRelatedUserID
 	}
+	if task.ParentID != nil {
+		result["parent_id"] = *task.ParentID
+	}
 
 	return result
 }
@@ -850,12 +1488,46 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 	// Add 24 hours to the start date
 	newStartDate := oldStartDate.Add(24 * time.Hour)
 
-	// Generate daily cron expression based on the task time (MM HH * * *)
-	// Format: minute hour * * * (runs daily at the same time)
-	cronExpression := fmt.Sprintf("%d %d * * *", newStartDate.Minute(), newStartDate.Hour())
+	// If task has parent_id, check if newStartDate conflicts with parent's next execution
+	if task.ParentID != nil {
+		parentTask, err := s.taskRepo.GetTaskByIDWithoutStatusFilter(ctx, *task.ParentID)
+		if err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", task.ID).
+				Int64("parent.id", *task.ParentID).
+				Msg("failed to get parent task for conflict check")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return errors.WithStack(err)
+		}
 
-	// Store old values for history
-	oldCronExpression := task.CronExpression
+		if parentTask.CronExpression != nil {
+			// Calculate parent's next execution time from newStartDate
+			parentNextTime := cronexpr.MustParse(*parentTask.CronExpression).Next(newStartDate)
+
+			// Check if newStartDate falls on the same day as parent's next execution
+			// If they are on the same day, don't reschedule (parent will handle it)
+			newStartDateDay := time.Date(newStartDate.Year(), newStartDate.Month(), newStartDate.Day(), 0, 0, 0, 0, newStartDate.Location())
+			parentNextTimeDay := time.Date(parentNextTime.Year(), parentNextTime.Month(), parentNextTime.Day(), 0, 0, 0, 0, parentNextTime.Location())
+
+			if newStartDateDay.Equal(parentNextTimeDay) {
+				log.Info().
+					Int64("task.id", task.ID).
+					Int64("parent.id", *task.ParentID).
+					Time("new_start_date", newStartDate).
+					Time("parent_next_time", parentNextTime).
+					Msg("rescheduling skipped: new start date conflicts with parent task execution")
+				span.SetAttributes(
+					attribute.String("skip_reason", "conflict_with_parent"),
+					attribute.String("parent_next_time", parentNextTime.Format(time.RFC3339)),
+				)
+				span.SetStatus(codes.Ok, "rescheduling skipped due to parent conflict")
+				return nil // Don't reschedule, parent will handle it
+			}
+		}
+	}
 
 	// Store old status
 	oldStatus := task.Status
@@ -893,13 +1565,12 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 	// Prepare task data for queue with new start date and cron expression
 	taskQueueMessage := map[string]interface{}{
 		"task": "worker.schedule_task",
-		"args": []interface{}{"telegram", messengerRelatedUser.ChatID, task.ID, task.Title, task.Description, newStartDate, &cronExpression},
+		"args": []interface{}{"telegram", messengerRelatedUser.ChatID, task.ID, task.Title, task.Description, newStartDate, nil},
 	}
 
 	// Publish to queue - if this fails, we don't reschedule
 	log.Info().
 		Int64("task.id", task.ID).
-		Str("cron_expression", cronExpression).
 		Time("new_start_date", newStartDate).
 		Msg("publishing rescheduled task to queue")
 
@@ -910,7 +1581,6 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 			Err(err).
 			Int64("task.id", task.ID).
 			Time("new_start_date", newStartDate).
-			Str("cron_expression", cronExpression).
 			Msg("failed to publish rescheduled task to queue - task will not be rescheduled to prevent data loss")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -924,7 +1594,6 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 
 	// Update the task's start date and cron expression
 	task.StartDate = newStartDate
-	task.CronExpression = &cronExpression
 	task.Status = string(models.TaskStatusRescheduled)
 
 	// Update the task in the repository
@@ -950,18 +1619,14 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 			attribute.Int64("user.id", task.UserID),
 		))
 	oldValue := map[string]interface{}{"start_date": oldStartDate, "status": oldStatus}
-	if oldCronExpression != nil {
-		oldValue["cron_expression"] = *oldCronExpression
-	}
 	history := &models.TaskHistory{
 		TaskID:   task.ID,
 		UserID:   task.UserID,
 		Action:   string(models.TaskHistoryActionUpdated),
 		OldValue: oldValue,
 		NewValue: map[string]interface{}{
-			"start_date":      newStartDate,
-			"cron_expression": cronExpression,
-			"status":          task.Status,
+			"start_date": newStartDate,
+			"status":     task.Status,
 		},
 	}
 	if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
@@ -982,12 +1647,10 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 		Int64("user.id", task.UserID).
 		Time("old_start_date", oldStartDate).
 		Time("new_start_date", newStartDate).
-		Str("cron_expression", cronExpression).
 		Msg("task rescheduled successfully with daily cron expression")
 	span.SetAttributes(
 		attribute.String("old_start_date", oldStartDate.Format(time.RFC3339)),
 		attribute.String("new_start_date", newStartDate.Format(time.RFC3339)),
-		attribute.String("cron_expression", cronExpression),
 	)
 	span.SetStatus(codes.Ok, "task rescheduled successfully")
 	return nil
