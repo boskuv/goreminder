@@ -424,6 +424,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 }
 
 // DeleteTask implements BL of soft deleting task by id
+// If queueing fails, the database update is rolled back
 func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 	ctx, span := s.tracer.Start(ctx, "task_service.DeleteTask",
 		trace.WithAttributes(
@@ -447,39 +448,161 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		return errors.WithStack(err)
 	}
 
-	// If task has cron_expression, it's a parent task - delete all child tasks first
-	if task.CronExpression != nil {
-		log.Debug().
-			Int64("task.id", taskID).
-			Msg("deleting child tasks for parent task")
-		err = s.taskRepo.DeleteChildTasks(ctx, taskID)
-		if err != nil {
-			log.Error().
-				Stack().
-				Err(err).
-				Int64("task.id", taskID).
-				Msg("failed to delete child tasks")
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return errors.WithStack(err)
-		}
-		log.Debug().
-			Int64("task.id", taskID).
-			Msg("child tasks deleted successfully")
-	}
-
-	err = s.taskRepo.DeleteTask(ctx, taskID)
-	if err != nil {
-		log.Debug().
+	// Get database connection for transaction
+	db := s.taskRepo.GetDB()
+	if db == nil {
+		err := errors.New("database connection not available")
+		log.Error().
+			Stack().
 			Err(err).
 			Int64("task.id", taskID).
-			Msg("failed to delete task")
+			Msg("failed to get database connection for transaction")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
 	}
 
-	// Record history
+	// Begin transaction
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to begin transaction")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "failed to begin transaction")
+	}
+
+	// Track if we need to rollback
+	var shouldRollback = true
+	defer func() {
+		if shouldRollback {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				log.Error().
+					Stack().
+					Err(rollbackErr).
+					Int64("task.id", taskID).
+					Msg("failed to rollback transaction")
+			}
+		}
+	}()
+
+	// If task has cron_expression, it's a parent task - delete all child tasks first
+	if task.CronExpression != nil {
+		log.Debug().
+			Int64("task.id", taskID).
+			Msg("deleting child tasks for parent task")
+
+		// Get all child tasks
+		childTasks, err := s.taskRepo.GetChildTasksByParentID(ctx, taskID)
+		if err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Msg("failed to get child tasks for deletion")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return errors.WithStack(err)
+		}
+
+		if len(childTasks) > 0 {
+			// Delete all child tasks in transaction
+			err = s.taskRepo.DeleteChildTasksWithTx(ctx, tx, taskID)
+			if err != nil {
+				log.Error().
+					Stack().
+					Err(err).
+					Int64("task.id", taskID).
+					Msg("failed to delete child tasks in transaction")
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return errors.WithStack(err)
+			}
+
+			// Queue delete_task message for each child task
+			// If this fails, we'll rollback the transaction
+			for _, childTask := range childTasks {
+				childTaskQueueMessage := map[string]interface{}{
+					"task": "worker.delete_task",
+					"args": []interface{}{childTask.ID, "telegram"},
+				}
+
+				err = s.producer.Publish(ctx, childTaskQueueMessage)
+				if err != nil {
+					log.Error().
+						Stack().
+						Err(err).
+						Int64("task.id", taskID).
+						Int64("child_task.id", childTask.ID).
+						Msg("failed to queue delete_task message for child task, rolling back transaction")
+					span.RecordError(err)
+					span.SetStatus(codes.Error, err.Error())
+					// Transaction will be rolled back in defer
+					return errors.Wrap(err, "failed to queue delete_task message for child task")
+				}
+			}
+
+			log.Debug().
+				Int64("task.id", taskID).
+				Int("child_tasks.count", len(childTasks)).
+				Msg("child tasks deleted and queued successfully")
+			span.SetAttributes(attribute.Int("child_tasks.count", len(childTasks)))
+		}
+	}
+
+	// Delete the task in transaction
+	err = s.taskRepo.DeleteTaskWithTx(ctx, tx, taskID)
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to delete task in transaction")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.WithStack(err)
+	}
+
+	// Queue delete_task message for the task
+	// If this fails, we'll rollback the transaction
+	taskQueueMessage := map[string]interface{}{
+		"task": "worker.delete_task",
+		"args": []interface{}{task.ID, "telegram"},
+	}
+
+	err = s.producer.Publish(ctx, taskQueueMessage)
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to queue delete_task message, rolling back transaction")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		// Transaction will be rolled back in defer
+		return errors.Wrap(err, "failed to queue delete_task message")
+	}
+
+	// Commit transaction
+	err = tx.Commit()
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to commit transaction")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "failed to commit transaction")
+	}
+
+	// Mark that we've committed, so defer won't rollback
+	shouldRollback = false
+
+	// Record history (outside transaction, as it's not critical if it fails)
 	_, deleteHistorySpan := s.tracer.Start(ctx, "task_service.record_task_deleted_history",
 		trace.WithAttributes(
 			attribute.Int64("task.id", taskID),
@@ -492,9 +615,13 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		OldValue: s.taskToMap(task),
 	}
 	if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to record task deleted history")
 		deleteHistorySpan.RecordError(err)
 		deleteHistorySpan.SetStatus(codes.Error, err.Error())
-		// TODO: log error
 	} else {
 		deleteHistorySpan.SetStatus(codes.Ok, "delete history recorded")
 	}
