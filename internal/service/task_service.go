@@ -734,6 +734,183 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 	// Mark that we've committed, so defer won't rollback
 	shouldRollback = false
 
+	// Handle child task logic after transaction commit
+	// If this is a child task and parent is not done, create next child task
+	if task.ParentID != nil {
+		parentTask, err := s.taskRepo.GetTaskByIDWithoutStatusFilter(ctx, *task.ParentID)
+		if err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Int64("parent.id", *task.ParentID).
+				Msg("failed to get parent task for child task logic")
+			// Don't fail the operation, just log the error
+		} else if parentTask.Status != string(models.TaskStatusDone) && parentTask.CronExpression != nil {
+			// Parent is not done and has cron expression - create next child task
+			log.Debug().
+				Int64("task.id", taskID).
+				Int64("parent.id", *task.ParentID).
+				Str("cron_expression", *parentTask.CronExpression).
+				Msg("creating next child task for parent with cron expression")
+
+			// Calculate next execution time from cron expression
+			nextTime := cronexpr.MustParse(*parentTask.CronExpression).Next(time.Now())
+
+			// Create child task
+			childTask := &models.Task{
+				Title:                  parentTask.Title,
+				Description:            parentTask.Description,
+				UserID:                 parentTask.UserID,
+				MessengerRelatedUserID: parentTask.MessengerRelatedUserID,
+				ParentID:               task.ParentID,
+				StartDate:              nextTime,
+				FinishDate:             parentTask.FinishDate,
+				CronExpression:         nil, // Child tasks don't have cron expression
+				RequiresConfirmation:   parentTask.RequiresConfirmation,
+				Status:                 string(models.TaskStatusPending),
+			}
+
+			childTaskID, err := s.taskRepo.CreateTask(ctx, childTask)
+			if err != nil {
+				log.Error().
+					Stack().
+					Err(err).
+					Int64("task.id", taskID).
+					Int64("parent.id", *task.ParentID).
+					Msg("failed to create next child task")
+				// Don't fail the operation, just log the error
+			} else {
+				log.Debug().
+					Int64("task.id", taskID).
+					Int64("parent.id", *task.ParentID).
+					Int64("child_task.id", childTaskID).
+					Time("child_start_date", nextTime).
+					Msg("next child task created successfully")
+				span.SetAttributes(attribute.Int64("child_task.id", childTaskID))
+			}
+		}
+	}
+
+	// If this is a parent task (has cron_expression), mark all child tasks as done
+	if task.CronExpression != nil {
+		log.Debug().
+			Int64("task.id", taskID).
+			Msg("parent task marked as done, marking all child tasks as done")
+
+		// Get all child tasks
+		childTasks, err := s.taskRepo.GetChildTasksByParentID(ctx, taskID)
+		if err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Msg("failed to get child tasks for parent")
+			// Don't fail the operation, just log the error
+		} else if len(childTasks) > 0 {
+			// Begin new transaction for child tasks
+			childDB := s.taskRepo.GetDB()
+			if childDB == nil {
+				log.Error().
+					Stack().
+					Int64("task.id", taskID).
+					Msg("database connection not available for child tasks transaction")
+				// Don't fail the operation, just log the error
+			} else {
+				tx, err := childDB.BeginTxx(ctx, nil)
+				if err != nil {
+					log.Error().
+						Stack().
+						Err(err).
+						Int64("task.id", taskID).
+						Msg("failed to begin transaction for child tasks")
+					// Don't fail the operation, just log the error
+				} else {
+					var childRollback = true
+					defer func() {
+						if childRollback {
+							if rollbackErr := tx.Rollback(); rollbackErr != nil {
+								log.Error().
+									Stack().
+									Err(rollbackErr).
+									Int64("task.id", taskID).
+									Msg("failed to rollback child tasks transaction")
+							}
+						}
+					}()
+
+					// Mark all child tasks as done and queue delete_task for each
+					now := time.Now().UTC()
+					for _, childTask := range childTasks {
+						if childTask.Status == string(models.TaskStatusDone) {
+							continue // Skip already done tasks
+						}
+
+						// Update child task status to done
+						childTask.Status = string(models.TaskStatusDone)
+						childTask.FinishDate = &now
+						err = s.taskRepo.UpdateTaskWithTx(ctx, tx, childTask)
+						if err != nil {
+							log.Error().
+								Stack().
+								Err(err).
+								Int64("task.id", taskID).
+								Int64("child_task.id", childTask.ID).
+								Msg("failed to update child task status to done")
+							// Rollback and break
+							childRollback = true
+							break
+						}
+
+						// Queue delete_task message for child task
+						childTaskQueueMessage := map[string]interface{}{
+							"task": "worker.delete_task",
+							"args": []interface{}{childTask.ID, "telegram"},
+						}
+
+						err = s.producer.Publish(ctx, childTaskQueueMessage)
+						if err != nil {
+							log.Error().
+								Stack().
+								Err(err).
+								Int64("task.id", taskID).
+								Int64("child_task.id", childTask.ID).
+								Msg("failed to queue delete_task message for child task, rolling back transaction")
+							// Rollback and break
+							childRollback = true
+							break
+						}
+					}
+
+					// Commit transaction if no errors
+					if childRollback {
+						// Transaction will be rolled back in defer
+						log.Error().
+							Int64("task.id", taskID).
+							Msg("failed to mark all child tasks as done, transaction rolled back")
+					} else {
+						err = tx.Commit()
+						if err != nil {
+							log.Error().
+								Stack().
+								Err(err).
+								Int64("task.id", taskID).
+								Msg("failed to commit child tasks transaction")
+							childRollback = true
+						} else {
+							childRollback = false
+							log.Debug().
+								Int64("task.id", taskID).
+								Int("child_tasks.count", len(childTasks)).
+								Msg("all child tasks marked as done successfully")
+							span.SetAttributes(attribute.Int("child_tasks.count", len(childTasks)))
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// Record history (outside transaction, as it's not critical if it fails)
 	_, historySpan := s.tracer.Start(ctx, "task_service.record_task_marked_done_history",
 		trace.WithAttributes(
