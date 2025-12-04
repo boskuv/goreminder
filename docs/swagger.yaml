@@ -251,6 +251,9 @@ definitions:
       messenger_related_user_id:
         example: 123
         type: integer
+      parent_id:
+        example: 5
+        type: integer
       requires_confirmation:
         example: true
         type: boolean

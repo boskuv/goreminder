@@ -1874,6 +1874,10 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 123
                 },
+                "parent_id": {
+                    "type": "integer",
+                    "example": 5
+                },
                 "requires_confirmation": {
                     "type": "boolean",
                     "example": true
