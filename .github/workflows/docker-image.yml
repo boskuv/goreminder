@@ -1,0 +1,129 @@
+name: Build and Push GoReminder API Docker Image
+
+on:
+  push:
+    branches: [ dev, main, prod-* ]
+    paths:
+      - 'Dockerfile'
+      - 'go.mod'
+      - 'go.sum'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'pkg/**'
+
+env:
+  DOCKER_USERNAME: boris24kv
+  GO_IMAGE_NAME: boris24kv/goreminder
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Extract branch name
+      id: extract_branch
+      run: |
+        BRANCH_NAME=${GITHUB_REF#refs/heads/}
+        SHORT_SHA=${GITHUB_SHA::8}
+        
+        echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+        echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+        
+        if [[ "$BRANCH_NAME" == prod-* ]]; then
+          echo "is_prod=true" >> $GITHUB_OUTPUT
+        else
+          echo "is_prod=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Determine image tags
+      id: tags
+      run: |
+        CURRENT_DATE=$(date -u +"%Y%m%d%H%M")
+        BRANCH_NAME="${{ steps.extract_branch.outputs.branch_name }}"
+        SHORT_SHA="${{ steps.extract_branch.outputs.short_sha }}"
+        
+        # Base tags
+        if [[ "$BRANCH_NAME" == prod-* ]]; then
+          # Production branches: prod-1.0.0, latest
+          TAGS="${GO_IMAGE_NAME}:${BRANCH_NAME},${GO_IMAGE_NAME}:latest"
+        elif [[ "$BRANCH_NAME" == "main" ]]; then
+          # Main branch: date, sha, latest
+          TAGS="${GO_IMAGE_NAME}:${CURRENT_DATE},${GO_IMAGE_NAME}:main-${SHORT_SHA},${GO_IMAGE_NAME}:latest"
+        else
+          # Other branches: date, branch-sha
+          TAGS="${GO_IMAGE_NAME}:${CURRENT_DATE},${GO_IMAGE_NAME}:${BRANCH_NAME}-${SHORT_SHA}"
+        fi
+        
+        echo "tags=$TAGS" >> $GITHUB_OUTPUT
+        echo "current_date=$CURRENT_DATE" >> $GITHUB_OUTPUT
+      env:
+        GO_IMAGE_NAME: ${{ env.DOCKER_USERNAME }}/goreminder-api
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: Dockerfile
+        platforms: linux/amd64
+        push: true
+        tags: ${{ steps.tags.outputs.tags }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          USER=apiuser
+          UID=10001
+          GID=10001
+        labels: |
+          org.opencontainers.image.title=GoReminder API
+          org.opencontainers.image.description="Task Management API built with Go"
+          org.opencontainers.image.version=${{ github.ref_name }}
+          org.opencontainers.image.created=${{ steps.tags.outputs.current_date }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.source=${{ github.repositoryUrl }}
+          org.opencontainers.image.licenses=MIT
+
+    - name: Print image info
+      run: |
+        echo "✅ GoReminder API Docker image pushed successfully"
+        echo "👤 Docker Hub user: ${DOCKER_USERNAME}"
+        echo "🏷️  Tags: ${{ steps.tags.outputs.tags }}"
+        echo "📅 Date: ${{ steps.tags.outputs.current_date }}"
+        echo "🌿 Branch: ${{ steps.extract_branch.outputs.branch_name }}"
+        echo "🔧 SHA: ${{ steps.extract_branch.outputs.short_sha }}"
+        echo ""
+        echo "📦 Image ready for deployment"
+        echo "   docker pull ${{ env.DOCKER_USERNAME }}/goreminder-api:${{ steps.tags.outputs.current_date }}"
+
+    - name: Create deployment summary
+      if: always()
+      run: |
+        echo "# 🐳 GoReminder API Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Image:** \`${{ env.GO_IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+        IFS=',' read -ra TAG_ARRAY <<< "${{ steps.tags.outputs.tags }}"
+        for tag in "${TAG_ARRAY[@]}"; do
+          echo "- \`$tag\`" >> $GITHUB_STEP_SUMMARY
+        done
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Build Info:**" >> $GITHUB_STEP_SUMMARY
+        echo "- Branch: \`${{ steps.extract_branch.outputs.branch_name }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- Commit: \`${{ steps.extract_branch.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- Build Date: \`${{ steps.tags.outputs.current_date }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- Built by: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
