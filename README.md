@@ -5,7 +5,17 @@
 <p align="center">
 </p>
 
-## Features
+## Business Features
+- [x] **Auto-rescheduling**: Tasks are automatically rescheduled to the next day if confirmation is not received
+- [ ] **Task Muting**: Temporarily mute notifications for specific tasks
+- [ ] **Daily Task Digest**: Send daily task summaries at specified times
+- [ ] **Task Postponement**: Ability to postpone tasks to a later time
+- [ ] **Reminder Groups**: Group related tasks together for batch management
+- [ ] **ICS Import**: Import tasks from iCalendar (.ics) files
+- [ ] **Advanced Reminders**: Pre-reminders before task deadlines
+- [ ] **Chaos Zone**: Tasks without fixed time and confirmation requirements
+
+## Tech Features
 - **Task Management**: Create, fetch, update, and delete tasks with soft delete support
 - **User Management**: Create, fetch, update, and delete users with soft delete support
 - **Messenger Integration**: Support for multiple messaging platforms (Telegram, etc.)
