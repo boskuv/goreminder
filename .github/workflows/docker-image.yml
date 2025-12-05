@@ -3,17 +3,10 @@ name: Build and Push GoReminder API Docker Image
 on:
   push:
     branches: [ dev, main, prod-* ]
-    paths:
-      - 'Dockerfile'
-      - 'go.mod'
-      - 'go.sum'
-      - 'cmd/**'
-      - 'internal/**'
-      - 'pkg/**'
 
 env:
   DOCKER_USERNAME: boris24kv
-  GO_IMAGE_NAME: boris24kv/goreminder
+  GO_IMAGE_NAME: boris24kv/goreminder-api
 
 jobs:
   build-and-push:
@@ -25,6 +18,15 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Debug - Print branch info
+      run: |
+        echo "GITHUB_REF: $GITHUB_REF"
+        echo "GITHUB_REF_NAME: $GITHUB_REF_NAME"
+        echo "GITHUB_EVENT_NAME: $GITHUB_EVENT_NAME"
+        echo "Current branch: ${GITHUB_REF#refs/heads/}"
+        echo "Triggering branch: ${{ github.ref }}"
+        echo "Workflow triggered: ${{ github.event_name }}"
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -38,7 +40,15 @@ jobs:
     - name: Extract branch name
       id: extract_branch
       run: |
-        BRANCH_NAME=${GITHUB_REF#refs/heads/}
+        # Получаем имя ветки разными способами для отладки
+        if [[ -n "$GITHUB_HEAD_REF" ]]; then
+          # Для pull requests
+          BRANCH_NAME="$GITHUB_HEAD_REF"
+        else
+          # Для прямых пушей
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+        fi
+        
         SHORT_SHA=${GITHUB_SHA::8}
         
         echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
@@ -49,6 +59,9 @@ jobs:
         else
           echo "is_prod=false" >> $GITHUB_OUTPUT
         fi
+        
+        echo "Detected branch: $BRANCH_NAME"
+        echo "SHA: $SHORT_SHA"
 
     - name: Determine image tags
       id: tags
@@ -57,18 +70,24 @@ jobs:
         BRANCH_NAME="${{ steps.extract_branch.outputs.branch_name }}"
         SHORT_SHA="${{ steps.extract_branch.outputs.short_sha }}"
         
+        echo "Creating tags for branch: $BRANCH_NAME"
+        
         # Base tags
         if [[ "$BRANCH_NAME" == prod-* ]]; then
           # Production branches: prod-1.0.0, latest
           TAGS="${GO_IMAGE_NAME}:${BRANCH_NAME},${GO_IMAGE_NAME}:latest"
+          echo "Production tags set"
         elif [[ "$BRANCH_NAME" == "main" ]]; then
           # Main branch: date, sha, latest
           TAGS="${GO_IMAGE_NAME}:${CURRENT_DATE},${GO_IMAGE_NAME}:main-${SHORT_SHA},${GO_IMAGE_NAME}:latest"
+          echo "Main branch tags set"
         else
           # Other branches: date, branch-sha
           TAGS="${GO_IMAGE_NAME}:${CURRENT_DATE},${GO_IMAGE_NAME}:${BRANCH_NAME}-${SHORT_SHA}"
+          echo "Development branch tags set"
         fi
         
+        echo "Final tags: $TAGS"
         echo "tags=$TAGS" >> $GITHUB_OUTPUT
         echo "current_date=$CURRENT_DATE" >> $GITHUB_OUTPUT
       env:
@@ -91,7 +110,7 @@ jobs:
         labels: |
           org.opencontainers.image.title=GoReminder API
           org.opencontainers.image.description="Task Management API built with Go"
-          org.opencontainers.image.version=${{ github.ref_name }}
+          org.opencontainers.image.version=${{ steps.extract_branch.outputs.branch_name }}
           org.opencontainers.image.created=${{ steps.tags.outputs.current_date }}
           org.opencontainers.image.revision=${{ github.sha }}
           org.opencontainers.image.source=${{ github.repositoryUrl }}
