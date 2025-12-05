@@ -1,17 +1,18 @@
 # Use the official Golang image as the build stage
-FROM golang:1.23 AS builder
+FROM golang:1.23-alpine AS builder
 
 # Add Golang specific environment variables for compiling
-ENV GOOS=linux GOARCH=amd64
+ENV GOOS=linux \
+    GOARCH=amd64 \
+    CGO_ENABLED=0 \
+    GOPROXY=direct \
+    GOSUMDB=off
 
 # Set the Current Working Directory inside the container
 WORKDIR /app
 
 # Copy the go mod and sum files
 COPY go.mod go.sum ./
-
-# Copy the go mod and sum files
-COPY ./cmd/core/config.yaml.example ./config.yaml
 
 # Download all dependencies. Dependencies will be cached if the go.mod and 
 # go.sum files are not changed
@@ -21,39 +22,63 @@ RUN go mod download && go mod verify
 COPY . .
 
 # Build the Go app
-RUN CGO_ENABLED=0 go build -o goreminder ./cmd/core/main.go
+RUN go build -ldflags="-w -s" -trimpath -o goreminder ./cmd/core/main.go
 
 # Start a new stage from scratch
 FROM alpine:latest
 
-# Install file utility to check binary format
-RUN apk add --no-cache file
+# Security hardening
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    && update-ca-certificates \
+    && rm -rf /var/cache/apk/*
 
 WORKDIR /app
 
-# We don't want to run our container as the root user for security reasons
-# Therefore, we define a new non-root user and UID for it
-# We disable login via password and omit creating a home directory
-# to protect us against malicious SSH login attempts
-ENV USER=apiuser UID=10001
-RUN adduser \
+# Create non-root user with specific UID/GID
+ARG USER=apiuser
+ARG UID=10001
+ARG GID=10001
+
+RUN addgroup -g ${GID} ${USER} && \
+    adduser \
     --disabled-password \
     --gecos "" \
     --home "/nonexistent" \
     --shell "/sbin/nologin" \
     --no-create-home \
     --uid "${UID}" \
+    --ingroup "${USER}" \
     "${USER}"
 
 # Copy the compiled binary from 'builder' stage
-# Binary permissions are given to our custom user to make the app runnable
-COPY --from=builder --chown=${USER}:${USER} /app/goreminder .
-COPY --from=builder --chown=${USER}:${USER} /app/config.yaml .
+COPY --from=builder --chown=${UID}:${GID} /app/goreminder .
+COPY --from=builder --chown=${UID}:${GID} /app/config.yaml .
 
-RUN chmod +x ./goreminder
+# Verify binary security
+RUN ["/app/goreminder", "--version"] || true
+
+# Set secure permissions
+RUN chmod 550 /app/goreminder && \
+    chmod 440 /app/config.yaml
+
+# Create necessary directories with correct permissions
+RUN mkdir -p /app/logs /app/data && \
+    chown -R ${UID}:${GID} /app/logs /app/data && \
+    chmod 750 /app/logs /app/data
 
 # Switch to our new user
-USER ${USER}:${USER}
+USER ${UID}:${GID}
+
+# Security-related environment variables
+ENV PATH="/app:${PATH}" \
+    GIN_MODE=release
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["/app/goreminder", "health"] || exit 1
 
 # Command to run the executable
-CMD ["./goreminder"]
+ENTRYPOINT ["/app/goreminder"]
+CMD ["serve"]
