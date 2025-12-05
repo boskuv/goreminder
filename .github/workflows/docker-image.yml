@@ -6,7 +6,7 @@ on:
 
 env:
   DOCKER_USERNAME: boris24kv
-  GO_IMAGE_NAME: boris24kv/goreminder-api
+  GO_IMAGE_NAME: boris24kv/goreminder
 
 jobs:
   build-and-push:
