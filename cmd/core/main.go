@@ -118,6 +118,21 @@ func main() {
 	// Get the database connection from the manager
 	db := dbManager.GetDB()
 
+	// Run database migrations automatically on startup
+	// Can be disabled by setting SKIP_MIGRATIONS=true
+	if os.Getenv("SKIP_MIGRATIONS") != "true" {
+		// Allow migrations directory to be overridden via environment variable for CI/CD
+		migrationsDir := os.Getenv("MIGRATIONS_DIR")
+		if migrationsDir == "" {
+			migrationsDir = "migrations"
+		}
+		if err := database.RunMigrations(db, migrationsDir, log); err != nil {
+			log.Fatal().Stack().Err(err).Msg("failed to run database migrations")
+		}
+	} else {
+		log.Info().Msg("database migrations skipped (SKIP_MIGRATIONS=true)")
+	}
+
 	// setup repositories
 	taskRepo := repository.NewTaskRepository(db, log)
 	userRepo := repository.NewUserRepository(db, log)

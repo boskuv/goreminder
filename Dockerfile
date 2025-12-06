@@ -58,6 +58,7 @@ RUN adduser \
 # Copy the compiled binary from 'builder' stage
 COPY --from=builder --chown=${USER}:${USER} /app/goreminder .
 COPY --from=builder --chown=${USER}:${USER} /app/config.yaml .
+COPY --from=builder --chown=${USER}:${USER} /app/migrations ./migrations
 
 # Verify binary
 RUN file ./goreminder && ./goreminder --version || true
