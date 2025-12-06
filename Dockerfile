@@ -1,5 +1,5 @@
 # Use Alpine-based Go image for smaller size
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # Install Git and build dependencies
 RUN apk add --no-cache \
