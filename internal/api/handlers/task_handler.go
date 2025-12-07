@@ -62,7 +62,7 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 	// Convert DTO to model for service
 	taskModel := mapper.CreateTaskRequestToModel(&req)
 
-	taskID, err := h.taskService.CreateTask(ctx, taskModel)
+	taskID, childTaskID, err := h.taskService.CreateTask(ctx, taskModel)
 	if err != nil {
 		log.Error().
 			Stack().
@@ -92,7 +92,7 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 		Int64("user.id", req.UserID).
 		Msg("task created successfully")
 
-	c.JSON(http.StatusCreated, gin.H{"id": taskID})
+	c.JSON(http.StatusCreated, gin.H{"id": taskID, "child_id": childTaskID})
 }
 
 // @Summary Get task by ID

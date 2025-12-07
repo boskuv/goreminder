@@ -46,7 +46,7 @@ func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.User
 }
 
 // CreateTask implements BL of adding new task
-func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64, error) {
+func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64, int64, error) {
 	ctx, span := s.tracer.Start(ctx, "task_service.CreateTask",
 		trace.WithAttributes(
 			attribute.Int64("user.id", task.UserID),
@@ -71,7 +71,7 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 			Msg("user not found or error retrieving user")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return 0, errors.WithStack(err)
+		return 0, 0, errors.WithStack(err)
 	}
 	log.Debug().
 		Int64("user.id", task.UserID).
@@ -88,7 +88,7 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 				Msg("invalid task status")
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
-			return 0, errors.Wrap(errs.ErrValidation, err.Error())
+			return 0, 0, errors.Wrap(errs.ErrValidation, err.Error())
 		}
 	}
 
@@ -102,7 +102,7 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 			}
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
-			return 0, errors.WithStack(err)
+			return 0, 0, errors.WithStack(err)
 		}
 	}
 
@@ -117,7 +117,7 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 			Msg("failed to create task in repository")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return 0, errors.WithStack(err)
+		return 0, 0, errors.WithStack(err)
 	}
 
 	span.SetAttributes(attribute.Int64("task.id", taskID))
@@ -155,6 +155,7 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 	historySpan.End()
 
 	// If task has cron_expression and requires_confirmation, create a child task
+	var childTaskID int64
 	if task.CronExpression != nil && task.RequiresConfirmation {
 		log.Debug().
 			Int64("task.id", taskID).
@@ -178,7 +179,7 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 			Status:                 string(models.TaskStatusPending),
 		}
 
-		childTaskID, err := s.taskRepo.CreateTask(ctx, childTask)
+		childTaskID, err = s.taskRepo.CreateTask(ctx, childTask)
 		if err != nil {
 			log.Error().
 				Stack().
@@ -203,7 +204,7 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 		Int64("user.id", task.UserID).
 		Msg("task creation completed successfully")
 	span.SetStatus(codes.Ok, "task created successfully")
-	return taskID, nil
+	return taskID, childTaskID, nil
 }
 
 // GetTask implements BL of retrieving existing task by its id
