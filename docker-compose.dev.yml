@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:15
+    image: postgres:18
     container_name: postgres_container
     environment:
       POSTGRES_USER: postgres
@@ -76,12 +76,10 @@ services:
         max-file: "10"
         compress: "true"
 
-  goreminder-api:
+  api:
     build:
       context: .
       dockerfile: Dockerfile
-    image: goreminder-api-img
-    container_name: goreminder-api
     ports:
       - "8080:8080"
       - "9191:9191"
