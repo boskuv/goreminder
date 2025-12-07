@@ -51,9 +51,10 @@ func TestTaskService_CreateTask_Success(t *testing.T) {
 	taskRepo.EXPECT().CreateTask(gomock.Any(), task).Return(int64(42), nil)
 	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
 
-	id, err := service.CreateTask(ctx, task)
+	id, childTaskID, err := service.CreateTask(ctx, task)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(42), id)
+	assert.Equal(t, int64(0), childTaskID)
 }
 
 func TestTaskService_CreateTask_WithMessengerRelatedUser_Success(t *testing.T) {
@@ -73,9 +74,10 @@ func TestTaskService_CreateTask_WithMessengerRelatedUser_Success(t *testing.T) {
 	taskRepo.EXPECT().CreateTask(gomock.Any(), task).Return(int64(42), nil)
 	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
 
-	id, err := service.CreateTask(ctx, task)
+	id, childTaskID, err := service.CreateTask(ctx, task)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(42), id)
+	assert.Equal(t, int64(0), childTaskID)
 }
 
 func TestTaskService_CreateTask_UserNotFound(t *testing.T) {
@@ -85,9 +87,10 @@ func TestTaskService_CreateTask_UserNotFound(t *testing.T) {
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(nil, errs.ErrNotFound)
 
-	id, err := service.CreateTask(ctx, task)
+	id, childTaskID, err := service.CreateTask(ctx, task)
 	assert.Error(t, err)
 	assert.Equal(t, int64(0), id)
+	assert.Equal(t, int64(0), childTaskID)
 	assert.Contains(t, err.Error(), "unprocessable entity")
 }
 
@@ -99,9 +102,10 @@ func TestTaskService_CreateTask_UserRepositoryError(t *testing.T) {
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(nil, expectedErr)
 
-	id, err := service.CreateTask(ctx, task)
+	id, childTaskID, err := service.CreateTask(ctx, task)
 	assert.Error(t, err)
 	assert.Equal(t, int64(0), id)
+	assert.Equal(t, int64(0), childTaskID)
 	assert.Contains(t, err.Error(), "database error")
 }
 
@@ -117,9 +121,10 @@ func TestTaskService_CreateTask_MessengerRelatedUserNotFound(t *testing.T) {
 	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
 	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), messengerUserID).Return(nil, errs.ErrNotFound)
 
-	id, err := service.CreateTask(ctx, task)
+	id, childTaskID, err := service.CreateTask(ctx, task)
 	assert.Error(t, err)
 	assert.Equal(t, int64(0), id)
+	assert.Equal(t, int64(0), childTaskID)
 	assert.Contains(t, err.Error(), "unprocessable entity")
 }
 
@@ -136,9 +141,10 @@ func TestTaskService_CreateTask_MessengerRepositoryError(t *testing.T) {
 	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
 	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), messengerUserID).Return(nil, expectedErr)
 
-	id, err := service.CreateTask(ctx, task)
+	id, childTaskID, err := service.CreateTask(ctx, task)
 	assert.Error(t, err)
 	assert.Equal(t, int64(0), id)
+	assert.Equal(t, int64(0), childTaskID)
 	assert.Contains(t, err.Error(), "messenger database error")
 }
 
@@ -151,9 +157,10 @@ func TestTaskService_CreateTask_TaskRepositoryError(t *testing.T) {
 	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
 	taskRepo.EXPECT().CreateTask(gomock.Any(), task).Return(int64(0), expectedErr)
 
-	id, err := service.CreateTask(ctx, task)
+	id, childTaskID, err := service.CreateTask(ctx, task)
 	assert.Error(t, err)
 	assert.Equal(t, int64(0), id)
+	assert.Equal(t, int64(0), childTaskID)
 	assert.Contains(t, err.Error(), "task creation failed")
 }
 
@@ -469,9 +476,10 @@ func TestTaskService_CreateTask_NilMessengerRelatedUserID(t *testing.T) {
 	taskRepo.EXPECT().CreateTask(gomock.Any(), task).Return(int64(42), nil)
 	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
 
-	id, err := service.CreateTask(ctx, task)
+	id, childTaskID, err := service.CreateTask(ctx, task)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(42), id)
+	assert.Equal(t, int64(0), childTaskID)
 }
 
 func TestTaskService_UpdateTask_NilUpdateRequest(t *testing.T) {
