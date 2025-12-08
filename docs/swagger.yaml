@@ -91,9 +91,7 @@ definitions:
         example: UTC
         type: string
     required:
-    - email
     - name
-    - password_hash
     type: object
   dto.MessengerRelatedUserResponse:
     properties:

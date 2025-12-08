@@ -1620,9 +1620,7 @@ const docTemplate = `{
         "dto.CreateUserRequest": {
             "type": "object",
             "required": [
-                "email",
-                "name",
-                "password_hash"
+                "name"
             ],
             "properties": {
                 "email": {

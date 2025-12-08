@@ -3,7 +3,7 @@ package dto
 // CreateUserRequest represents the request DTO for creating a user
 type CreateUserRequest struct {
 	Name         string  `json:"name" binding:"required" example:"John Doe"`
-	Email        string  `json:"email,omitempty" binding:"email" example:"john.doe@example.com"`
+	Email        string  `json:"email,omitempty" example:"john.doe@example.com"`
 	PasswordHash string  `json:"password_hash,omitempty" example:"$2a$10$N9qo8uLOickgx2ZMRZoMye"`
 	Timezone     *string `json:"timezone,omitempty" example:"UTC"`
 	LanguageCode *string `json:"language_code,omitempty" example:"en"`
