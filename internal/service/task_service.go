@@ -492,7 +492,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			descriptionChanged := updateRequest.Description != nil && *updateRequest.Description != oldDescription
 			startDateChanged := updateRequest.StartDate != nil && !updateRequest.StartDate.Equal(oldStartDate)
 			cronExpressionChanged := (updateRequest.CronExpression != nil && oldCronExpression == nil) ||
-				(updateRequest.CronExpression == nil && oldCronExpression != nil) ||
+				// (updateRequest.CronExpression == nil && oldCronExpression != nil) || TODO: hotfix - how to delete cron then?
 				(updateRequest.CronExpression != nil && oldCronExpression != nil && *updateRequest.CronExpression != *oldCronExpression)
 			finishDateChanged := (updateRequest.FinishDate != nil && oldFinishDate == nil) ||
 				(updateRequest.FinishDate == nil && oldFinishDate != nil) ||
