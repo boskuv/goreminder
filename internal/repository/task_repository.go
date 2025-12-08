@@ -232,6 +232,10 @@ func (r *taskRepository) GetTasksByUserID(ctx context.Context, userID int64) ([]
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"user_id": userID}).
 		Where(squirrel.NotEq{"status": "done"}).
+		Where(squirrel.Or{
+			squirrel.Eq{"cron_expression": nil},
+			squirrel.NotEq{"parent_id": nil},
+		}).
 		ToSql()
 	if err != nil {
 		span.RecordError(err)
@@ -297,7 +301,11 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"user_id": userID}).
-		Where(squirrel.NotEq{"status": "done"})
+		Where(squirrel.NotEq{"status": "done"}).
+		Where(squirrel.Or{
+			squirrel.Eq{"cron_expression": nil},
+			squirrel.NotEq{"parent_id": nil},
+		})
 
 	countQuery, countArgs, err := countBuilder.ToSql()
 	if err != nil {
@@ -320,7 +328,11 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"user_id": userID}).
-		Where(squirrel.NotEq{"status": "done"})
+		Where(squirrel.NotEq{"status": "done"}).
+		Where(squirrel.Or{
+			squirrel.Eq{"cron_expression": nil},
+			squirrel.NotEq{"parent_id": nil},
+		})
 
 	query, args, err := dataBuilder.
 		OrderBy(orderBy).
