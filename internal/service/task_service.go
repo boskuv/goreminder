@@ -492,7 +492,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			descriptionChanged := updateRequest.Description != nil && *updateRequest.Description != oldDescription
 			startDateChanged := updateRequest.StartDate != nil && !updateRequest.StartDate.Equal(oldStartDate)
 			cronExpressionChanged := (updateRequest.CronExpression != nil && oldCronExpression == nil) ||
-				// (updateRequest.CronExpression == nil && oldCronExpression != nil) || TODO: hotfix - how to delete cron then?
+				(updateRequest.CronExpression == nil && oldCronExpression != nil) ||
 				(updateRequest.CronExpression != nil && oldCronExpression != nil && *updateRequest.CronExpression != *oldCronExpression)
 			finishDateChanged := (updateRequest.FinishDate != nil && oldFinishDate == nil) ||
 				(updateRequest.FinishDate == nil && oldFinishDate != nil) ||
@@ -525,11 +525,24 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					if oldTask.CronExpression != nil {
 						// Calculate next execution time from new cron expression
 						// Use current time or the new start_date as base
+						// If startDate has already passed, use time.Now() instead
 						baseTime := time.Now()
 						if startDateChanged {
-							baseTime = oldTask.StartDate
+							// Check if the new startDate has already passed
+							if oldTask.StartDate.After(time.Now()) {
+								baseTime = oldTask.StartDate
+							} else {
+								// startDate has already passed, use current time
+								baseTime = time.Now()
+							}
 						} else if !childTask.StartDate.IsZero() {
-							baseTime = childTask.StartDate
+							// Check if childTask.StartDate has already passed
+							if childTask.StartDate.After(time.Now()) {
+								baseTime = childTask.StartDate
+							} else {
+								// childTask.StartDate has already passed, use current time
+								baseTime = time.Now()
+							}
 						}
 						nextTime := cronexpr.MustParse(*oldTask.CronExpression).Next(baseTime)
 						childTask.StartDate = nextTime
@@ -539,6 +552,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 							Int64("task.id", taskID).
 							Int64("child_task.id", childTask.ID).
 							Time("new_start_date", nextTime).
+							Time("base_time", baseTime).
 							Msg("recalculated child task start_date from cron expression")
 					} else if startDateChanged {
 						// If cron expression was removed but start_date changed, update start_date
