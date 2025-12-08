@@ -238,17 +238,23 @@ func (s *TaskService) GetTask(ctx context.Context, taskID int64) (*models.Task, 
 	return task, nil
 }
 
-// GetUserTasks implements BL of retrieving existing tasks by user id
-func (s *TaskService) GetUserTasks(ctx context.Context, userID int64) ([]*models.Task, error) {
+// GetUserTasks implements BL of retrieving existing tasks by user id with pagination and ordering
+func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, pageSize int, orderBy string) ([]*models.Task, int, error) {
 	ctx, span := s.tracer.Start(ctx, "task_service.GetUserTasks",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
+			attribute.Int("page", page),
+			attribute.Int("page_size", pageSize),
+			attribute.String("order_by", orderBy),
 		))
 	defer span.End()
 
 	log := logger.WithTraceContext(ctx, s.logger)
 	log.Debug().
 		Int64("user.id", userID).
+		Int("page", page).
+		Int("page_size", pageSize).
+		Str("order_by", orderBy).
 		Msg("getting user tasks")
 
 	// check if user exists
@@ -263,10 +269,10 @@ func (s *TaskService) GetUserTasks(ctx context.Context, userID int64) ([]*models
 			Msg("user not found when getting tasks")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return nil, errors.WithStack(err)
+		return nil, 0, errors.WithStack(err)
 	}
 
-	tasks, err := s.taskRepo.GetTasksByUserID(ctx, userID)
+	tasks, totalCount, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, page, pageSize, orderBy)
 	if err != nil {
 		log.Debug().
 			Err(err).
@@ -274,16 +280,18 @@ func (s *TaskService) GetUserTasks(ctx context.Context, userID int64) ([]*models
 			Msg("failed to get user tasks")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return nil, errors.WithStack(err)
+		return nil, 0, errors.WithStack(err)
 	}
 
 	log.Debug().
 		Int64("user.id", userID).
 		Int("tasks.count", len(tasks)).
+		Int("total_count", totalCount).
 		Msg("user tasks retrieved successfully")
 	span.SetAttributes(attribute.Int("tasks.count", len(tasks)))
+	span.SetAttributes(attribute.Int("total_count", totalCount))
 	span.SetStatus(codes.Ok, "user tasks retrieved successfully")
-	return tasks, nil
+	return tasks, totalCount, nil
 }
 
 // UpdateTask implements BL of updating task by id

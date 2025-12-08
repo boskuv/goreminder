@@ -1243,22 +1243,35 @@ paths:
       - Users
   /api/v1/users/{user_id}/tasks:
     get:
-      description: Retrieves all tasks by userID
+      description: Retrieves all tasks by userID with pagination and ordering
       parameters:
       - description: User ID
         in: path
         name: user_id
         required: true
         type: integer
+      - default: 1
+        description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: 'Page size (default: 50)'
+        in: query
+        name: page_size
+        type: integer
+      - default: created_at DESC
+        description: 'Order by field (default: created_at DESC)'
+        in: query
+        name: order_by
+        type: string
       produces:
       - application/json
       responses:
         "200":
-          description: List of tasks
+          description: Paginated list of tasks
           schema:
-            items:
-              $ref: '#/definitions/dto.TaskResponse'
-            type: array
+            $ref: '#/definitions/dto.PaginatedTasksResponse'
         "400":
           description: Bad request
           schema:

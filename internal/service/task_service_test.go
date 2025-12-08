@@ -213,42 +213,56 @@ func TestTaskService_GetUserTasks_Success(t *testing.T) {
 	service, taskRepo, userRepo, _, _, _ := setup(t)
 	ctx := context.Background()
 	userID := int64(1)
+	page := 1
+	pageSize := 50
+	orderBy := "created_at DESC"
 	expectedTasks := []*models.Task{
 		{ID: 1, UserID: userID, Title: "Task 1"},
 		{ID: 2, UserID: userID, Title: "Task 2"},
 	}
+	totalCount := 2
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
-	taskRepo.EXPECT().GetTasksByUserID(gomock.Any(), userID).Return(expectedTasks, nil)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy).Return(expectedTasks, totalCount, nil)
 
-	tasks, err := service.GetUserTasks(ctx, userID)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTasks, tasks)
+	assert.Equal(t, totalCount, count)
 }
 
 func TestTaskService_GetUserTasks_EmptyList(t *testing.T) {
 	service, taskRepo, userRepo, _, _, _ := setup(t)
 	ctx := context.Background()
 	userID := int64(1)
+	page := 1
+	pageSize := 50
+	orderBy := "created_at DESC"
+	totalCount := 0
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
-	taskRepo.EXPECT().GetTasksByUserID(gomock.Any(), userID).Return([]*models.Task{}, nil)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy).Return([]*models.Task{}, totalCount, nil)
 
-	tasks, err := service.GetUserTasks(ctx, userID)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy)
 	assert.NoError(t, err)
 	assert.Empty(t, tasks)
+	assert.Equal(t, totalCount, count)
 }
 
 func TestTaskService_GetUserTasks_UserNotFound(t *testing.T) {
 	service, _, userRepo, _, _, _ := setup(t)
 	ctx := context.Background()
 	userID := int64(1)
+	page := 1
+	pageSize := 50
+	orderBy := "created_at DESC"
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(nil, errs.ErrNotFound)
 
-	tasks, err := service.GetUserTasks(ctx, userID)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy)
 	assert.Error(t, err)
 	assert.Nil(t, tasks)
+	assert.Equal(t, 0, count)
 	assert.Contains(t, err.Error(), "unprocessable entity")
 }
 
@@ -256,13 +270,17 @@ func TestTaskService_GetUserTasks_UserRepositoryError(t *testing.T) {
 	service, _, userRepo, _, _, _ := setup(t)
 	ctx := context.Background()
 	userID := int64(1)
+	page := 1
+	pageSize := 50
+	orderBy := "created_at DESC"
 	expectedErr := errors.New("user database error")
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(nil, expectedErr)
 
-	tasks, err := service.GetUserTasks(ctx, userID)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy)
 	assert.Error(t, err)
 	assert.Nil(t, tasks)
+	assert.Equal(t, 0, count)
 	assert.Contains(t, err.Error(), "user database error")
 }
 
@@ -270,14 +288,18 @@ func TestTaskService_GetUserTasks_TaskRepositoryError(t *testing.T) {
 	service, taskRepo, userRepo, _, _, _ := setup(t)
 	ctx := context.Background()
 	userID := int64(1)
+	page := 1
+	pageSize := 50
+	orderBy := "created_at DESC"
 	expectedErr := errors.New("task database error")
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
-	taskRepo.EXPECT().GetTasksByUserID(gomock.Any(), userID).Return(nil, expectedErr)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy).Return(nil, 0, expectedErr)
 
-	tasks, err := service.GetUserTasks(ctx, userID)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy)
 	assert.Error(t, err)
 	assert.Nil(t, tasks)
+	assert.Equal(t, 0, count)
 	assert.Contains(t, err.Error(), "task database error")
 }
 

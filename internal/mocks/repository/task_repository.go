@@ -200,8 +200,24 @@ func (m *MockTaskRepository) GetTasksByUserID(ctx context.Context, userID int64)
 
 // GetTasksByUserID indicates an expected call of GetTasksByUserID.
 func (mr *MockTaskRepositoryMockRecorder) GetTasksByUserID(ctx, userID any) *gomock.Call {
-        mr.mock.ctrl.T.Helper()
-        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTasksByUserID", reflect.TypeOf((*MockTaskRepository)(nil).GetTasksByUserID), ctx, userID)
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTasksByUserID", reflect.TypeOf((*MockTaskRepository)(nil).GetTasksByUserID), ctx, userID)
+}
+
+// GetTasksByUserIDWithPagination mocks base method.
+func (m *MockTaskRepository) GetTasksByUserIDWithPagination(ctx context.Context, userID int64, page, pageSize int, orderBy string) ([]*models.Task, int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTasksByUserIDWithPagination", ctx, userID, page, pageSize, orderBy)
+	ret0, _ := ret[0].([]*models.Task)
+	ret1, _ := ret[1].(int)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetTasksByUserIDWithPagination indicates an expected call of GetTasksByUserIDWithPagination.
+func (mr *MockTaskRepositoryMockRecorder) GetTasksByUserIDWithPagination(ctx, userID, page, pageSize, orderBy any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTasksByUserIDWithPagination", reflect.TypeOf((*MockTaskRepository)(nil).GetTasksByUserIDWithPagination), ctx, userID, page, pageSize, orderBy)
 }
 
 // GetTasksNeedingRescheduling mocks base method.

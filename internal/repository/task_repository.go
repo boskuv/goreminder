@@ -24,6 +24,7 @@ type TaskRepository interface {
 	GetTaskByID(ctx context.Context, id int64) (*models.Task, error)
 	GetTaskByIDWithoutStatusFilter(ctx context.Context, id int64) (*models.Task, error)
 	GetTasksByUserID(ctx context.Context, userID int64) ([]*models.Task, error)
+	GetTasksByUserIDWithPagination(ctx context.Context, userID int64, page, pageSize int, orderBy string) ([]*models.Task, int, error)
 	GetChildTasksByParentID(ctx context.Context, parentID int64) ([]*models.Task, error)
 	UpdateTask(ctx context.Context, task *models.Task) error
 	UpdateTaskWithTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) error
@@ -257,6 +258,102 @@ func (r *taskRepository) GetTasksByUserID(ctx context.Context, userID int64) ([]
 	span.SetAttributes(attribute.Int("tasks.count", len(tasks)))
 	span.SetStatus(codes.Ok, "tasks retrieved successfully")
 	return tasks, nil
+}
+
+// GetTasksByUserIDWithPagination retrieves tasks by user ID with pagination and ordering
+// Returns task entities, total count, and an error if occurred
+func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, userID int64, page, pageSize int, orderBy string) ([]*models.Task, int, error) {
+	ctx, span := r.tracer.Start(ctx, "task_repository.GetTasksByUserIDWithPagination",
+		trace.WithAttributes(
+			attribute.Int64("user.id", userID),
+			attribute.Int("page", page),
+			attribute.Int("page_size", pageSize),
+			attribute.String("order_by", orderBy),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("user.id", userID).
+		Int("page", page).
+		Int("page_size", pageSize).
+		Str("order_by", orderBy).
+		Msg("getting tasks by user id from database with pagination")
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 50
+	}
+	if orderBy == "" {
+		orderBy = "created_at DESC"
+	}
+
+	offset := (page - 1) * pageSize
+
+	// Build count query
+	countBuilder := r.sb.Select("COUNT(*)").
+		From("tasks").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"user_id": userID}).
+		Where(squirrel.NotEq{"status": "done"})
+
+	countQuery, countArgs, err := countBuilder.ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to build count query")
+	}
+
+	var totalCount int
+	err = r.db.GetContext(ctx, &totalCount, countQuery, countArgs...)
+	if err != nil {
+		log.Debug().Err(err).Msg("failed to get total count of tasks by user id")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to get total count")
+	}
+
+	// Build data query
+	dataBuilder := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "status", "created_at", "requires_confirmation").
+		From("tasks").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"user_id": userID}).
+		Where(squirrel.NotEq{"status": "done"})
+
+	query, args, err := dataBuilder.
+		OrderBy(orderBy).
+		Limit(uint64(pageSize)).
+		Offset(uint64(offset)).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to build query")
+	}
+
+	var tasks []*models.Task
+	err = r.db.SelectContext(ctx, &tasks, query, args...)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("failed to get tasks by user id from database")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, 0, errors.Wrap(err, "failed to get tasks by user id")
+	}
+
+	log.Debug().
+		Int64("user.id", userID).
+		Int("tasks.count", len(tasks)).
+		Int("total_count", totalCount).
+		Msg("tasks retrieved successfully from database")
+	span.SetAttributes(attribute.Int("tasks.count", len(tasks)))
+	span.SetAttributes(attribute.Int("total_count", totalCount))
+	span.SetStatus(codes.Ok, "tasks retrieved successfully")
+	return tasks, totalCount, nil
 }
 
 // GetChildTasksByParentID retrieves all child tasks by parent ID

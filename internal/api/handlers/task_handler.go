@@ -152,11 +152,14 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 }
 
 // @Summary Get all user's tasks by userID
-// @Description Retrieves all tasks by userID
+// @Description Retrieves all tasks by userID with pagination and ordering
 // @Tags Tasks
 // @Produce json
 // @Param user_id path int true "User ID"
-// @Success 200 {array} dto.TaskResponse "List of tasks"
+// @Param page query int false "Page number (default: 1)" default(1)
+// @Param page_size query int false "Page size (default: 50)" default(50)
+// @Param order_by query string false "Order by field (default: created_at DESC)" default(created_at DESC)
+// @Success 200 {object} dto.PaginatedTasksResponse "Paginated list of tasks"
 // @Failure 400 {object} map[string]string "Bad request"
 // @Failure 422 {object} map[string]string "Unprocessable entity"
 // @Failure 500 {object} map[string]string "Internal server error"
@@ -175,11 +178,38 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		return
 	}
 
+	page, err := validation.ValidateInt64Query(c, "page", 1, 1)
+	if err != nil {
+		log.Info().Err(err).Msg("invalid page query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	pageSize, err := validation.ValidateInt64Query(c, "page_size", 50, 1)
+	if err != nil {
+		log.Info().Err(err).Msg("invalid page_size query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	orderBy, err := validation.ValidateOptionalStringQuery(c, "order_by")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid order_by query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	if orderBy == "" {
+		orderBy = "created_at DESC"
+	}
+
 	log.Info().
 		Int64("user.id", userID).
+		Int64("page", page).
+		Int64("page_size", pageSize).
+		Str("order_by", orderBy).
 		Msg("getting user tasks")
 
-	tasks, err := h.taskService.GetUserTasks(ctx, userID)
+	tasks, totalCount, err := h.taskService.GetUserTasks(ctx, userID, int(page), int(pageSize), orderBy)
 	if err != nil {
 		log.Error().
 			Stack().
@@ -197,14 +227,36 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		return
 	}
 
+	// Calculate total pages
+	totalPages := (totalCount + int(pageSize) - 1) / int(pageSize)
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	// Convert models to response DTOs
+	responsesPtr := mapper.TasksModelToResponse(tasks)
+	responses := make([]dto.TaskResponse, len(responsesPtr))
+	for i, resp := range responsesPtr {
+		responses[i] = *resp
+	}
+
+	response := dto.PaginatedTasksResponse{
+		Data: responses,
+		Pagination: dto.PaginationResponse{
+			Page:       int(page),
+			PageSize:   int(pageSize),
+			TotalPages: totalPages,
+			TotalCount: totalCount,
+		},
+	}
+
 	log.Info().
 		Int64("user.id", userID).
 		Int("tasks.count", len(tasks)).
+		Int("total_count", totalCount).
 		Msg("user tasks retrieved successfully")
 
-	// Convert models to response DTOs
-	responses := mapper.TasksModelToResponse(tasks)
-	c.JSON(http.StatusOK, responses)
+	c.JSON(http.StatusOK, response)
 }
 
 // @Summary Update a task

@@ -1334,7 +1334,7 @@ const docTemplate = `{
         },
         "/api/v1/users/{user_id}/tasks": {
             "get": {
-                "description": "Retrieves all tasks by userID",
+                "description": "Retrieves all tasks by userID with pagination and ordering",
                 "produces": [
                     "application/json"
                 ],
@@ -1349,16 +1349,34 @@ const docTemplate = `{
                         "name": "user_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number (default: 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Page size (default: 50)",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "created_at DESC",
+                        "description": "Order by field (default: created_at DESC)",
+                        "name": "order_by",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "List of tasks",
+                        "description": "Paginated list of tasks",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/dto.TaskResponse"
-                            }
+                            "$ref": "#/definitions/dto.PaginatedTasksResponse"
                         }
                     },
                     "400": {
