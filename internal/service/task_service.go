@@ -544,11 +544,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 								baseTime = time.Now()
 							}
 						} else if !childTask.StartDate.IsZero() {
-							// Check if childTask.StartDate has already passed
-							if childTask.StartDate.After(time.Now()) {
-								baseTime = childTask.StartDate
-							} else {
-								// childTask.StartDate has already passed, use current time
+							// Check if childTask.StartDate has already passed, use current time
+							if childTask.StartDate.Before(time.Now()) {
 								baseTime = time.Now()
 							}
 						}
