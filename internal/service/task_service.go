@@ -162,9 +162,6 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 			Str("cron_expression", *task.CronExpression).
 			Msg("creating child task for cron task with confirmation")
 
-		// Calculate next execution time from cron expression
-		nextTime := cronexpr.MustParse(*task.CronExpression).Next(time.Now())
-
 		// Create child task
 		childTask := &models.Task{
 			Title:                  task.Title,
@@ -172,7 +169,7 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 			UserID:                 task.UserID,
 			MessengerRelatedUserID: task.MessengerRelatedUserID,
 			ParentID:               &taskID,
-			StartDate:              nextTime,
+			StartDate:              task.StartDate,
 			FinishDate:             task.FinishDate,
 			CronExpression:         nil, // Child tasks don't have cron expression
 			RequiresConfirmation:   task.RequiresConfirmation,
@@ -193,7 +190,7 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 			log.Debug().
 				Int64("task.id", taskID).
 				Int64("child_task.id", childTaskID).
-				Time("child_start_date", nextTime).
+				Time("child_start_date", task.StartDate).
 				Msg("child task created successfully")
 			span.SetAttributes(attribute.Int64("child_task.id", childTaskID))
 		}
