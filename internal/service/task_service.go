@@ -1582,7 +1582,7 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 	// Prepare task data for queue with new start date and cron expression
 	taskQueueMessage := map[string]interface{}{
 		"task": "worker.schedule_task",
-		"args": []interface{}{"telegram", messengerRelatedUser.ChatID, task.ID, task.Title, task.Description, newStartDate, nil, false},
+		"args": []interface{}{"telegram", messengerRelatedUser.ChatID, task.ID, task.Title, task.Description, newStartDate, nil, task.RequiresConfirmation},
 	}
 
 	// Publish to queue - if this fails, we don't reschedule
