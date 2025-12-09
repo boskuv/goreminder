@@ -6,7 +6,7 @@ on:
 
 env:
   DOCKER_USERNAME: boris24kv
-  GO_IMAGE_NAME: boris24kv/goreminder
+  GO_IMAGE_NAME: boris24kv/goreminder-api
 
 jobs:
   build-and-push:
@@ -40,7 +40,6 @@ jobs:
     - name: Extract branch name
       id: extract_branch
       run: |
-        # Получаем имя ветки разными способами для отладки
         if [[ -n "$GITHUB_HEAD_REF" ]]; then
           # Для pull requests
           BRANCH_NAME="$GITHUB_HEAD_REF"
@@ -91,7 +90,7 @@ jobs:
         echo "tags=$TAGS" >> $GITHUB_OUTPUT
         echo "current_date=$CURRENT_DATE" >> $GITHUB_OUTPUT
       env:
-        GO_IMAGE_NAME: ${{ env.DOCKER_USERNAME }}/goreminder-api
+        GO_IMAGE_NAME: ${{ env.GO_IMAGE_NAME }}
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
@@ -126,7 +125,7 @@ jobs:
         echo "🔧 SHA: ${{ steps.extract_branch.outputs.short_sha }}"
         echo ""
         echo "📦 Image ready for deployment"
-        echo "   docker pull ${{ env.DOCKER_USERNAME }}/goreminder-api:${{ steps.tags.outputs.current_date }}"
+        echo "   docker pull ${{ env.GO_IMAGE_NAME }}:${{ steps.tags.outputs.current_date }}"
 
     - name: Create deployment summary
       if: always()
