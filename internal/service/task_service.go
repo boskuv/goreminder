@@ -503,9 +503,15 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				(updateRequest.FinishDate == nil && oldFinishDate != nil) ||
 				(updateRequest.FinishDate != nil && oldFinishDate != nil && !updateRequest.FinishDate.Equal(*oldFinishDate))
 
-			// Update each child task
+			// Update each child task (skip done/deleted tasks)
 			for _, childTask := range childTasks {
+				// Skip already done or deleted tasks
+				if childTask.Status == string(models.TaskStatusDone) {
+					continue
+				}
+
 				childUpdated := false
+				startDateUpdated := false
 
 				// Update title if changed
 				if titleChanged {
@@ -549,6 +555,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 						nextTime := cronexpr.MustParse(*oldTask.CronExpression).Next(baseTime)
 						childTask.StartDate = nextTime
 						childUpdated = true
+						startDateUpdated = true
 
 						log.Debug().
 							Int64("task.id", taskID).
@@ -560,6 +567,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 						// If cron expression was removed but start_date changed, update start_date
 						childTask.StartDate = oldTask.StartDate
 						childUpdated = true
+						startDateUpdated = true
 					}
 				}
 
@@ -576,6 +584,45 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 						span.RecordError(err)
 						span.SetStatus(codes.Error, err.Error())
 						return nil, errors.WithStack(err)
+					}
+
+					// Publish update to queue if start_date, title, or description changed
+					// This is needed to update the task in scheduler
+					if startDateUpdated || titleChanged || descriptionChanged {
+						if childTask.MessengerRelatedUserID != nil {
+							messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *childTask.MessengerRelatedUserID)
+							if err != nil {
+								log.Error().
+									Stack().
+									Err(err).
+									Int64("task.id", taskID).
+									Int64("child_task.id", childTask.ID).
+									Msg("failed to get messenger related user for child task queue update")
+								// Don't fail the operation, just log the error
+							} else {
+								childTaskQueueMessage := map[string]interface{}{
+									"task": "worker.schedule_task",
+									"args": []interface{}{"telegram", messengerRelatedUser.ChatID, childTask.ID, childTask.Title, childTask.Description, childTask.StartDate, childTask.CronExpression, childTask.RequiresConfirmation},
+								}
+
+								err = s.producer.Publish(ctx, childTaskQueueMessage)
+								if err != nil {
+									log.Error().
+										Stack().
+										Err(err).
+										Int64("task.id", taskID).
+										Int64("child_task.id", childTask.ID).
+										Msg("failed to queue schedule_task message for updated child task")
+									// Don't fail the operation, just log the error
+									// The database update was successful, queue update failure is non-critical
+								} else {
+									log.Debug().
+										Int64("task.id", taskID).
+										Int64("child_task.id", childTask.ID).
+										Msg("child task update queued successfully")
+								}
+							}
+						}
 					}
 				}
 			}
