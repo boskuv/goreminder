@@ -427,6 +427,103 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		return nil, errors.WithStack(err)
 	}
 
+	// Handle queue publishing for single tasks (without cron) or parent tasks when status changes
+	// For parent tasks, we only publish if status changes to deleted (parent tasks don't execute directly)
+	// For single tasks, we publish schedule_task or delete_task based on changes
+	if !isParentTask {
+		// For single tasks (without cron), publish to queue based on changes
+		titleChanged := updateRequest.Title != nil && *updateRequest.Title != oldTitle
+		descriptionChanged := updateRequest.Description != nil && *updateRequest.Description != oldDescription
+		startDateChanged := updateRequest.StartDate != nil && !updateRequest.StartDate.Equal(oldStartDate)
+		statusChangedToDeleted := statusChanged && oldTask.Status == string(models.TaskStatusDeleted)
+		statusChangedToScheduled := statusChanged && oldTask.Status == string(models.TaskStatusScheduled)
+
+		// Publish delete_task if status changed to deleted
+		if statusChangedToDeleted {
+			if oldTask.MessengerRelatedUserID != nil {
+				taskQueueMessage := map[string]interface{}{
+					"task": "worker.delete_task",
+					"args": []interface{}{oldTask.ID, "telegram"},
+				}
+
+				err = s.producer.Publish(ctx, taskQueueMessage)
+				if err != nil {
+					log.Error().
+						Stack().
+						Err(err).
+						Int64("task.id", taskID).
+						Msg("failed to queue delete_task message for task with deleted status")
+					// Don't fail the operation, just log the error
+					// The database update was successful, queue update failure is non-critical
+				} else {
+					log.Debug().
+						Int64("task.id", taskID).
+						Msg("delete_task message queued successfully for deleted task")
+				}
+			}
+		} else if statusChangedToScheduled || startDateChanged || titleChanged || descriptionChanged {
+			// Publish schedule_task if status changed to scheduled or relevant fields changed
+			if oldTask.MessengerRelatedUserID != nil {
+				messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *oldTask.MessengerRelatedUserID)
+				if err != nil {
+					log.Error().
+						Stack().
+						Err(err).
+						Int64("task.id", taskID).
+						Msg("failed to get messenger related user for task queue update")
+					// Don't fail the operation, just log the error
+				} else {
+					taskQueueMessage := map[string]interface{}{
+						"task": "worker.schedule_task",
+						"args": []interface{}{"telegram", messengerRelatedUser.ChatID, oldTask.ID, oldTask.Title, oldTask.Description, oldTask.StartDate, oldTask.CronExpression, oldTask.RequiresConfirmation},
+					}
+
+					err = s.producer.Publish(ctx, taskQueueMessage)
+					if err != nil {
+						log.Error().
+							Stack().
+							Err(err).
+							Int64("task.id", taskID).
+							Msg("failed to queue schedule_task message for updated task")
+						// Don't fail the operation, just log the error
+						// The database update was successful, queue update failure is non-critical
+					} else {
+						log.Debug().
+							Int64("task.id", taskID).
+							Msg("schedule_task message queued successfully for updated task")
+					}
+				}
+			}
+		}
+	} else if statusChanged {
+		// For parent tasks, only publish if status changed to deleted
+		// Parent tasks don't execute directly, so we don't publish schedule_task for them
+		statusChangedToDeleted := oldTask.Status == string(models.TaskStatusDeleted)
+		if statusChangedToDeleted {
+			if oldTask.MessengerRelatedUserID != nil {
+				taskQueueMessage := map[string]interface{}{
+					"task": "worker.delete_task",
+					"args": []interface{}{oldTask.ID, "telegram"},
+				}
+
+				err = s.producer.Publish(ctx, taskQueueMessage)
+				if err != nil {
+					log.Error().
+						Stack().
+						Err(err).
+						Int64("task.id", taskID).
+						Msg("failed to queue delete_task message for parent task with deleted status")
+					// Don't fail the operation, just log the error
+					// The database update was successful, queue update failure is non-critical
+				} else {
+					log.Debug().
+						Int64("task.id", taskID).
+						Msg("delete_task message queued successfully for deleted parent task")
+				}
+			}
+		}
+	}
+
 	// Handle child tasks synchronization if this is a parent task
 	if isParentTask {
 		// Get all child tasks
