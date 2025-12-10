@@ -326,7 +326,18 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 	}
 	if requiresConfirmation != nil {
 		countBuilder = countBuilder.Where(squirrel.Eq{"requires_confirmation": *requiresConfirmation})
-		span.SetAttributes(attribute.Bool("filter.requires_confirmation", *requiresConfirmation))
+
+		switch *requiresConfirmation {
+		case true:
+			countBuilder = countBuilder.Where(squirrel.Or{
+				squirrel.Eq{"cron_expression": nil},
+				squirrel.NotEq{"parent_id": nil},
+			})
+			span.SetAttributes(attribute.String("filter.confirmation", "required"))
+		case false:
+			countBuilder = countBuilder.Where(squirrel.Eq{"requires_confirmation": false})
+			span.SetAttributes(attribute.String("filter.confirmation", "not_required"))
+		}
 	}
 
 	countQuery, countArgs, err := countBuilder.ToSql()
@@ -350,11 +361,7 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"user_id": userID}).
-		Where(squirrel.NotEq{"status": "done"}).
-		Where(squirrel.Or{
-			squirrel.Eq{"cron_expression": nil},
-			squirrel.NotEq{"parent_id": nil},
-		})
+		Where(squirrel.NotEq{"status": "done"})
 
 	// Apply filters
 	if startDateFrom != nil {
@@ -371,6 +378,13 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 	}
 	if requiresConfirmation != nil {
 		dataBuilder = dataBuilder.Where(squirrel.Eq{"requires_confirmation": *requiresConfirmation})
+
+		if *requiresConfirmation {
+			dataBuilder = dataBuilder.Where(squirrel.Or{
+				squirrel.Eq{"cron_expression": nil},
+				squirrel.NotEq{"parent_id": nil},
+			})
+		}
 	}
 
 	query, args, err := dataBuilder.
