@@ -1201,11 +1201,11 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 		}
 	}
 
-	// If this is a parent task (has cron_expression), mark all child tasks as done
+	// If this is a parent task (has cron_expression), sync changes to child tasks and mark them as done
 	if task.CronExpression != nil {
 		log.Debug().
 			Int64("task.id", taskID).
-			Msg("parent task marked as done, marking all child tasks as done")
+			Msg("parent task marked as done, syncing changes to child tasks and marking them as done")
 
 		// Get all child tasks
 		childTasks, err := s.taskRepo.GetChildTasksByParentID(ctx, taskID)
@@ -1226,7 +1226,7 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 					Msg("database connection not available for child tasks transaction")
 				// Don't fail the operation, just log the error
 			} else {
-				tx, err := childDB.BeginTxx(ctx, nil)
+				childTx, err := childDB.BeginTxx(ctx, nil)
 				if err != nil {
 					log.Error().
 						Stack().
@@ -1235,39 +1235,63 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 						Msg("failed to begin transaction for child tasks")
 					// Don't fail the operation, just log the error
 				} else {
-					var childRollback = true
+					var childCommitted = false
 					defer func() {
-						if childRollback {
-							if rollbackErr := tx.Rollback(); rollbackErr != nil {
-								log.Error().
-									Stack().
-									Err(rollbackErr).
-									Int64("task.id", taskID).
-									Msg("failed to rollback child tasks transaction")
+						if !childCommitted {
+							if rollbackErr := childTx.Rollback(); rollbackErr != nil {
+								// Only log error if transaction wasn't already committed/rolled back
+								if rollbackErr.Error() != "sql: transaction has already been committed or rolled back" {
+									log.Error().
+										Stack().
+										Err(rollbackErr).
+										Int64("task.id", taskID).
+										Msg("failed to rollback child tasks transaction")
+								}
 							}
 						}
 					}()
 
-					// Mark all child tasks as done and queue delete_task for each
+					// Sync parent task changes to child tasks and mark them as done
 					now := time.Now().UTC()
+					hasErrors := false
 					for _, childTask := range childTasks {
+						// Skip already done or deleted tasks
 						if childTask.Status == string(models.TaskStatusDone) {
-							continue // Skip already done tasks
+							continue
 						}
 
-						// Update child task status to done
+						// Sync changes from parent task to child task (for non-done/non-deleted tasks)
+						// Sync title if different
+						if childTask.Title != task.Title {
+							childTask.Title = task.Title
+						}
+
+						// Sync description if different
+						if childTask.Description != task.Description {
+							childTask.Description = task.Description
+						}
+
+						// Sync finish_date from parent task
+						if task.FinishDate != nil {
+							childTask.FinishDate = task.FinishDate
+						}
+
+						// Mark child task as done
 						childTask.Status = string(models.TaskStatusDone)
-						childTask.FinishDate = &now
-						err = s.taskRepo.UpdateTaskWithTx(ctx, tx, childTask)
+						if childTask.FinishDate == nil {
+							childTask.FinishDate = &now
+						}
+
+						// Update child task in transaction
+						err = s.taskRepo.UpdateTaskWithTx(ctx, childTx, childTask)
 						if err != nil {
 							log.Error().
 								Stack().
 								Err(err).
 								Int64("task.id", taskID).
 								Int64("child_task.id", childTask.ID).
-								Msg("failed to update child task status to done")
-							// Rollback and break
-							childRollback = true
+								Msg("failed to update child task with parent changes and mark as done")
+							hasErrors = true
 							break
 						}
 
@@ -1285,33 +1309,32 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 								Int64("task.id", taskID).
 								Int64("child_task.id", childTask.ID).
 								Msg("failed to queue delete_task message for child task, rolling back transaction")
-							// Rollback and break
-							childRollback = true
+							hasErrors = true
 							break
 						}
 					}
 
 					// Commit transaction if no errors
-					if childRollback {
+					if hasErrors {
 						// Transaction will be rolled back in defer
 						log.Error().
 							Int64("task.id", taskID).
-							Msg("failed to mark all child tasks as done, transaction rolled back")
+							Msg("failed to sync changes and mark all child tasks as done, transaction rolled back")
 					} else {
-						err = tx.Commit()
+						err = childTx.Commit()
 						if err != nil {
 							log.Error().
 								Stack().
 								Err(err).
 								Int64("task.id", taskID).
 								Msg("failed to commit child tasks transaction")
-							childRollback = true
+							// Transaction will be rolled back in defer
 						} else {
-							childRollback = false
+							childCommitted = true
 							log.Debug().
 								Int64("task.id", taskID).
 								Int("child_tasks.count", len(childTasks)).
-								Msg("all child tasks marked as done successfully")
+								Msg("parent task changes synced to child tasks and all child tasks marked as done successfully")
 							span.SetAttributes(attribute.Int("child_tasks.count", len(childTasks)))
 						}
 					}
