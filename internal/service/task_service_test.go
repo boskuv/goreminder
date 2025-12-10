@@ -41,10 +41,11 @@ func TestTaskService_CreateTask_Success(t *testing.T) {
 	service, taskRepo, userRepo, _, taskHistoryRepo, _ := setup(t)
 	ctx := context.Background()
 	task := &models.Task{
-		UserID:      1,
-		Title:       "Test Task",
-		Description: "Test Description",
-		Status:      "pending",
+		UserID:               1,
+		Title:                "Test Task",
+		Description:          "Test Description",
+		Status:               "pending",
+		RequiresConfirmation: false,
 	}
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
@@ -67,6 +68,7 @@ func TestTaskService_CreateTask_WithMessengerRelatedUser_Success(t *testing.T) {
 		Description:            "Test Description",
 		Status:                 "pending",
 		MessengerRelatedUserID: &messengerUserID,
+		RequiresConfirmation:   false,
 	}
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
@@ -83,7 +85,7 @@ func TestTaskService_CreateTask_WithMessengerRelatedUser_Success(t *testing.T) {
 func TestTaskService_CreateTask_UserNotFound(t *testing.T) {
 	service, _, userRepo, _, _, _ := setup(t)
 	ctx := context.Background()
-	task := &models.Task{UserID: 1}
+	task := &models.Task{UserID: 1, RequiresConfirmation: false}
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(nil, errs.ErrNotFound)
 
@@ -97,7 +99,7 @@ func TestTaskService_CreateTask_UserNotFound(t *testing.T) {
 func TestTaskService_CreateTask_UserRepositoryError(t *testing.T) {
 	service, _, userRepo, _, _, _ := setup(t)
 	ctx := context.Background()
-	task := &models.Task{UserID: 1}
+	task := &models.Task{UserID: 1, RequiresConfirmation: false}
 	expectedErr := errors.New("database error")
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(nil, expectedErr)
@@ -116,6 +118,7 @@ func TestTaskService_CreateTask_MessengerRelatedUserNotFound(t *testing.T) {
 	task := &models.Task{
 		UserID:                 1,
 		MessengerRelatedUserID: &messengerUserID,
+		RequiresConfirmation:   false,
 	}
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
@@ -135,6 +138,7 @@ func TestTaskService_CreateTask_MessengerRepositoryError(t *testing.T) {
 	task := &models.Task{
 		UserID:                 1,
 		MessengerRelatedUserID: &messengerUserID,
+		RequiresConfirmation:   false,
 	}
 	expectedErr := errors.New("messenger database error")
 
@@ -151,7 +155,7 @@ func TestTaskService_CreateTask_MessengerRepositoryError(t *testing.T) {
 func TestTaskService_CreateTask_TaskRepositoryError(t *testing.T) {
 	service, taskRepo, userRepo, _, _, _ := setup(t)
 	ctx := context.Background()
-	task := &models.Task{UserID: 1}
+	task := &models.Task{UserID: 1, RequiresConfirmation: false}
 	expectedErr := errors.New("task creation failed")
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
@@ -169,11 +173,12 @@ func TestTaskService_GetTask_Success(t *testing.T) {
 	service, taskRepo, _, _, _, _ := setup(t)
 	ctx := context.Background()
 	expectedTask := &models.Task{
-		ID:          1,
-		Title:       "Test Task",
-		Description: "Test Description",
-		UserID:      1,
-		Status:      "pending",
+		ID:                   1,
+		Title:                "Test Task",
+		Description:          "Test Description",
+		UserID:               1,
+		Status:               "pending",
+		RequiresConfirmation: false,
 	}
 
 	taskRepo.EXPECT().GetTaskByID(gomock.Any(), int64(1)).Return(expectedTask, nil)
@@ -217,15 +222,15 @@ func TestTaskService_GetUserTasks_Success(t *testing.T) {
 	pageSize := 50
 	orderBy := "created_at DESC"
 	expectedTasks := []*models.Task{
-		{ID: 1, UserID: userID, Title: "Task 1"},
-		{ID: 2, UserID: userID, Title: "Task 2"},
+		{ID: 1, UserID: userID, Title: "Task 1", RequiresConfirmation: false},
+		{ID: 2, UserID: userID, Title: "Task 2", RequiresConfirmation: false},
 	}
 	totalCount := 2
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
-	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy).Return(expectedTasks, totalCount, nil)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy, nil, nil, nil, nil, nil).Return(expectedTasks, totalCount, nil)
 
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTasks, tasks)
 	assert.Equal(t, totalCount, count)
@@ -241,9 +246,9 @@ func TestTaskService_GetUserTasks_EmptyList(t *testing.T) {
 	totalCount := 0
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
-	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy).Return([]*models.Task{}, totalCount, nil)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy, nil, nil, nil, nil, nil).Return([]*models.Task{}, totalCount, nil)
 
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil)
 	assert.NoError(t, err)
 	assert.Empty(t, tasks)
 	assert.Equal(t, totalCount, count)
@@ -259,7 +264,7 @@ func TestTaskService_GetUserTasks_UserNotFound(t *testing.T) {
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(nil, errs.ErrNotFound)
 
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil)
 	assert.Error(t, err)
 	assert.Nil(t, tasks)
 	assert.Equal(t, 0, count)
@@ -277,7 +282,7 @@ func TestTaskService_GetUserTasks_UserRepositoryError(t *testing.T) {
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(nil, expectedErr)
 
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil)
 	assert.Error(t, err)
 	assert.Nil(t, tasks)
 	assert.Equal(t, 0, count)
@@ -294,9 +299,9 @@ func TestTaskService_GetUserTasks_TaskRepositoryError(t *testing.T) {
 	expectedErr := errors.New("task database error")
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
-	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy).Return(nil, 0, expectedErr)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy, nil, nil, nil, nil, nil).Return(nil, 0, expectedErr)
 
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil)
 	assert.Error(t, err)
 	assert.Nil(t, tasks)
 	assert.Equal(t, 0, count)
@@ -309,16 +314,17 @@ func TestTaskService_UpdateTask_Success_AllFields(t *testing.T) {
 	ctx := context.Background()
 	taskID := int64(1)
 	originalTask := &models.Task{
-		ID:          taskID,
-		Title:       "Old Title",
-		Description: "Old Description",
-		Status:      "pending",
-		StartDate:   time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
+		ID:                   taskID,
+		Title:                "Old Title",
+		Description:          "Old Description",
+		Status:               "pending",
+		StartDate:            time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
+		RequiresConfirmation: false,
 	}
 	updateReq := &models.TaskUpdateRequest{
 		Title:       ptrString("New Title"),
 		Description: ptrString("New Description"),
-		Status:      ptrString("completed"),
+		Status:      ptrString("done"),
 		StartDate:   ptrTime(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)),
 	}
 
@@ -330,7 +336,7 @@ func TestTaskService_UpdateTask_Success_AllFields(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "New Title", updatedTask.Title)
 	assert.Equal(t, "New Description", updatedTask.Description)
-	assert.Equal(t, "completed", updatedTask.Status)
+	assert.Equal(t, "done", updatedTask.Status)
 	assert.Equal(t, time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), updatedTask.StartDate)
 }
 
@@ -339,11 +345,12 @@ func TestTaskService_UpdateTask_Success_PartialUpdate(t *testing.T) {
 	ctx := context.Background()
 	taskID := int64(1)
 	originalTask := &models.Task{
-		ID:          taskID,
-		Title:       "Original Title",
-		Description: "Original Description",
-		Status:      "pending",
-		StartDate:   time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
+		ID:                   taskID,
+		Title:                "Original Title",
+		Description:          "Original Description",
+		Status:               "pending",
+		StartDate:            time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
+		RequiresConfirmation: false,
 	}
 	updateReq := &models.TaskUpdateRequest{
 		Title: ptrString("Updated Title"),
@@ -395,7 +402,7 @@ func TestTaskService_UpdateTask_UpdateError(t *testing.T) {
 	service, taskRepo, _, _, _, _ := setup(t)
 	ctx := context.Background()
 	taskID := int64(1)
-	originalTask := &models.Task{ID: taskID, Title: "Original Title"}
+	originalTask := &models.Task{ID: taskID, Title: "Original Title", RequiresConfirmation: false}
 	updateReq := &models.TaskUpdateRequest{Title: ptrString("New Title")}
 	expectedErr := errors.New("update failed")
 
@@ -413,9 +420,10 @@ func TestTaskService_DeleteTask_Success(t *testing.T) {
 	service, taskRepo, _, _, taskHistoryRepo, _ := setup(t)
 	ctx := context.Background()
 	taskID := int64(1)
-	task := &models.Task{ID: taskID, Title: "Task to Delete"}
+	task := &models.Task{ID: taskID, Title: "Task to Delete", RequiresConfirmation: false}
 
-	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(task, nil)
+	taskRepo.EXPECT().GetTaskByIDWithoutStatusFilter(gomock.Any(), taskID).Return(task, nil)
+	taskRepo.EXPECT().GetDB().Return(nil).AnyTimes() // For transaction handling
 	taskRepo.EXPECT().DeleteTask(gomock.Any(), taskID).Return(nil)
 	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
 
@@ -428,7 +436,7 @@ func TestTaskService_DeleteTask_TaskNotFound(t *testing.T) {
 	ctx := context.Background()
 	taskID := int64(1)
 
-	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(nil, errs.ErrNotFound)
+	taskRepo.EXPECT().GetTaskByIDWithoutStatusFilter(gomock.Any(), taskID).Return(nil, errs.ErrNotFound)
 
 	err := service.DeleteTask(ctx, taskID)
 	assert.Error(t, err)
@@ -441,7 +449,7 @@ func TestTaskService_DeleteTask_GetTaskError(t *testing.T) {
 	taskID := int64(1)
 	expectedErr := errors.New("database error")
 
-	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(nil, expectedErr)
+	taskRepo.EXPECT().GetTaskByIDWithoutStatusFilter(gomock.Any(), taskID).Return(nil, expectedErr)
 
 	err := service.DeleteTask(ctx, taskID)
 	assert.Error(t, err)
@@ -452,10 +460,11 @@ func TestTaskService_DeleteTask_DeleteError(t *testing.T) {
 	service, taskRepo, _, _, _, _ := setup(t)
 	ctx := context.Background()
 	taskID := int64(1)
-	task := &models.Task{ID: taskID, Title: "Task to Delete"}
+	task := &models.Task{ID: taskID, Title: "Task to Delete", RequiresConfirmation: false}
 	expectedErr := errors.New("delete failed")
 
-	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(task, nil)
+	taskRepo.EXPECT().GetTaskByIDWithoutStatusFilter(gomock.Any(), taskID).Return(task, nil)
+	taskRepo.EXPECT().GetDB().Return(nil).AnyTimes() // For transaction handling
 	taskRepo.EXPECT().DeleteTask(gomock.Any(), taskID).Return(expectedErr)
 
 	err := service.DeleteTask(ctx, taskID)
@@ -492,6 +501,7 @@ func TestTaskService_CreateTask_NilMessengerRelatedUserID(t *testing.T) {
 		UserID:                 1,
 		Title:                  "Test Task",
 		MessengerRelatedUserID: nil, // Should not call messenger repository
+		RequiresConfirmation:   false,
 	}
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
@@ -508,7 +518,7 @@ func TestTaskService_UpdateTask_NilUpdateRequest(t *testing.T) {
 	service, taskRepo, _, _, _, _ := setup(t)
 	ctx := context.Background()
 	taskID := int64(1)
-	originalTask := &models.Task{ID: taskID, Title: "Original Title"}
+	originalTask := &models.Task{ID: taskID, Title: "Original Title", RequiresConfirmation: false}
 
 	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(originalTask, nil)
 	taskRepo.EXPECT().UpdateTask(gomock.Any(), originalTask).Return(nil)
@@ -523,13 +533,14 @@ func TestTaskService_UpdateTask_AllNilFields(t *testing.T) {
 	ctx := context.Background()
 	taskID := int64(1)
 	originalTask := &models.Task{
-		ID:             taskID,
-		Title:          "Original Title",
-		Description:    "Original Description",
-		Status:         "pending",
-		StartDate:      time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
-		FinishDate:     ptrTime(time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)),
-		CronExpression: ptrString("0 0 0 0 0"),
+		ID:                   taskID,
+		Title:                "Original Title",
+		Description:          "Original Description",
+		Status:               "pending",
+		StartDate:            time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
+		FinishDate:           ptrTime(time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)),
+		CronExpression:       ptrString("0 0 0 0 0"),
+		RequiresConfirmation: false,
 	}
 	updateReq := &models.TaskUpdateRequest{
 		Title:          nil,
@@ -541,6 +552,8 @@ func TestTaskService_UpdateTask_AllNilFields(t *testing.T) {
 	}
 
 	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(originalTask, nil)
+	taskRepo.EXPECT().GetDB().Return(nil).AnyTimes() // For transaction handling (parent task)
+	taskRepo.EXPECT().GetChildTasksByParentID(gomock.Any(), taskID).Return([]*models.Task{}, nil)
 	taskRepo.EXPECT().UpdateTask(gomock.Any(), originalTask).Return(nil)
 
 	task, err := service.UpdateTask(ctx, taskID, updateReq)
