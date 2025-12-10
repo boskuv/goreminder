@@ -152,13 +152,18 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 }
 
 // @Summary Get all user's tasks by userID
-// @Description Retrieves all tasks by userID with pagination and ordering
+// @Description Retrieves all tasks by userID with pagination, ordering, and filtering
 // @Tags Tasks
 // @Produce json
 // @Param user_id path int true "User ID"
 // @Param page query int false "Page number (default: 1)" default(1)
 // @Param page_size query int false "Page size (default: 50)" default(50)
 // @Param order_by query string false "Order by field (default: created_at DESC)" default(created_at DESC)
+// @Param start_date_from query string false "Filter by start_date from (RFC3339 format, inclusive)"
+// @Param start_date_to query string false "Filter by start_date to (RFC3339 format, inclusive)"
+// @Param created_at_from query string false "Filter by created_at from (RFC3339 format, inclusive)"
+// @Param created_at_to query string false "Filter by created_at to (RFC3339 format, inclusive)"
+// @Param requires_confirmation query bool false "Filter by requires_confirmation (true/false)"
 // @Success 200 {object} dto.PaginatedTasksResponse "Paginated list of tasks"
 // @Failure 400 {object} map[string]string "Bad request"
 // @Failure 422 {object} map[string]string "Unprocessable entity"
@@ -202,6 +207,42 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		orderBy = "created_at DESC"
 	}
 
+	// Optional filters
+	startDateFrom, err := validation.ValidateOptionalTimeQuery(c, "start_date_from")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid start_date_from query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	startDateTo, err := validation.ValidateOptionalTimeQuery(c, "start_date_to")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid start_date_to query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	createdAtFrom, err := validation.ValidateOptionalTimeQuery(c, "created_at_from")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid created_at_from query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	createdAtTo, err := validation.ValidateOptionalTimeQuery(c, "created_at_to")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid created_at_to query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	requiresConfirmation, err := validation.ValidateOptionalBoolQuery(c, "requires_confirmation")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid requires_confirmation query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
 	log.Info().
 		Int64("user.id", userID).
 		Int64("page", page).
@@ -209,7 +250,7 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		Str("order_by", orderBy).
 		Msg("getting user tasks")
 
-	tasks, totalCount, err := h.taskService.GetUserTasks(ctx, userID, int(page), int(pageSize), orderBy)
+	tasks, totalCount, err := h.taskService.GetUserTasks(ctx, userID, int(page), int(pageSize), orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation)
 	if err != nil {
 		log.Error().
 			Stack().

@@ -206,3 +206,18 @@ func ValidateOptionalTimeQuery(c *gin.Context, paramName string) (*time.Time, er
 
 	return &parsedTime, nil
 }
+
+// ValidateOptionalBoolQuery validates an optional query parameter as bool
+func ValidateOptionalBoolQuery(c *gin.Context, paramName string) (*bool, error) {
+	paramValue := c.Query(paramName)
+	if paramValue == "" {
+		return nil, nil
+	}
+
+	value, err := strconv.ParseBool(paramValue)
+	if err != nil {
+		return nil, fmt.Errorf("query parameter '%s' must be a valid boolean (true/false): %w", paramName, err)
+	}
+
+	return &value, nil
+}

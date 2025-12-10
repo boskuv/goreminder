@@ -236,7 +236,7 @@ func (s *TaskService) GetTask(ctx context.Context, taskID int64) (*models.Task, 
 }
 
 // GetUserTasks implements BL of retrieving existing tasks by user id with pagination and ordering
-func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, pageSize int, orderBy string) ([]*models.Task, int, error) {
+func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool) ([]*models.Task, int, error) {
 	ctx, span := s.tracer.Start(ctx, "task_service.GetUserTasks",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
@@ -269,7 +269,7 @@ func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, page
 		return nil, 0, errors.WithStack(err)
 	}
 
-	tasks, totalCount, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, page, pageSize, orderBy)
+	tasks, totalCount, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation)
 	if err != nil {
 		log.Debug().
 			Err(err).
