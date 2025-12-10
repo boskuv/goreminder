@@ -1334,7 +1334,7 @@ const docTemplate = `{
         },
         "/api/v1/users/{user_id}/tasks": {
             "get": {
-                "description": "Retrieves all tasks by userID with pagination and ordering",
+                "description": "Retrieves all tasks by userID with pagination, ordering, and filtering",
                 "produces": [
                     "application/json"
                 ],
@@ -1369,6 +1369,36 @@ const docTemplate = `{
                         "default": "created_at DESC",
                         "description": "Order by field (default: created_at DESC)",
                         "name": "order_by",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by start_date from (RFC3339 format, inclusive)",
+                        "name": "start_date_from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by start_date to (RFC3339 format, inclusive)",
+                        "name": "start_date_to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by created_at from (RFC3339 format, inclusive)",
+                        "name": "created_at_from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by created_at to (RFC3339 format, inclusive)",
+                        "name": "created_at_to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter by requires_confirmation (true/false)",
+                        "name": "requires_confirmation",
                         "in": "query"
                     }
                 ],

@@ -1243,7 +1243,7 @@ paths:
       - Users
   /api/v1/users/{user_id}/tasks:
     get:
-      description: Retrieves all tasks by userID with pagination and ordering
+      description: Retrieves all tasks by userID with pagination, ordering, and filtering
       parameters:
       - description: User ID
         in: path
@@ -1265,6 +1265,26 @@ paths:
         in: query
         name: order_by
         type: string
+      - description: Filter by start_date from (RFC3339 format, inclusive)
+        in: query
+        name: start_date_from
+        type: string
+      - description: Filter by start_date to (RFC3339 format, inclusive)
+        in: query
+        name: start_date_to
+        type: string
+      - description: Filter by created_at from (RFC3339 format, inclusive)
+        in: query
+        name: created_at_from
+        type: string
+      - description: Filter by created_at to (RFC3339 format, inclusive)
+        in: query
+        name: created_at_to
+        type: string
+      - description: Filter by requires_confirmation (true/false)
+        in: query
+        name: requires_confirmation
+        type: boolean
       produces:
       - application/json
       responses:
