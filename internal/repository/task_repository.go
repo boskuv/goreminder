@@ -33,6 +33,7 @@ type TaskRepository interface {
 	DeleteChildTasks(ctx context.Context, parentID int64) error
 	DeleteChildTasksWithTx(ctx context.Context, tx *sqlx.Tx, parentID int64) error
 	GetTasksNeedingRescheduling(ctx context.Context) ([]*models.Task, error)
+	GetTasksWithCronNeedingRescheduling(ctx context.Context) ([]*models.Task, error)
 	GetDB() *sqlx.DB
 	GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64) ([]*models.Task, int, error)
 }
@@ -806,6 +807,52 @@ func (r *taskRepository) GetTasksNeedingRescheduling(ctx context.Context) ([]*mo
 		Msg("tasks needing rescheduling retrieved successfully from database")
 	span.SetAttributes(attribute.Int("tasks.count", len(tasks)))
 	span.SetStatus(codes.Ok, "tasks needing rescheduling retrieved successfully")
+	return tasks, nil
+}
+
+// GetTasksWithCronNeedingRescheduling retrieves tasks that need to be rescheduled:
+// - have cron expression (cron_expression IS NOT NULL)
+// - requires_confirmation = false
+// - status is 'scheduled'
+// - start_date has passed (start_date < NOW())
+func (r *taskRepository) GetTasksWithCronNeedingRescheduling(ctx context.Context) ([]*models.Task, error) {
+	ctx, span := r.tracer.Start(ctx, "task_repository.GetTasksWithCronNeedingRescheduling")
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Msg("getting tasks with cron needing rescheduling from database")
+
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "status", "created_at", "requires_confirmation").
+		From("tasks").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"status": string(models.TaskStatusScheduled)}).
+		Where(squirrel.NotEq{"cron_expression": nil}).
+		Where(squirrel.Eq{"requires_confirmation": false}).
+		Where(squirrel.Lt{"start_date": time.Now().UTC()}).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to build query while getting tasks with cron needing rescheduling")
+	}
+
+	var tasks []*models.Task
+	err = r.db.SelectContext(ctx, &tasks, query, args...)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Msg("failed to get tasks with cron needing rescheduling from database")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to get tasks with cron needing rescheduling")
+	}
+
+	log.Debug().
+		Int("tasks.count", len(tasks)).
+		Msg("tasks with cron needing rescheduling retrieved successfully from database")
+	span.SetAttributes(attribute.Int("tasks.count", len(tasks)))
+	span.SetStatus(codes.Ok, "tasks with cron needing rescheduling retrieved successfully")
 	return tasks, nil
 }
 

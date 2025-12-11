@@ -235,6 +235,21 @@ func (mr *MockTaskRepositoryMockRecorder) GetTasksNeedingRescheduling(ctx any) *
         return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTasksNeedingRescheduling", reflect.TypeOf((*MockTaskRepository)(nil).GetTasksNeedingRescheduling), ctx)
 }
 
+// GetTasksWithCronNeedingRescheduling mocks base method.
+func (m *MockTaskRepository) GetTasksWithCronNeedingRescheduling(ctx context.Context) ([]*models.Task, error) {
+        m.ctrl.T.Helper()
+        ret := m.ctrl.Call(m, "GetTasksWithCronNeedingRescheduling", ctx)
+        ret0, _ := ret[0].([]*models.Task)
+        ret1, _ := ret[1].(error)
+        return ret0, ret1
+}
+
+// GetTasksWithCronNeedingRescheduling indicates an expected call of GetTasksWithCronNeedingRescheduling.
+func (mr *MockTaskRepositoryMockRecorder) GetTasksWithCronNeedingRescheduling(ctx any) *gomock.Call {
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTasksWithCronNeedingRescheduling", reflect.TypeOf((*MockTaskRepository)(nil).GetTasksWithCronNeedingRescheduling), ctx)
+}
+
 // UpdateTask mocks base method.
 func (m *MockTaskRepository) UpdateTask(ctx context.Context, task *models.Task) error {
         m.ctrl.T.Helper()

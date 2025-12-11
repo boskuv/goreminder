@@ -85,10 +85,48 @@ func (s *TaskScheduler) RunScheduledRescheduling(ctx context.Context) error {
 		return errors.WithStack(err)
 	}
 
+	// Get tasks with cron expression and requires_confirmation = false that need rescheduling
+	cronTasks, err := s.taskRepo.GetTasksWithCronNeedingRescheduling(ctx)
+	if err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Msg("failed to get tasks with cron needing rescheduling")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.WithStack(err)
+	}
+
+	if len(cronTasks) > 0 {
+		log.Info().
+			Int("cron_tasks.count", len(cronTasks)).
+			Msg("found cron tasks needing rescheduling")
+
+		// Reschedule cron tasks (update start_date only, no queue publishing)
+		if err := s.taskSvc.RescheduleCronTasks(ctx, cronTasks); err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int("cron_tasks.count", len(cronTasks)).
+				Msg("failed to reschedule cron tasks")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return errors.WithStack(err)
+		}
+
+		log.Info().
+			Int("cron_tasks.count", len(cronTasks)).
+			Msg("cron tasks rescheduling completed successfully")
+	}
+
 	log.Info().
 		Int("tasks.count", len(tasks)).
+		Int("cron_tasks.count", len(cronTasks)).
 		Msg("scheduled task rescheduling check completed successfully")
-	span.SetAttributes(attribute.Int("tasks.count", len(tasks)))
+	span.SetAttributes(
+		attribute.Int("tasks.count", len(tasks)),
+		attribute.Int("cron_tasks.count", len(cronTasks)),
+	)
 	span.SetStatus(codes.Ok, "scheduled rescheduling completed successfully")
 	return nil
 }

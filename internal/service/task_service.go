@@ -1882,6 +1882,79 @@ func (s *TaskService) RescheduleTasks(ctx context.Context, tasks []*models.Task)
 	return nil
 }
 
+// RescheduleCronTasks updates start_date for tasks with cron expression and requires_confirmation = false
+// that have passed their start_date. It calculates the next execution time from cron expression
+// and updates only the start_date field without publishing to queue.
+func (s *TaskService) RescheduleCronTasks(ctx context.Context, tasks []*models.Task) error {
+	ctx, span := s.tracer.Start(ctx, "task_service.RescheduleCronTasks",
+		trace.WithAttributes(
+			attribute.Int("tasks.count", len(tasks)),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, s.logger)
+	log.Info().
+		Int("tasks.count", len(tasks)).
+		Msg("rescheduling cron tasks")
+
+	var updatedCount int
+	var failedCount int
+
+	for _, task := range tasks {
+		if task.CronExpression == nil {
+			log.Warn().
+				Int64("task.id", task.ID).
+				Msg("task has no cron expression, skipping")
+			continue
+		}
+
+		// Calculate next execution time from cron expression
+		// Use current time as base to get the next occurrence
+		// Since we filter by start_date < NOW(), all tasks have passed their start_date
+		now := time.Now().UTC()
+		nextTime := cronexpr.MustParse(*task.CronExpression).Next(now)
+
+		log.Info().
+			Int64("task.id", task.ID).
+			Time("old_start_date", task.StartDate).
+			Time("new_start_date", nextTime).
+			Str("cron_expression", *task.CronExpression).
+			Msg("updating start_date for cron task")
+
+		// Update only the start_date field
+		task.StartDate = nextTime
+
+		// Update the task in the repository
+		err := s.taskRepo.UpdateTask(ctx, task)
+		if err != nil {
+			failedCount++
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", task.ID).
+				Msg("failed to update cron task start_date")
+		} else {
+			updatedCount++
+			log.Info().
+				Int64("task.id", task.ID).
+				Time("new_start_date", nextTime).
+				Msg("cron task start_date updated successfully")
+		}
+	}
+
+	log.Info().
+		Int("tasks.count", len(tasks)).
+		Int("updated.count", updatedCount).
+		Int("failed.count", failedCount).
+		Msg("cron tasks rescheduling completed")
+	span.SetAttributes(
+		attribute.Int("updated.count", updatedCount),
+		attribute.Int("failed.count", failedCount),
+	)
+	span.SetStatus(codes.Ok, "cron tasks rescheduling completed")
+	return nil
+}
+
 // GetAllTasks implements BL of retrieving all tasks with pagination, ordering, and filtering
 func (s *TaskService) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64) ([]*models.Task, int, error) {
 	ctx, span := s.tracer.Start(ctx, "task_service.GetAllTasks",
