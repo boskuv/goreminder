@@ -138,6 +138,7 @@ func main() {
 	userRepo := repository.NewUserRepository(db, log)
 	messengerRepo := repository.NewMessengerRepository(db, log)
 	taskHistoryRepo := repository.NewTaskHistoryRepository(db, log)
+	backlogRepo := repository.NewBacklogRepository(db, log)
 
 	// producer init
 	producerConfig := queue.NewProducerConfig(
@@ -167,6 +168,7 @@ func main() {
 	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer, log)
 	userService := service.NewUserService(userRepo, taskRepo, messengerRepo, producer, log)
 	messengerService := service.NewMessengerService(messengerRepo, userRepo, log)
+	backlogService := service.NewBacklogService(backlogRepo, userRepo, messengerRepo, log)
 
 	// setup scheduler
 	taskScheduler := service.NewTaskScheduler(taskRepo, taskService, log)
@@ -175,6 +177,7 @@ func main() {
 	taskHandler := handlers.NewTaskHandler(taskService, log)
 	userHandler := handlers.NewUserHandler(userService, log)
 	messengerHandler := handlers.NewMessengerHandler(messengerService, log)
+	backlogHandler := handlers.NewBacklogHandler(backlogService, log)
 
 	// setup swagger info
 	docs.SwaggerInfo.Title = "Task Management API"
@@ -243,7 +246,7 @@ func main() {
 	}
 
 	// register application routes
-	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler)
+	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler, backlogHandler)
 	routes.RegisterSystemRoutes(router, docs.SwaggerInfo.Version)
 
 	log.Info().Msg("graceful startup")
