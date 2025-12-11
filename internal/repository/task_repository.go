@@ -300,11 +300,7 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 	countBuilder := r.sb.Select("COUNT(*)").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
-		Where(squirrel.Eq{"user_id": userID}).
-		Where(squirrel.Or{
-			squirrel.Eq{"cron_expression": nil},
-			squirrel.NotEq{"parent_id": nil},
-		})
+		Where(squirrel.Eq{"user_id": userID})
 
 	// Apply filters
 	if startDateFrom != nil {
