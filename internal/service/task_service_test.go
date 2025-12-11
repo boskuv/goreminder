@@ -573,7 +573,7 @@ func TestTaskService_GetTaskHistory_Success(t *testing.T) {
 			UserID:    1,
 			Action:    string(models.TaskHistoryActionCreated),
 			NewValue:  map[string]interface{}{"title": "Test Task"},
-			CreatedAt: time.Now(),
+			CreatedAt: time.Now().UTC(),
 		},
 	}
 
@@ -612,7 +612,7 @@ func TestTaskService_GetUserTaskHistory_Success(t *testing.T) {
 			UserID:    userID,
 			Action:    string(models.TaskHistoryActionCreated),
 			NewValue:  map[string]interface{}{"title": "Test Task"},
-			CreatedAt: time.Now(),
+			CreatedAt: time.Now().UTC(),
 		},
 	}
 

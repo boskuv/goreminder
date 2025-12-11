@@ -633,20 +633,20 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					if oldTask.CronExpression != nil {
 						// Calculate next execution time from new cron expression
 						// Use current time or the new start_date as base
-						// If startDate has already passed, use time.Now() instead
-						baseTime := time.Now()
+						// If startDate has already passed, use time.Now().UTC() instead
+						baseTime := time.Now().UTC()
 						if startDateChanged {
 							// Check if the new startDate has already passed
-							if oldTask.StartDate.After(time.Now()) {
+							if oldTask.StartDate.After(time.Now().UTC()) {
 								baseTime = oldTask.StartDate
 							} else {
 								// startDate has already passed, use current time
-								baseTime = time.Now()
+								baseTime = time.Now().UTC()
 							}
 						} else if !childTask.StartDate.IsZero() {
 							// Check if childTask.StartDate has already passed, use current time
-							if childTask.StartDate.Before(time.Now()) {
-								baseTime = time.Now()
+							if childTask.StartDate.Before(time.Now().UTC()) {
+								baseTime = time.Now().UTC()
 							}
 						}
 						nextTime := cronexpr.MustParse(*oldTask.CronExpression).Next(baseTime)
@@ -755,7 +755,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			Msg("requires_confirmation added, creating child tasks")
 
 		// Calculate next execution time from cron expression
-		nextTime := cronexpr.MustParse(*oldTask.CronExpression).Next(time.Now())
+		nextTime := cronexpr.MustParse(*oldTask.CronExpression).Next(time.Now().UTC())
 
 		// Create child task
 		childTask := &models.Task{
@@ -1308,7 +1308,7 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 				Msg("creating next child task for parent with cron expression")
 
 			// Calculate next execution time from cron expression
-			nextTime := cronexpr.MustParse(*parentTask.CronExpression).Next(time.Now())
+			nextTime := cronexpr.MustParse(*parentTask.CronExpression).Next(time.Now().UTC())
 
 			// Create child task
 			childTask := &models.Task{
