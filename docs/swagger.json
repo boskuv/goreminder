@@ -4,6 +4,361 @@
         "contact": {}
     },
     "paths": {
+        "/api/v1/backlogs": {
+            "get": {
+                "description": "Retrieves all backlog items with pagination, ordering, and filtering",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Backlogs"
+                ],
+                "summary": "Get all backlog items",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "created_at DESC",
+                        "description": "Order by",
+                        "name": "order_by",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by user ID",
+                        "name": "user_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated backlogs",
+                        "schema": {
+                            "$ref": "#/definitions/dto.PaginatedBacklogsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a new backlog item and associates it with a user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Backlogs"
+                ],
+                "summary": "Create a new backlog item",
+                "parameters": [
+                    {
+                        "description": "Backlog to create",
+                        "name": "backlog",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateBacklogRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created backlog ID",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "integer"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable entity",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/backlogs/batch": {
+            "post": {
+                "description": "Creates multiple backlog items from a batch string separated by separator",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Backlogs"
+                ],
+                "summary": "Create multiple backlog items from batch",
+                "parameters": [
+                    {
+                        "description": "Batch backlog items to create",
+                        "name": "backlog",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateBacklogsBatchRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created backlog IDs",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable entity",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/backlogs/{id}": {
+            "get": {
+                "description": "Retrieves a backlog item by its ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Backlogs"
+                ],
+                "summary": "Get backlog by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Backlog ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Backlog item",
+                        "schema": {
+                            "$ref": "#/definitions/dto.BacklogResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Updates a backlog item by its ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Backlogs"
+                ],
+                "summary": "Update backlog item",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Backlog ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Backlog update data",
+                        "name": "backlog",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateBacklogRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated backlog item",
+                        "schema": {
+                            "$ref": "#/definitions/dto.BacklogResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable entity",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Deletes a backlog item by its ID (soft delete)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Backlogs"
+                ],
+                "summary": "Delete backlog item",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Backlog ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/messengerRelatedUsers": {
             "get": {
                 "description": "Retrieves a messenger-related user by chatID, messengerUserID, userID and messengerID",
@@ -1562,6 +1917,93 @@
         }
     },
     "definitions": {
+        "dto.BacklogResponse": {
+            "type": "object",
+            "properties": {
+                "completed_at": {
+                    "type": "string",
+                    "example": "2024-01-15T10:00:00Z"
+                },
+                "created_at": {
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Add user authentication"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "messenger_related_user_id": {
+                    "type": "integer",
+                    "example": 123
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Implement new feature"
+                },
+                "updated_at": {
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "dto.CreateBacklogRequest": {
+            "type": "object",
+            "required": [
+                "title",
+                "user_id"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "example": "Add user authentication"
+                },
+                "messenger_related_user_id": {
+                    "type": "integer",
+                    "example": 123
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Implement new feature"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "dto.CreateBacklogsBatchRequest": {
+            "type": "object",
+            "required": [
+                "items",
+                "user_id"
+            ],
+            "properties": {
+                "items": {
+                    "type": "string",
+                    "example": "Item 1\nItem 2\nItem 3"
+                },
+                "messenger_related_user_id": {
+                    "type": "integer",
+                    "example": 123
+                },
+                "separator": {
+                    "type": "string",
+                    "example": "\n"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
         "dto.CreateMessengerRelatedUserRequest": {
             "type": "object",
             "required": [
@@ -1736,6 +2178,20 @@
                 "name": {
                     "type": "string",
                     "example": "telegram"
+                }
+            }
+        },
+        "dto.PaginatedBacklogsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.BacklogResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/dto.PaginationResponse"
                 }
             }
         },
@@ -1940,6 +2396,23 @@
                 "user_id": {
                     "type": "integer",
                     "example": 1
+                }
+            }
+        },
+        "dto.UpdateBacklogRequest": {
+            "type": "object",
+            "properties": {
+                "completed_at": {
+                    "type": "string",
+                    "example": "2024-01-15T10:00:00Z"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Updated backlog description"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Updated backlog title"
                 }
             }
         },

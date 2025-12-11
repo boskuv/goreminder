@@ -1,4 +1,71 @@
 definitions:
+  dto.BacklogResponse:
+    properties:
+      completed_at:
+        example: "2024-01-15T10:00:00Z"
+        type: string
+      created_at:
+        example: "2024-01-10T08:00:00Z"
+        type: string
+      description:
+        example: Add user authentication
+        type: string
+      id:
+        example: 1
+        type: integer
+      messenger_related_user_id:
+        example: 123
+        type: integer
+      title:
+        example: Implement new feature
+        type: string
+      updated_at:
+        example: "2024-01-10T08:00:00Z"
+        type: string
+      user_id:
+        example: 1
+        type: integer
+    type: object
+  dto.CreateBacklogRequest:
+    properties:
+      description:
+        example: Add user authentication
+        type: string
+      messenger_related_user_id:
+        example: 123
+        type: integer
+      title:
+        example: Implement new feature
+        type: string
+      user_id:
+        example: 1
+        type: integer
+    required:
+    - title
+    - user_id
+    type: object
+  dto.CreateBacklogsBatchRequest:
+    properties:
+      items:
+        example: |-
+          Item 1
+          Item 2
+          Item 3
+        type: string
+      messenger_related_user_id:
+        example: 123
+        type: integer
+      separator:
+        example: |2+
+
+        type: string
+      user_id:
+        example: 1
+        type: integer
+    required:
+    - items
+    - user_id
+    type: object
   dto.CreateMessengerRelatedUserRequest:
     properties:
       chat_id:
@@ -128,6 +195,15 @@ definitions:
       name:
         example: telegram
         type: string
+    type: object
+  dto.PaginatedBacklogsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/dto.BacklogResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/dto.PaginationResponse'
     type: object
   dto.PaginatedMessengerRelatedUsersResponse:
     properties:
@@ -275,6 +351,18 @@ definitions:
         example: 1
         type: integer
     type: object
+  dto.UpdateBacklogRequest:
+    properties:
+      completed_at:
+        example: "2024-01-15T10:00:00Z"
+        type: string
+      description:
+        example: Updated backlog description
+        type: string
+      title:
+        example: Updated backlog title
+        type: string
+    type: object
   dto.UpdateTaskRequest:
     properties:
       cron_expression:
@@ -361,6 +449,243 @@ definitions:
 info:
   contact: {}
 paths:
+  /api/v1/backlogs:
+    get:
+      description: Retrieves all backlog items with pagination, ordering, and filtering
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - default: created_at DESC
+        description: Order by
+        in: query
+        name: order_by
+        type: string
+      - description: Filter by user ID
+        in: query
+        name: user_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Paginated backlogs
+          schema:
+            $ref: '#/definitions/dto.PaginatedBacklogsResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get all backlog items
+      tags:
+      - Backlogs
+    post:
+      consumes:
+      - application/json
+      description: Creates a new backlog item and associates it with a user
+      parameters:
+      - description: Backlog to create
+        in: body
+        name: backlog
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateBacklogRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created backlog ID
+          schema:
+            additionalProperties:
+              type: integer
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a new backlog item
+      tags:
+      - Backlogs
+  /api/v1/backlogs/{id}:
+    delete:
+      description: Deletes a backlog item by its ID (soft delete)
+      parameters:
+      - description: Backlog ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete backlog item
+      tags:
+      - Backlogs
+    get:
+      description: Retrieves a backlog item by its ID
+      parameters:
+      - description: Backlog ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Backlog item
+          schema:
+            $ref: '#/definitions/dto.BacklogResponse'
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get backlog by ID
+      tags:
+      - Backlogs
+    put:
+      consumes:
+      - application/json
+      description: Updates a backlog item by its ID
+      parameters:
+      - description: Backlog ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Backlog update data
+        in: body
+        name: backlog
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateBacklogRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Updated backlog item
+          schema:
+            $ref: '#/definitions/dto.BacklogResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update backlog item
+      tags:
+      - Backlogs
+  /api/v1/backlogs/batch:
+    post:
+      consumes:
+      - application/json
+      description: Creates multiple backlog items from a batch string separated by
+        separator
+      parameters:
+      - description: Batch backlog items to create
+        in: body
+        name: backlog
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateBacklogsBatchRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created backlog IDs
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create multiple backlog items from batch
+      tags:
+      - Backlogs
   /api/v1/messengerRelatedUsers:
     get:
       description: Retrieves a messenger-related user by chatID, messengerUserID,
