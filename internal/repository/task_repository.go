@@ -231,7 +231,6 @@ func (r *taskRepository) GetTasksByUserID(ctx context.Context, userID int64) ([]
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"user_id": userID}).
-		Where(squirrel.NotEq{"status": "done"}).
 		Where(squirrel.Or{
 			squirrel.Eq{"cron_expression": nil},
 			squirrel.NotEq{"parent_id": nil},
@@ -301,7 +300,6 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"user_id": userID}).
-		Where(squirrel.NotEq{"status": "done"}).
 		Where(squirrel.Or{
 			squirrel.Eq{"cron_expression": nil},
 			squirrel.NotEq{"parent_id": nil},
@@ -360,8 +358,7 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 	dataBuilder := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "status", "created_at", "requires_confirmation").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
-		Where(squirrel.Eq{"user_id": userID}).
-		Where(squirrel.NotEq{"status": "done"})
+		Where(squirrel.Eq{"user_id": userID})
 
 	// Apply filters
 	if startDateFrom != nil {
