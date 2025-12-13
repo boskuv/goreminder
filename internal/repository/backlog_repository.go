@@ -25,6 +25,7 @@ type BacklogRepository interface {
 	GetAllBacklogs(ctx context.Context, page, pageSize int, orderBy string, userID *int64) ([]*models.Backlog, int, error)
 	UpdateBacklog(ctx context.Context, backlog *models.Backlog) error
 	DeleteBacklog(ctx context.Context, id int64) error
+	GetCompletedBacklogsCount(ctx context.Context, userID int64, startDate, endDate time.Time) (int, error)
 }
 
 type backlogRepository struct {
@@ -347,4 +348,56 @@ func (r *backlogRepository) DeleteBacklog(ctx context.Context, id int64) error {
 		Msg("backlog deleted successfully from database")
 	span.SetStatus(codes.Ok, "backlog deleted successfully")
 	return nil
+}
+
+// GetCompletedBacklogsCount retrieves the count of completed backlogs for a user within a date range
+func (r *backlogRepository) GetCompletedBacklogsCount(ctx context.Context, userID int64, startDate, endDate time.Time) (int, error) {
+	ctx, span := r.tracer.Start(ctx, "backlog_repository.GetCompletedBacklogsCount",
+		trace.WithAttributes(
+			attribute.Int64("user.id", userID),
+			attribute.String("start_date", startDate.Format(time.RFC3339)),
+			attribute.String("end_date", endDate.Format(time.RFC3339)),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("user.id", userID).
+		Str("start_date", startDate.Format(time.RFC3339)).
+		Str("end_date", endDate.Format(time.RFC3339)).
+		Msg("getting completed backlogs count from database")
+
+	query, args, err := r.sb.Select("COUNT(*)").
+		From("backlogs").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"user_id": userID}).
+		Where(squirrel.NotEq{"completed_at": nil}).
+		Where(squirrel.GtOrEq{"completed_at": startDate}).
+		Where(squirrel.LtOrEq{"completed_at": endDate}).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, errors.Wrap(err, "failed to build query while getting completed backlogs count")
+	}
+
+	var count int
+	err = r.db.GetContext(ctx, &count, query, args...)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("failed to get completed backlogs count from database")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, errors.Wrap(err, "failed to get completed backlogs count")
+	}
+
+	log.Debug().
+		Int64("user.id", userID).
+		Int("count", count).
+		Msg("completed backlogs count retrieved successfully from database")
+	span.SetAttributes(attribute.Int("count", count))
+	span.SetStatus(codes.Ok, "completed backlogs count retrieved successfully")
+	return count, nil
 }
