@@ -366,7 +366,7 @@ func (s *DigestService) GetDigest(ctx context.Context, userID int64, messengerRe
 		return nil, errors.WithStack(err)
 	}
 
-	// Get user timezone or use UTC
+	// Get user timezone or use UTC (for default dates only)
 	location := time.UTC
 	if user.Timezone != nil && *user.Timezone != "" {
 		loc, err := time.LoadLocation(*user.Timezone)
@@ -380,17 +380,15 @@ func (s *DigestService) GetDigest(ctx context.Context, userID int64, messengerRe
 		}
 	}
 
-	// Convert dates to user's timezone if provided
+	// Use dates as-is (client sends in UTC)
 	var startDateFromInTZ, startDateToInTZ *time.Time
 	if startDateFrom != nil {
-		startDateFromTZ := startDateFrom.In(location)
-		startDateFromInTZ = &startDateFromTZ
-		span.SetAttributes(attribute.String("start_date_from", startDateFromTZ.Format(time.RFC3339)))
+		startDateFromInTZ = startDateFrom
+		span.SetAttributes(attribute.String("start_date_from", startDateFrom.Format(time.RFC3339)))
 	}
 	if startDateTo != nil {
-		startDateToTZ := startDateTo.In(location)
-		startDateToInTZ = &startDateToTZ
-		span.SetAttributes(attribute.String("start_date_to", startDateToTZ.Format(time.RFC3339)))
+		startDateToInTZ = startDateTo
+		span.SetAttributes(attribute.String("start_date_to", startDateTo.Format(time.RFC3339)))
 	}
 
 	// Get completed backlogs count for the period
@@ -433,12 +431,26 @@ func (s *DigestService) GetDigest(ctx context.Context, userID int64, messengerRe
 		startDateToFinal = time.Now().In(location)
 	}
 
-	mru, _ := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *messengerRelatedUserID) // TODO !!!!!!!!!!!!!!!
+	// Get chat_id if messengerRelatedUserID is provided
+	var chatID *string
+	if messengerRelatedUserID != nil {
+		mru, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *messengerRelatedUserID)
+		if err != nil {
+			log.Debug().
+				Err(err).
+				Int("messenger_related_user.id", *messengerRelatedUserID).
+				Msg("failed to get messenger related user for chat_id")
+			// Don't fail the operation, just log the error
+			// chat_id will remain nil
+		} else {
+			chatID = &mru.ChatID
+		}
+	}
 
 	digest := &DigestResponse{
 		UserID:                 userID,
 		MessengerRelatedUserID: messengerRelatedUserID,
-		ChatID:                 &mru.ChatID,
+		ChatID:                 chatID,
 		StartDateFrom:          startDateFromFinal,
 		StartDateTo:            startDateToFinal,
 		CompletedBacklogsCount: completedCount,
