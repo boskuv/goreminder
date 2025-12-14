@@ -370,6 +370,409 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/digests": {
+            "get": {
+                "description": "Generates a digest for a user with statistics and tasks",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Digests"
+                ],
+                "summary": "Get digest",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Messenger Related User ID",
+                        "name": "messenger_related_user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by start_date from (RFC3339 format, inclusive)",
+                        "name": "start_date_from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by start_date to (RFC3339 format, inclusive)",
+                        "name": "start_date_to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Digest data",
+                        "schema": {
+                            "$ref": "#/definitions/dto.DigestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable entity",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/digests/settings": {
+            "get": {
+                "description": "Retrieves digest settings for a user",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Digests"
+                ],
+                "summary": "Get digest settings",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Messenger Related User ID",
+                        "name": "messenger_related_user_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Digest settings",
+                        "schema": {
+                            "$ref": "#/definitions/dto.DigestSettingsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Updates digest settings for a user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Digests"
+                ],
+                "summary": "Update digest settings",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Messenger Related User ID",
+                        "name": "messenger_related_user_id",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Digest settings update data",
+                        "name": "settings",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateDigestSettingsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated digest settings",
+                        "schema": {
+                            "$ref": "#/definitions/dto.DigestSettingsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable entity",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates new digest settings for a user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Digests"
+                ],
+                "summary": "Create digest settings",
+                "parameters": [
+                    {
+                        "description": "Digest settings to create",
+                        "name": "settings",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateDigestSettingsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created digest settings ID",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "integer"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable entity",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Deletes digest settings for a user",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Digests"
+                ],
+                "summary": "Delete digest settings",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Messenger Related User ID",
+                        "name": "messenger_related_user_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/digests/settings/all": {
+            "get": {
+                "description": "Retrieves all digest settings with pagination, ordering, and filtering",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Digests"
+                ],
+                "summary": "Get all digest settings",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "created_at DESC",
+                        "description": "Order by",
+                        "name": "order_by",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by user ID",
+                        "name": "user_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated digest settings",
+                        "schema": {
+                            "$ref": "#/definitions/dto.PaginatedDigestSettingsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/messengerRelatedUsers": {
             "get": {
                 "description": "Retrieves a messenger-related user by chatID, messengerUserID, userID and messengerID",
@@ -2015,6 +2418,38 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.CreateDigestSettingsRequest": {
+            "type": "object",
+            "required": [
+                "user_id",
+                "weekday_time",
+                "weekend_time"
+            ],
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "messenger_related_user_id": {
+                    "type": "integer",
+                    "example": 123
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "weekday_time": {
+                    "description": "Format: HH:MM",
+                    "type": "string",
+                    "example": "07:00"
+                },
+                "weekend_time": {
+                    "description": "Format: HH:MM",
+                    "type": "string",
+                    "example": "10:00"
+                }
+            }
+        },
         "dto.CreateMessengerRelatedUserRequest": {
             "type": "object",
             "required": [
@@ -2143,6 +2578,80 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.DigestResponse": {
+            "type": "object",
+            "properties": {
+                "completed_backlogs_count": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "messenger_related_user_id": {
+                    "type": "integer",
+                    "example": 123
+                },
+                "start_date_from": {
+                    "type": "string",
+                    "example": "2024-01-01T00:00:00Z"
+                },
+                "start_date_to": {
+                    "type": "string",
+                    "example": "2024-01-07T23:59:59Z"
+                },
+                "tasks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.TaskResponse"
+                    }
+                },
+                "timezone": {
+                    "type": "string",
+                    "example": "UTC"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "dto.DigestSettingsResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "description": "ISO 8601 format",
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
+                },
+                "enabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "messenger_related_user_id": {
+                    "type": "integer",
+                    "example": 123
+                },
+                "updated_at": {
+                    "description": "ISO 8601 format",
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "weekday_time": {
+                    "type": "string",
+                    "example": "07:00"
+                },
+                "weekend_time": {
+                    "type": "string",
+                    "example": "10:00"
+                }
+            }
+        },
         "dto.MessengerRelatedUserResponse": {
             "type": "object",
             "properties": {
@@ -2199,6 +2708,20 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/dto.BacklogResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/dto.PaginationResponse"
+                }
+            }
+        },
+        "dto.PaginatedDigestSettingsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.DigestSettingsResponse"
                     }
                 },
                 "pagination": {
@@ -2424,6 +2947,29 @@ const docTemplate = `{
                 "title": {
                     "type": "string",
                     "example": "Updated backlog title"
+                }
+            }
+        },
+        "dto.UpdateDigestSettingsRequest": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "messenger_related_user_id": {
+                    "type": "integer",
+                    "example": 123
+                },
+                "weekday_time": {
+                    "description": "Format: HH:MM",
+                    "type": "string",
+                    "example": "08:00"
+                },
+                "weekend_time": {
+                    "description": "Format: HH:MM",
+                    "type": "string",
+                    "example": "11:00"
                 }
             }
         },

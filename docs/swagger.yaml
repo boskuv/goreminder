@@ -66,6 +66,30 @@ definitions:
     - items
     - user_id
     type: object
+  dto.CreateDigestSettingsRequest:
+    properties:
+      enabled:
+        example: true
+        type: boolean
+      messenger_related_user_id:
+        example: 123
+        type: integer
+      user_id:
+        example: 1
+        type: integer
+      weekday_time:
+        description: 'Format: HH:MM'
+        example: "07:00"
+        type: string
+      weekend_time:
+        description: 'Format: HH:MM'
+        example: "10:00"
+        type: string
+    required:
+    - user_id
+    - weekday_time
+    - weekend_time
+    type: object
   dto.CreateMessengerRelatedUserRequest:
     properties:
       chat_id:
@@ -160,6 +184,60 @@ definitions:
     required:
     - name
     type: object
+  dto.DigestResponse:
+    properties:
+      completed_backlogs_count:
+        example: 5
+        type: integer
+      messenger_related_user_id:
+        example: 123
+        type: integer
+      start_date_from:
+        example: "2024-01-01T00:00:00Z"
+        type: string
+      start_date_to:
+        example: "2024-01-07T23:59:59Z"
+        type: string
+      tasks:
+        items:
+          $ref: '#/definitions/dto.TaskResponse'
+        type: array
+      timezone:
+        example: UTC
+        type: string
+      user_id:
+        example: 1
+        type: integer
+    type: object
+  dto.DigestSettingsResponse:
+    properties:
+      created_at:
+        description: ISO 8601 format
+        example: "2024-01-10T08:00:00Z"
+        type: string
+      enabled:
+        example: true
+        type: boolean
+      id:
+        example: 1
+        type: integer
+      messenger_related_user_id:
+        example: 123
+        type: integer
+      updated_at:
+        description: ISO 8601 format
+        example: "2024-01-10T08:00:00Z"
+        type: string
+      user_id:
+        example: 1
+        type: integer
+      weekday_time:
+        example: "07:00"
+        type: string
+      weekend_time:
+        example: "10:00"
+        type: string
+    type: object
   dto.MessengerRelatedUserResponse:
     properties:
       chat_id:
@@ -201,6 +279,15 @@ definitions:
       data:
         items:
           $ref: '#/definitions/dto.BacklogResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/dto.PaginationResponse'
+    type: object
+  dto.PaginatedDigestSettingsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/dto.DigestSettingsResponse'
         type: array
       pagination:
         $ref: '#/definitions/dto.PaginationResponse'
@@ -361,6 +448,23 @@ definitions:
         type: string
       title:
         example: Updated backlog title
+        type: string
+    type: object
+  dto.UpdateDigestSettingsRequest:
+    properties:
+      enabled:
+        example: true
+        type: boolean
+      messenger_related_user_id:
+        example: 123
+        type: integer
+      weekday_time:
+        description: 'Format: HH:MM'
+        example: "08:00"
+        type: string
+      weekend_time:
+        description: 'Format: HH:MM'
+        example: "11:00"
         type: string
     type: object
   dto.UpdateTaskRequest:
@@ -686,6 +790,274 @@ paths:
       summary: Create multiple backlog items from batch
       tags:
       - Backlogs
+  /api/v1/digests:
+    get:
+      description: Generates a digest for a user with statistics and tasks
+      parameters:
+      - description: User ID
+        in: query
+        name: user_id
+        required: true
+        type: integer
+      - description: Messenger Related User ID
+        in: query
+        name: messenger_related_user_id
+        type: integer
+      - description: Filter by start_date from (RFC3339 format, inclusive)
+        in: query
+        name: start_date_from
+        type: string
+      - description: Filter by start_date to (RFC3339 format, inclusive)
+        in: query
+        name: start_date_to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Digest data
+          schema:
+            $ref: '#/definitions/dto.DigestResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get digest
+      tags:
+      - Digests
+  /api/v1/digests/settings:
+    delete:
+      description: Deletes digest settings for a user
+      parameters:
+      - description: User ID
+        in: query
+        name: user_id
+        required: true
+        type: integer
+      - description: Messenger Related User ID
+        in: query
+        name: messenger_related_user_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete digest settings
+      tags:
+      - Digests
+    get:
+      description: Retrieves digest settings for a user
+      parameters:
+      - description: User ID
+        in: query
+        name: user_id
+        required: true
+        type: integer
+      - description: Messenger Related User ID
+        in: query
+        name: messenger_related_user_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Digest settings
+          schema:
+            $ref: '#/definitions/dto.DigestSettingsResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get digest settings
+      tags:
+      - Digests
+    post:
+      consumes:
+      - application/json
+      description: Creates new digest settings for a user
+      parameters:
+      - description: Digest settings to create
+        in: body
+        name: settings
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateDigestSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created digest settings ID
+          schema:
+            additionalProperties:
+              type: integer
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create digest settings
+      tags:
+      - Digests
+    put:
+      consumes:
+      - application/json
+      description: Updates digest settings for a user
+      parameters:
+      - description: User ID
+        in: query
+        name: user_id
+        required: true
+        type: integer
+      - description: Messenger Related User ID
+        in: query
+        name: messenger_related_user_id
+        type: integer
+      - description: Digest settings update data
+        in: body
+        name: settings
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateDigestSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Updated digest settings
+          schema:
+            $ref: '#/definitions/dto.DigestSettingsResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update digest settings
+      tags:
+      - Digests
+  /api/v1/digests/settings/all:
+    get:
+      description: Retrieves all digest settings with pagination, ordering, and filtering
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - default: created_at DESC
+        description: Order by
+        in: query
+        name: order_by
+        type: string
+      - description: Filter by user ID
+        in: query
+        name: user_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Paginated digest settings
+          schema:
+            $ref: '#/definitions/dto.PaginatedDigestSettingsResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get all digest settings
+      tags:
+      - Digests
   /api/v1/messengerRelatedUsers:
     get:
       description: Retrieves a messenger-related user by chatID, messengerUserID,

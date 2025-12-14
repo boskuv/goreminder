@@ -7,14 +7,14 @@ import (
 )
 
 // RegisterRoutes registers all API routes
-func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userHandler *handlers.UserHandler, messengerHandler *handlers.MessengerHandler, backlogHandler *handlers.BacklogHandler) {
+func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userHandler *handlers.UserHandler, messengerHandler *handlers.MessengerHandler, backlogHandler *handlers.BacklogHandler, digestHandler *handlers.DigestHandler) {
 	api := router.Group("/api/v1")
 	{
 		// Task routes
 		api.GET("/tasks", taskHandler.GetAllTasks)
 		api.POST("/tasks", taskHandler.CreateTask)
 		api.POST("/tasks/queue", taskHandler.QueueTask)
-		api.GET("/tasks/:id", taskHandler.GetTask) // TODO: task_id
+		api.GET("/tasks/:id", taskHandler.GetTask)
 		api.GET("/tasks/:id/history", taskHandler.GetTaskHistory)
 		api.GET("/users/:user_id/tasks", taskHandler.GetUserTasks)
 		api.GET("/users/:user_id/tasks/history", taskHandler.GetUserTaskHistory)
@@ -32,7 +32,7 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 		// Messenger routes
 		api.GET("/messengers", messengerHandler.GetAllMessengers)
 		api.POST("/messengers", messengerHandler.CreateMessenger)
-		api.GET("/messengers/:messenger_id", messengerHandler.GetMessenger)
+		api.GET("/messengers/:messenger_id", messengerHandler.GetMessenger) // TODO: id
 		api.GET("/messengers/by-name/:messenger_name", messengerHandler.GetMessengerIDByName)
 		api.POST("/messengerRelatedUsers", messengerHandler.CreateMessengerRelatedUser)
 		api.GET("/messengerRelatedUsers", messengerHandler.GetMessengerRelatedUser)
@@ -46,5 +46,13 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 		api.GET("/backlogs/:id", backlogHandler.GetBacklog)
 		api.PUT("/backlogs/:id", backlogHandler.UpdateBacklog)
 		api.DELETE("/backlogs/:id", backlogHandler.DeleteBacklog)
+
+		// Digest routes
+		api.GET("/digests", digestHandler.GetDigest)
+		api.POST("/digests/settings", digestHandler.CreateDigestSettings)
+		api.GET("/digests/settings", digestHandler.GetDigestSettings)
+		api.PUT("/digests/settings", digestHandler.UpdateDigestSettings)
+		api.DELETE("/digests/settings", digestHandler.DeleteDigestSettings)
+		api.GET("/digests/settings/all", digestHandler.GetAllDigestSettings)
 	}
 }
