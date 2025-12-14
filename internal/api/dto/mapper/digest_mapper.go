@@ -80,6 +80,7 @@ func DigestServiceResponseToDTO(digest *service.DigestResponse) *dto.DigestRespo
 	return &dto.DigestResponse{
 		UserID:                 digest.UserID,
 		MessengerRelatedUserID: digest.MessengerRelatedUserID,
+		ChatID:                 digest.ChatID,
 		StartDateFrom:          digest.StartDateFrom,
 		StartDateTo:            digest.StartDateTo,
 		CompletedBacklogsCount: digest.CompletedBacklogsCount,

@@ -36,6 +36,7 @@ type DigestSettingsResponse struct {
 type DigestResponse struct {
 	UserID                 int64          `json:"user_id" example:"1"`
 	MessengerRelatedUserID *int           `json:"messenger_related_user_id,omitempty" example:"123"`
+	ChatID                 *string        `json:"chat_id,omitempty" example:"123"`
 	StartDateFrom          time.Time      `json:"start_date_from" example:"2024-01-01T00:00:00Z"`
 	StartDateTo            time.Time      `json:"start_date_to" example:"2024-01-07T23:59:59Z"`
 	CompletedBacklogsCount int            `json:"completed_backlogs_count" example:"5"`
