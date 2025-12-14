@@ -2581,6 +2581,10 @@ const docTemplate = `{
         "dto.DigestResponse": {
             "type": "object",
             "properties": {
+                "chat_id": {
+                    "type": "string",
+                    "example": "123"
+                },
                 "completed_backlogs_count": {
                     "type": "integer",
                     "example": 5

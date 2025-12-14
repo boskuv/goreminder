@@ -186,6 +186,9 @@ definitions:
     type: object
   dto.DigestResponse:
     properties:
+      chat_id:
+        example: "123"
+        type: string
       completed_backlogs_count:
         example: 5
         type: integer
