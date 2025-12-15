@@ -447,6 +447,12 @@ func (s *DigestService) GetDigest(ctx context.Context, userID int64, messengerRe
 		}
 	}
 
+	// Get user timezone string (or UTC if not set)
+	timezoneStr := "UTC"
+	if user.Timezone != nil && *user.Timezone != "" {
+		timezoneStr = *user.Timezone
+	}
+
 	digest := &DigestResponse{
 		UserID:                 userID,
 		MessengerRelatedUserID: messengerRelatedUserID,
@@ -455,7 +461,7 @@ func (s *DigestService) GetDigest(ctx context.Context, userID int64, messengerRe
 		StartDateTo:            startDateToFinal,
 		CompletedBacklogsCount: completedCount,
 		Tasks:                  tasks,
-		Timezone:               location.String(),
+		Timezone:               timezoneStr,
 	}
 
 	log.Debug().
