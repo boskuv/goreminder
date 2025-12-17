@@ -1,0 +1,103 @@
+// GoReminder Database Schema
+// This file can be imported into https://dbdiagram.io for visualization
+
+Table users {
+  id bigserial [pk]
+  name varchar(255) [not null]
+  email varchar(255) [not null, unique]
+  password_hash text [not null]
+  timezone varchar(64)
+  language_code varchar(16)
+  role varchar(32)
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp
+  deleted_at timestamp
+
+  Note: 'User accounts with timezone and language support'
+}
+
+Table tasks {
+  id bigserial [pk]
+  title varchar(255) [not null]
+  description text
+  user_id bigint [not null, ref: > users.id]
+  messenger_related_user_id integer [ref: - user_messengers.id]
+  parent_id bigint [ref: - tasks.id]
+  start_date timestamp
+  finish_date timestamp
+  cron_expression varchar(255)
+  requires_confirmation boolean [default: true]
+  status varchar(50) [default: 'pending']
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp
+  deleted_at timestamp
+
+  Note: 'Tasks with support for recurring tasks (parent-child relationship)'
+}
+
+Table messengers {
+  id serial [pk]
+  name varchar(50) [not null, unique]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Messenger types (e.g., telegram, whatsapp)'
+}
+
+Table user_messengers {
+  id serial [pk]
+  user_id integer [not null, ref: > users.id]
+  messenger_id integer [not null, ref: > messengers.id]
+  chat_id varchar(255) [not null]
+  messenger_user_id varchar(255) [not null]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  deleted_at timestamp
+
+  Note: 'Links users to their messenger accounts'
+  indexes {
+    (user_id, messenger_id, chat_id) [unique]
+  }
+}
+
+Table backlogs {
+  id bigserial [pk]
+  title varchar(255) [not null]
+  description text
+  user_id bigint [not null, ref: > users.id]
+  messenger_related_user_id integer [ref: - user_messengers.id]
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  completed_at timestamp
+  deleted_at timestamp
+
+  Note: 'Backlog items for task planning'
+}
+
+Table digest_settings {
+  id bigserial [pk]
+  user_id bigint [not null, ref: > users.id]
+  messenger_related_user_id integer [ref: - user_messengers.id]
+  enabled boolean [not null, default: true]
+  weekday_time varchar(5) [not null, default: '07:00']
+  weekend_time varchar(5) [not null, default: '10:00']
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Daily digest settings per user and messenger'
+  indexes {
+    (user_id, messenger_related_user_id) [unique]
+  }
+}
+
+Table task_history {
+  id bigserial [pk]
+  task_id bigint [not null, ref: > tasks.id]
+  user_id bigint [not null, ref: > users.id]
+  action varchar(50) [not null]
+  old_value jsonb
+  new_value jsonb
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Audit log for task changes'
+}
+

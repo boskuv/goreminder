@@ -85,6 +85,134 @@
 └── tests/                 # Test suites (E2E tests)
 ```
 
+## Database Schema
+
+The application uses PostgreSQL as the database. Below is the Entity-Relationship diagram showing all tables and their relationships:
+
+```mermaid
+erDiagram
+    users ||--o{ tasks : "has"
+    users ||--o{ user_messengers : "has"
+    users ||--o{ backlogs : "has"
+    users ||--o{ digest_settings : "has"
+    users ||--o{ task_history : "has"
+    
+    messengers ||--o{ user_messengers : "has"
+    
+    user_messengers ||--o{ tasks : "references"
+    user_messengers ||--o{ backlogs : "references"
+    user_messengers ||--o{ digest_settings : "references"
+    
+    tasks ||--o{ tasks : "parent-child"
+    tasks ||--o{ task_history : "has"
+    
+    users {
+        bigserial id PK
+        varchar name
+        varchar email UK
+        text password_hash
+        varchar timezone
+        varchar language_code
+        varchar role
+        timestamp created_at
+        timestamp updated_at
+        timestamp deleted_at
+    }
+    
+    tasks {
+        bigserial id PK
+        varchar title
+        text description
+        bigint user_id FK
+        integer messenger_related_user_id FK
+        bigint parent_id FK
+        timestamp start_date
+        timestamp finish_date
+        varchar cron_expression
+        boolean requires_confirmation
+        varchar status
+        timestamp created_at
+        timestamp updated_at
+        timestamp deleted_at
+    }
+    
+    messengers {
+        serial id PK
+        varchar name UK
+        timestamp created_at
+    }
+    
+    user_messengers {
+        serial id PK
+        integer user_id FK
+        integer messenger_id FK
+        varchar chat_id
+        varchar messenger_user_id
+        timestamp created_at
+        timestamp updated_at
+        timestamp deleted_at
+    }
+    
+    backlogs {
+        bigserial id PK
+        varchar title
+        text description
+        bigint user_id FK
+        integer messenger_related_user_id FK
+        timestamp created_at
+        timestamp updated_at
+        timestamp completed_at
+        timestamp deleted_at
+    }
+    
+    digest_settings {
+        bigserial id PK
+        bigint user_id FK
+        integer messenger_related_user_id FK
+        boolean enabled
+        varchar weekday_time
+        varchar weekend_time
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    task_history {
+        bigserial id PK
+        bigint task_id FK
+        bigint user_id FK
+        varchar action
+        jsonb old_value
+        jsonb new_value
+        timestamp created_at
+    }
+```
+
+### Table Relationships
+
+- **users** ↔ **tasks**: One-to-many (CASCADE delete)
+- **users** ↔ **user_messengers**: One-to-many (CASCADE delete)
+- **users** ↔ **backlogs**: One-to-many (CASCADE delete)
+- **users** ↔ **digest_settings**: One-to-many (CASCADE delete)
+- **users** ↔ **task_history**: One-to-many (CASCADE delete)
+- **messengers** ↔ **user_messengers**: One-to-many (CASCADE delete)
+- **user_messengers** ↔ **tasks**: One-to-many (SET NULL on delete)
+- **user_messengers** ↔ **backlogs**: One-to-many (SET NULL on delete)
+- **user_messengers** ↔ **digest_settings**: One-to-many (SET NULL on delete)
+- **tasks** ↔ **tasks**: Self-referential (parent-child relationship for recurring tasks)
+- **tasks** ↔ **task_history**: One-to-many (CASCADE delete)
+
+### Key Features
+
+- **Soft Deletes**: `users`, `tasks`, `user_messengers`, and `backlogs` support soft deletes via `deleted_at` column
+- **Recurring Tasks**: Tasks can have a `parent_id` pointing to another task, enabling parent-child relationships for recurring tasks
+- **Task History**: All task changes are tracked in `task_history` table with JSONB fields for old/new values
+- **Messenger Integration**: Users can link multiple messenger accounts via `user_messengers` table
+- **Digest Settings**: Users can configure daily digest times per messenger account
+
+### Alternative Visualization
+
+For a more detailed interactive diagram, you can use the [dbdiagram.io](https://dbdiagram.io) file located at `docs/database_schema.dbml`. Simply copy the contents and paste them into dbdiagram.io for an interactive ER diagram.
+
 ## Configuration
 
 The application supports configuration via YAML files and environment variables. Environment variables take precedence over YAML file values. See `cmd/core/config.yaml.example` for a complete example.
