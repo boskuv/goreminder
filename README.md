@@ -334,6 +334,94 @@ Access Swagger UI at: `http://localhost:8080/swagger/index.html`
 | `/api/v1/messengerRelatedUsers/all` | GET | Get all messenger-related users with pagination | `page`, `page_size`, `order_by` |
 | `/api/v1/messengerRelatedUsers/:messenger_user_id/user` | GET | Get user ID by messenger user ID | - |
 
+### Backlogs
+
+| Endpoint | Method | Description | Query Parameters |
+|----------|--------|-------------|------------------|
+| `/api/v1/backlogs` | GET | Get all backlogs with pagination | `page`, `page_size`, `order_by` |
+| `/api/v1/backlogs` | POST | Create a new backlog | - |
+| `/api/v1/backlogs/batch` | POST | Create multiple backlogs at once | - |
+| `/api/v1/backlogs/:id` | GET | Get backlog by ID | - |
+| `/api/v1/backlogs/:id` | PUT | Update backlog by ID | - |
+| `/api/v1/backlogs/:id` | DELETE | Delete backlog | - |
+
+### Digests
+
+| Endpoint | Method | Description | Query Parameters |
+|----------|--------|-------------|------------------|
+| `/api/v1/digests` | GET | Get digest for user | `user_id`, `date` |
+| `/api/v1/digests/settings` | POST | Create digest settings | - |
+| `/api/v1/digests/settings` | GET | Get digest settings | `user_id` |
+| `/api/v1/digests/settings` | PUT | Update digest settings | - |
+| `/api/v1/digests/settings` | DELETE | Delete digest settings | `user_id` |
+| `/api/v1/digests/settings/all` | GET | Get all digest settings | `page`, `page_size`, `order_by` |
+
+## Task Types
+
+GoReminder supports two types of tasks: **one-time tasks** and **recurring tasks**.
+
+### Task Types Comparison
+
+| Field | One-time Task | Recurring Task (Parent) | Recurring Task (Child) |
+|-------|---------------|------------------------|------------------------|
+| `cron_expr` | `null` | Required (e.g., `"0 9 * * *"`) | `null` |
+| `requires_confirmation` | `true` or `false` | `true` | `true` (inherited) |
+| `parent_id` | `null` | `null` | Points to parent task ID |
+| Execution | Executes once at `start_date` | Does not execute directly | Executes at calculated `start_date` |
+| Auto-creates child | No | Yes (on creation and when child is done) | No |
+
+### How Recurring Tasks Work
+
+1. **Parent Task**: Contains `cron_expression` and `requires_confirmation=true`. Does not execute directly.
+2. **Child Task**: Created automatically from parent. Has `parent_id` pointing to parent. Executes at calculated `start_date`.
+3. When a child task is marked as **done**, a new child task is created with `start_date` calculated from parent's `cron_expression`.
+
+### Reschedule Mechanism
+
+Rescheduling occurs when a task with `requires_confirmation=true` is not confirmed by the user.
+
+#### One-time Task (no `cron_expr`, `requires_confirmation=true`)
+
+1. Task is sent at `start_date`
+2. User does not confirm
+3. `RescheduleTask` is called:
+   - `start_date` is moved forward by **24 hours**
+   - `status` changes to `rescheduled`
+   - Task is re-published to queue with new `start_date`
+
+#### Recurring Task Child (has `parent_id`, `requires_confirmation=true`)
+
+1. Child task is sent at `start_date`
+2. User does not confirm
+3. `RescheduleTask` is called:
+   - Checks if new `start_date` (+24h) conflicts with parent's next cron execution
+   - **If conflict**: Rescheduling is skipped (parent will create a new child)
+   - **If no conflict**: `start_date` is moved forward by 24 hours, task is re-published
+
+#### Recurring Task Parent (has `cron_expr`, `requires_confirmation=false`)
+
+1. `RescheduleCronTasks` is called for parent tasks without confirmation
+2. `start_date` is updated to next cron execution time
+3. No queue publishing (parent tasks don't execute directly)
+
+### Mark as Done Behavior
+
+#### Marking a Child Task as Done
+
+1. Child task status → `done`, `finish_date` → now
+2. `worker.delete_task` is queued
+3. If parent exists and has `cron_expression`:
+   - New child task is created with `start_date` = next cron execution time
+
+#### Marking a Parent Task as Done
+
+1. Parent task status → `done`, `finish_date` → now
+2. `worker.delete_task` is queued for parent
+3. All non-done child tasks are:
+   - Synced with parent's title/description
+   - Marked as `done`
+   - `worker.delete_task` is queued for each child
+
 ## Pagination
 
 All list endpoints support pagination with the following query parameters:
