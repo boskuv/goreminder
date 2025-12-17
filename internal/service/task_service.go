@@ -1321,7 +1321,7 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 				FinishDate:             parentTask.FinishDate,
 				CronExpression:         nil, // Child tasks don't have cron expression
 				RequiresConfirmation:   parentTask.RequiresConfirmation,
-				Status:                 string(models.TaskStatusPending),
+				Status:                 string(models.TaskStatusScheduled),
 			}
 
 			childTaskID, err := s.taskRepo.CreateTask(ctx, childTask)
@@ -1342,6 +1342,49 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 					Msg("next child task created successfully")
 				span.SetAttributes(attribute.Int64("child_task.id", childTaskID))
 			}
+
+			if childTask.MessengerRelatedUserID != nil {
+				messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *childTask.MessengerRelatedUserID)
+				if err != nil {
+					log.Error().
+						Stack().
+						Err(err).
+						Int64("task.id", taskID).
+						Int64("child_task.id", childTaskID).
+						Msg("failed to get messenger related user for child task queue publish")
+					// Don't fail, just log
+				} else {
+					childTaskQueueMessage := map[string]interface{}{
+						"task": "worker.schedule_task",
+						"args": []interface{}{
+							"telegram",
+							messengerRelatedUser.ChatID,
+							childTaskID,
+							childTask.Title,
+							childTask.Description,
+							childTask.StartDate,
+							childTask.CronExpression,
+							childTask.RequiresConfirmation,
+						},
+					}
+					err = s.producer.Publish(ctx, childTaskQueueMessage)
+					if err != nil {
+						log.Error().
+							Stack().
+							Err(err).
+							Int64("task.id", taskID).
+							Int64("child_task.id", childTaskID).
+							Msg("failed to queue schedule_task for new child task")
+						// Don't fail the operation, just log the error
+					} else {
+						log.Debug().
+							Int64("task.id", taskID).
+							Int64("child_task.id", childTaskID).
+							Msg("schedule_task queued successfully for new child task")
+					}
+				}
+			}
+
 		}
 	}
 
