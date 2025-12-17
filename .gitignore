@@ -7,7 +7,6 @@
 
 # Build output directories
 /bin/
-/pkg/
 
 # Test output
 /testdata/*.out
