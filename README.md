@@ -87,7 +87,46 @@
 
 ## Configuration
 
-The application uses YAML configuration files. See `cmd/core/config.yaml.example` for a complete example.
+The application supports configuration via YAML files and environment variables. Environment variables take precedence over YAML file values. See `cmd/core/config.yaml.example` for a complete example.
+
+### Configuration Sources
+
+1. **YAML File** (default): Primary configuration source
+2. **Environment Variables** (optional): Override YAML values
+
+You can use either YAML file only, environment variables only, or a combination of both.
+
+### Environment Variables
+
+Environment variables use the prefix `GOREMINDER_` and nested keys are separated by underscores. For example:
+
+- `GOREMINDER_SERVER_PORT=8080`
+- `GOREMINDER_DATABASE_HOST=localhost`
+- `GOREMINDER_DATABASE_PASSWORD=secret`
+- `GOREMINDER_PRODUCER_HOST=rabbitmq`
+
+**Examples:**
+
+```bash
+# Override specific values from YAML
+export GOREMINDER_SERVER_PORT=9090
+export GOREMINDER_DATABASE_HOST=production-db
+export GOREMINDER_DATABASE_PASSWORD=secure-password
+
+# Use only environment variables (no YAML file needed)
+export GOREMINDER_SERVER_PORT=8080
+export GOREMINDER_SERVER_SECRET=my-secret
+export GOREMINDER_SERVER_MODE=production
+export GOREMINDER_DATABASE_DRIVER=postgres
+export GOREMINDER_DATABASE_DBNAME=mydb
+export GOREMINDER_DATABASE_USERNAME=user
+export GOREMINDER_DATABASE_PASSWORD=pass
+export GOREMINDER_DATABASE_HOST=localhost
+export GOREMINDER_DATABASE_PORT=5432
+# ... set other required variables
+```
+
+**Note:** When using environment variables only, you can pass an empty string as config path: `./goreminder -config=""`
 
 ### Configuration Structure
 
@@ -153,6 +192,56 @@ cors:
     - X-Request-ID
   allowCredentials: false       # Allow credentials
   maxAge: 3600                  # Preflight cache max age (seconds)
+```
+
+### Docker/Kubernetes Example
+
+When deploying in containers, you can use environment variables instead of mounting config files:
+
+```yaml
+# docker-compose.yml example
+services:
+  api:
+    image: goreminder:latest
+    environment:
+      - GOREMINDER_SERVER_PORT=8080
+      - GOREMINDER_SERVER_MODE=production
+      - GOREMINDER_DATABASE_HOST=postgres
+      - GOREMINDER_DATABASE_DBNAME=task_manager
+      - GOREMINDER_DATABASE_USERNAME=postgres
+      - GOREMINDER_DATABASE_PASSWORD=${DB_PASSWORD}
+      - GOREMINDER_PRODUCER_HOST=rabbitmq
+      - GOREMINDER_PRODUCER_USER=guest
+      - GOREMINDER_PRODUCER_PASSWORD=guest
+```
+
+Or in Kubernetes:
+
+```yaml
+# kubernetes deployment example
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: goreminder
+spec:
+  template:
+    spec:
+      containers:
+      - name: api
+        image: goreminder:latest
+        env:
+        - name: GOREMINDER_SERVER_PORT
+          value: "8080"
+        - name: GOREMINDER_DATABASE_HOST
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: host
+        - name: GOREMINDER_DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: password
 ```
 
 ## Setup Instructions

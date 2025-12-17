@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/creasty/defaults"
@@ -84,14 +85,26 @@ type CorsConfiguration struct {
 }
 
 // Setup configuration
+// Configuration can be loaded from YAML file and optionally overridden by environment variables.
+// Environment variables use the prefix GOREMINDER_ and nested keys are separated by underscores.
+// Example: GOREMINDER_SERVER_PORT=8080, GOREMINDER_DATABASE_HOST=localhost
+// Environment variables take precedence over YAML file values.
 func Setup(configPath string) error {
 	var configuration Configuration
 
-	viper.SetConfigFile(configPath)
-	viper.SetConfigType("yaml")
+	// Set up environment variable support
+	viper.SetEnvPrefix("GOREMINDER")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv() // Automatically bind all environment variables
 
-	if err := viper.ReadInConfig(); err != nil {
-		return fmt.Errorf("error reading config file: %w", err)
+	// Read YAML config file (if provided)
+	if configPath != "" {
+		viper.SetConfigFile(configPath)
+		viper.SetConfigType("yaml")
+
+		if err := viper.ReadInConfig(); err != nil {
+			return fmt.Errorf("error reading config file: %w", err)
+		}
 	}
 
 	// Apply defaults to configuration before unmarshal so zero-values are prefilled
