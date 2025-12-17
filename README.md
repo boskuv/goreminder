@@ -397,12 +397,33 @@ docker-compose up --build
 ```
 
 ### 4. Run Database Migrations
+
+The application automatically runs database migrations on startup. However, you can run them manually if needed:
+
 ```bash
 # Ensure goose is installed
 go install github.com/pressly/goose/v3/cmd/goose@latest
 
-# Run migrations
+# Run migrations manually
 goose -dir migrations postgres "host=localhost port=5432 user=postgres password=password dbname=task_manager sslmode=disable" up
+```
+
+**Note**: For local development, you can skip automatic migrations by setting the `SKIP_MIGRATIONS` environment variable:
+
+```bash
+# Skip migrations on startup (useful if you manage migrations manually)
+SKIP_MIGRATIONS=true make run
+
+# Or export it before running
+export SKIP_MIGRATIONS=true
+make run
+```
+
+You can also override the migrations directory using the `MIGRATIONS_DIR` environment variable:
+
+```bash
+# Use custom migrations directory
+MIGRATIONS_DIR=custom_migrations make run
 ```
 
 ### 5. Run the Application
@@ -845,11 +866,18 @@ make test
 # Check database connectivity
 make db-check
 
-# Run migrations
+# Run migrations manually
 goose -dir migrations postgres "host=localhost port=5432 user=postgres password=password dbname=task_manager sslmode=disable" up
 
 # Rollback migrations
 goose -dir migrations postgres "host=localhost port=5432 user=postgres password=password dbname=task_manager sslmode=disable" down
+```
+
+**Note**: By default, migrations run automatically on application startup. To skip automatic migrations (useful for local development when managing migrations manually), set `SKIP_MIGRATIONS=true`:
+
+```bash
+# Run application without automatic migrations
+SKIP_MIGRATIONS=true make run
 ```
 
 ### Docker Operations
