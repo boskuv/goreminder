@@ -1650,6 +1650,7 @@ func (s *TaskService) taskToMap(task *models.Task) map[string]interface{} {
 
 // RescheduleTask reschedules a task by updating its start_date to the next day at the same time
 // It also adds a daily cron expression and publishes to the queue
+// For tasks with a parent, it checks for conflicts with parent's cron schedule and uses parent's next execution time if conflict found
 // The status remains "scheduled"
 // If queue publishing fails, the task is NOT rescheduled to prevent data loss
 func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) error {
@@ -1669,8 +1670,16 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 
 	// Calculate next day at the same time
 	oldStartDate := task.StartDate
-	// Add 24 hours to the start date
+
+	nowUTC := time.Now().UTC()
+
+	// Calculate initial next day at same time
 	newStartDate := oldStartDate.Add(24 * time.Hour)
+
+	// Advance by 24 hours until newStartDate is strictly in the future (handles past dates)
+	for !newStartDate.After(nowUTC) {
+		newStartDate = newStartDate.Add(24 * time.Hour)
+	}
 
 	// If task has parent_id, check if newStartDate conflicts with parent's next execution
 	if task.ParentID != nil {
@@ -1688,11 +1697,11 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 		}
 
 		if parentTask.CronExpression != nil {
-			// Calculate parent's next execution time from newStartDate
-			parentNextTime := cronexpr.MustParse(*parentTask.CronExpression).Next(newStartDate)
+			// Calculate parent's next execution time from nowUTC
+			parentNextTime := cronexpr.MustParse(*parentTask.CronExpression).Next(nowUTC)
 
 			// Check if newStartDate falls on the same day as parent's next execution
-			// If they are on the same day, don't reschedule (parent will handle it)
+			// If they are on the same day, use parent's cron time instead
 			newStartDateDay := time.Date(newStartDate.Year(), newStartDate.Month(), newStartDate.Day(), 0, 0, 0, 0, newStartDate.Location())
 			parentNextTimeDay := time.Date(parentNextTime.Year(), parentNextTime.Month(), parentNextTime.Day(), 0, 0, 0, 0, parentNextTime.Location())
 
@@ -1702,13 +1711,14 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 					Int64("parent.id", *task.ParentID).
 					Time("new_start_date", newStartDate).
 					Time("parent_next_time", parentNextTime).
-					Msg("rescheduling skipped: new start date conflicts with parent task execution")
+					Msg("rescheduling aligned to parent cron: conflict detected, using parent execution time")
 				span.SetAttributes(
-					attribute.String("skip_reason", "conflict_with_parent"),
+					attribute.String("reason", "conflict_with_parent"),
 					attribute.String("parent_next_time", parentNextTime.Format(time.RFC3339)),
 				)
-				span.SetStatus(codes.Ok, "rescheduling skipped due to parent conflict")
-				return nil // Don't reschedule, parent will handle it
+				span.SetStatus(codes.Ok, "rescheduling aligned to parent cron schedule")
+
+				newStartDate = parentNextTime
 			}
 		}
 	}
