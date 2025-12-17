@@ -7,8 +7,8 @@
 
 ## Business Features
 - [x] **Auto-rescheduling**: Tasks are automatically rescheduled to the next day if confirmation is not received
+- [x] **Daily Task Digest**: Send daily task summaries at specified times
 - [ ] **Task Muting**: Temporarily mute notifications for specific tasks
-- [ ] **Daily Task Digest**: Send daily task summaries at specified times
 - [ ] **Task Postponement**: Ability to postpone tasks to a later time
 - [ ] **Reminder Groups**: Group related tasks together for batch management
 - [ ] **ICS Import**: Import tasks from iCalendar (.ics) files
