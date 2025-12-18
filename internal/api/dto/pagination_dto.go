@@ -37,3 +37,9 @@ type PaginatedBacklogsResponse struct {
 	Data       []BacklogResponse  `json:"data"`
 	Pagination PaginationResponse `json:"pagination"`
 }
+
+// PaginatedTargetsResponse represents a paginated response for targets
+type PaginatedTargetsResponse struct {
+	Data       []TargetResponse   `json:"data"`
+	Pagination PaginationResponse `json:"pagination"`
+}
