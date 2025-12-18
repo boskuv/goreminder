@@ -9,6 +9,7 @@
 - [x] **Auto-rescheduling**: Tasks are automatically rescheduled to the next day if confirmation is not received
 - [x] **Daily Task Digest**: Send daily task summaries at specified times
 - [x] **Backlog Zone**: Tasks without fixed time and confirmation requirements
+- [x] **Targets/Goals Management**: Create and track targets (aims/goals) with completion tracking
 - [ ] **Task Muting**: Temporarily mute notifications for specific tasks
 - [ ] **Task Postponement**: Ability to postpone tasks to a later time
 - [ ] **Reminder Groups**: Group related tasks together for batch management
@@ -18,6 +19,8 @@
 ## Tech Features
 - **Task Management**: Create, fetch, update, and delete tasks with soft delete support
 - **User Management**: Create, fetch, update, and delete users with soft delete support
+- **Target Management**: Create, fetch, update, and delete targets (aims/goals) with soft delete support
+- **Backlog Management**: Create, fetch, update, and delete backlog items with batch creation support
 - **Messenger Integration**: Support for multiple messaging platforms (Telegram, etc.)
 - **RESTful API**: Built with Gin framework for fast HTTP routing
 - **Swagger API Documentation**: Auto-generated interactive API documentation
@@ -94,6 +97,7 @@ erDiagram
     users ||--o{ tasks : "has"
     users ||--o{ user_messengers : "has"
     users ||--o{ backlogs : "has"
+    users ||--o{ targets : "has"
     users ||--o{ digest_settings : "has"
     users ||--o{ task_history : "has"
     
@@ -101,6 +105,7 @@ erDiagram
     
     user_messengers ||--o{ tasks : "references"
     user_messengers ||--o{ backlogs : "references"
+    user_messengers ||--o{ targets : "references"
     user_messengers ||--o{ digest_settings : "references"
     
     tasks ||--o{ tasks : "parent-child"
@@ -165,6 +170,18 @@ erDiagram
         timestamp deleted_at
     }
     
+    targets {
+        bigserial id PK
+        varchar title
+        text description
+        bigint user_id FK
+        integer messenger_related_user_id FK
+        timestamp created_at
+        timestamp updated_at
+        timestamp completed_at
+        timestamp deleted_at
+    }
+    
     digest_settings {
         bigserial id PK
         bigint user_id FK
@@ -192,18 +209,20 @@ erDiagram
 - **users** ↔ **tasks**: One-to-many (CASCADE delete)
 - **users** ↔ **user_messengers**: One-to-many (CASCADE delete)
 - **users** ↔ **backlogs**: One-to-many (CASCADE delete)
+- **users** ↔ **targets**: One-to-many (CASCADE delete)
 - **users** ↔ **digest_settings**: One-to-many (CASCADE delete)
 - **users** ↔ **task_history**: One-to-many (CASCADE delete)
 - **messengers** ↔ **user_messengers**: One-to-many (CASCADE delete)
 - **user_messengers** ↔ **tasks**: One-to-many (SET NULL on delete)
 - **user_messengers** ↔ **backlogs**: One-to-many (SET NULL on delete)
+- **user_messengers** ↔ **targets**: One-to-many (SET NULL on delete)
 - **user_messengers** ↔ **digest_settings**: One-to-many (SET NULL on delete)
 - **tasks** ↔ **tasks**: Self-referential (parent-child relationship for recurring tasks)
 - **tasks** ↔ **task_history**: One-to-many (CASCADE delete)
 
 ### Key Features
 
-- **Soft Deletes**: `users`, `tasks`, `user_messengers`, and `backlogs` support soft deletes via `deleted_at` column
+- **Soft Deletes**: `users`, `tasks`, `user_messengers`, `backlogs`, and `targets` support soft deletes via `deleted_at` column
 - **Recurring Tasks**: Tasks can have a `parent_id` pointing to another task, enabling parent-child relationships for recurring tasks
 - **Task History**: All task changes are tracked in `task_history` table with JSONB fields for old/new values
 - **Messenger Integration**: Users can link multiple messenger accounts via `user_messengers` table
@@ -576,12 +595,22 @@ Access Swagger UI at: `http://localhost:8080/swagger/index.html`
 
 | Endpoint | Method | Description | Query Parameters |
 |----------|--------|-------------|------------------|
-| `/api/v1/backlogs` | GET | Get all backlogs with pagination | `page`, `page_size`, `order_by` |
+| `/api/v1/backlogs` | GET | Get all backlogs with pagination | `page`, `page_size`, `order_by`, `user_id` |
 | `/api/v1/backlogs` | POST | Create a new backlog | - |
 | `/api/v1/backlogs/batch` | POST | Create multiple backlogs at once | - |
 | `/api/v1/backlogs/:id` | GET | Get backlog by ID | - |
 | `/api/v1/backlogs/:id` | PUT | Update backlog by ID | - |
 | `/api/v1/backlogs/:id` | DELETE | Delete backlog | - |
+
+### Targets
+
+| Endpoint | Method | Description | Query Parameters |
+|----------|--------|-------------|------------------|
+| `/api/v1/targets` | GET | Get all targets with pagination | `page`, `page_size`, `order_by`, `user_id` |
+| `/api/v1/targets` | POST | Create a new target | - |
+| `/api/v1/targets/:id` | GET | Get target by ID | - |
+| `/api/v1/targets/:id` | PUT | Update target by ID | - |
+| `/api/v1/targets/:id` | DELETE | Delete target (soft delete) | - |
 
 ### Digests
 
@@ -760,6 +789,30 @@ curl -X POST http://localhost:8080/api/v1/messengers \
   }'
 ```
 
+### Create a Backlog
+```bash
+curl -X POST http://localhost:8080/api/v1/backlogs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "New backlog item",
+    "description": "Task to be planned",
+    "user_id": 1,
+    "messenger_related_user_id": 123
+  }'
+```
+
+### Create a Target
+```bash
+curl -X POST http://localhost:8080/api/v1/targets \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Learn Go programming",
+    "description": "Master Go programming language",
+    "user_id": 1,
+    "messenger_related_user_id": 123
+  }'
+```
+
 ### Get Task by ID
 ```bash
 curl http://localhost:8080/api/v1/tasks/1
@@ -799,6 +852,27 @@ curl -X DELETE http://localhost:8080/api/v1/tasks/1
 ### Delete User (Soft Delete)
 ```bash
 curl -X DELETE http://localhost:8080/api/v1/users/1
+```
+
+### Get All Targets with Pagination
+```bash
+curl -X GET "http://localhost:8080/api/v1/targets?page=1&page_size=50&order_by=created_at DESC&user_id=1"
+```
+
+### Update Target
+```bash
+curl -X PUT http://localhost:8080/api/v1/targets/1 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Updated target title",
+    "description": "Updated target description",
+    "completed_at": "2024-12-20T10:00:00Z"
+  }'
+```
+
+### Delete Target (Soft Delete)
+```bash
+curl -X DELETE http://localhost:8080/api/v1/targets/1
 ```
 
 ## Testing

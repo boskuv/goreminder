@@ -73,6 +73,20 @@ Table backlogs {
   Note: 'Backlog items for task planning'
 }
 
+Table targets {
+  id bigserial [pk]
+  title varchar(255) [not null]
+  description text
+  user_id bigint [not null, ref: > users.id]
+  messenger_related_user_id integer [ref: - user_messengers.id]
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  completed_at timestamp
+  deleted_at timestamp
+
+  Note: 'Target items (aims/goals) for goal tracking'
+}
+
 Table digest_settings {
   id bigserial [pk]
   user_id bigint [not null, ref: > users.id]
