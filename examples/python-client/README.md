@@ -51,6 +51,199 @@ python example_usage.py
 
 Make sure the GoReminder API server is running at `http://localhost:8080` before running the examples.
 
+## Architecture
+
+The GoReminder system consists of several components that interact through an AMQP queue and HTTP API.
+
+### System Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           GoReminder Backend (Go)                        │
+│                                                                           │
+│  ┌──────────────┐         ┌──────────────┐         ┌──────────────┐   │
+│  │   REST API   │         │   Services   │         │   Database   │   │
+│  │   (Gin)      │◄────────┤  (Business   │◄────────┤  (PostgreSQL)│   │
+│  │              │         │   Logic)     │         │              │   │
+│  └──────┬───────┘         └──────┬───────┘         └──────────────┘   │
+│         │                        │                                      │
+│         │                        │ Publish                              │
+│         │                        ▼                                      │
+│         │              ┌──────────────────┐                             │
+│         │              │  Queue Producer  │                             │
+│         │              │   (AMQP/RabbitMQ)│                             │
+│         │              └────────┬─────────┘                             │
+└─────────┼───────────────────────┼──────────────────────────────────────┘
+          │                       │
+          │ HTTP API              │ AMQP Messages
+          │                       │ (Tasks, Digest Settings)
+          │                       ▼
+          │              ┌─────────────────────┐
+          │              │   RabbitMQ / AMQP   │
+          │              │      Message Queue  │
+          │              └──────────┬──────────┘
+          │                       │
+          │                       │ Consume
+          │                       ▼
+          │              ┌─────────────────────┐
+          │              │   Worker (Celery)   │
+          │              │                     │
+          │              │  ┌───────────────┐  │
+          │              │  │  Scheduler    │  │
+          │              │  │  (Celery Beat)│  │
+          │              │  └───────┬───────┘  │
+          │              │          │          │
+          │              │          │ Schedule │
+          │              │          ▼          │
+          │              │  ┌───────────────┐  │
+          │              │  │ Task Executor │  │
+          │              │  └───────┬───────┘  │
+          │              └───────────┼──────────┘
+          │                        │
+          │                        │ HTTP GET (for digests)
+          │                        │ Webhook POST (for sending messages)
+          │                        │
+          │                        ▼
+          │              ┌─────────────────────┐
+          │              │  Telegram Client    │
+          │              │                     │
+          │              │  ┌───────────────┐  │
+          │              │  │  Webhook      │  │◄─── Messages from Worker
+          │              │  │  Endpoint     │  │
+          │              │  └───────────────┘  │
+          │              │                     │
+          │              │  ┌───────────────┐  │
+          │              │  │  Telegram Bot │  │
+          │              │  │  (python-telegram-bot)│
+          │              │  └───────┬───────┘  │
+          │              └───────────┼──────────┘
+          │                        │
+          │                        │ Telegram API
+          │                        ▼
+          │              ┌─────────────────────┐
+          │              │   Telegram Users    │
+          │              └─────────────────────┘
+          │
+          │ HTTP API (for Telegram Bot)
+          │
+          ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      Telegram Bot (Python)                              │
+│                                                                           │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │  Bot calls API to retrieve data:                                │  │
+│  │  - GET /api/v1/tasks - get tasks                                │  │
+│  │  - GET /api/v1/users/:id - get user                             │  │
+│  │  - POST /api/v1/tasks/:id/done - mark task as done              │  │
+│  │  - GET /api/v1/digests - get digest                             │  │
+│  │  - and other endpoints...                                       │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Data Flow
+
+#### 1. Task Creation
+
+```
+User/Client → Backend API → Database
+                    ↓
+              Queue Producer → AMQP → Worker
+                                        ↓
+                                   Scheduler (adds to scheduler)
+```
+
+#### 2. Task Execution
+
+```
+Scheduler (at scheduled time) → Task Executor
+                                    ↓
+                              HTTP GET /api/v1/digests (if digest)
+                                    ↓
+                              Webhook POST → Telegram Client
+                                    ↓
+                              Telegram API → User
+```
+
+#### 3. Digest Settings Configuration
+
+```
+User/Client → Backend API → Database
+                    ↓
+              Queue Producer → AMQP → Worker
+                                        ↓
+                                   Scheduler (adds schedule)
+```
+
+#### 4. Digest Delivery
+
+```
+Scheduler (on schedule) → Task Executor
+                                    ↓
+                              HTTP GET /api/v1/digests?user_id=X
+                                    ↓
+                              Backend API → Database (fetch current data)
+                                    ↓
+                              Task Executor (form message)
+                                    ↓
+                              Webhook POST → Telegram Client
+                                    ↓
+                              Telegram API → User
+```
+
+#### 5. Telegram Bot API Interaction
+
+```
+Telegram User → Telegram Bot
+                    ↓
+              HTTP GET/POST → Backend API
+                    ↓
+              Database (read/write)
+                    ↓
+              Response → Telegram Bot → User
+```
+
+### System Components
+
+1. **GoReminder Backend (Go)**
+   - REST API on Gin
+   - Business logic in services
+   - Publishes tasks and digest settings to AMQP
+   - Data storage in PostgreSQL
+
+2. **RabbitMQ / AMQP**
+   - Message queue for asynchronous processing
+   - Message types:
+     - `worker.schedule_task` - schedule a task
+     - `worker.delete_task` - delete a task
+     - `worker.create_digest_settings` - create digest settings
+     - `worker.update_digest_settings` - update digest settings
+     - `worker.delete_digest_settings` - delete digest settings
+
+3. **Worker (Celery)**
+   - Consumes messages from AMQP
+   - Scheduler (Celery Beat) for periodic tasks
+   - Task Executor for task execution
+   - Sends messages via webhook to Telegram Client
+
+4. **Telegram Client**
+   - Webhook endpoint for receiving messages from worker
+   - Integration with Telegram Bot API
+   - Sends messages to users
+
+5. **Telegram Bot**
+   - Interacts with users through Telegram
+   - HTTP requests to Backend API for retrieving/updating data
+   - Handles commands and callbacks from users
+
+### Architecture Benefits
+
+- **Asynchrony**: tasks are processed asynchronously through a queue
+- **Scalability**: workers can be scaled independently
+- **Separation of concerns**: each component performs its own function
+- **Data freshness**: worker receives fresh data through API when sending digests
+- **Flexibility**: easy to add new messengers or task types
+
 ## API Methods
 
 ### Tasks
