@@ -77,6 +77,21 @@ func DigestServiceResponseToDTO(digest *service.DigestResponse) *dto.DigestRespo
 		}
 	}
 
+	// Convert targets from models to DTOs
+	targets := make([]dto.TargetResponse, len(digest.Targets))
+	for i, target := range digest.Targets {
+		targets[i] = dto.TargetResponse{
+			ID:                     target.ID,
+			Title:                  target.Title,
+			Description:            target.Description,
+			UserID:                 target.UserID,
+			MessengerRelatedUserID: target.MessengerRelatedUserID,
+			CreatedAt:              target.CreatedAt,
+			UpdatedAt:              target.UpdatedAt,
+			CompletedAt:            target.CompletedAt,
+		}
+	}
+
 	return &dto.DigestResponse{
 		UserID:                 digest.UserID,
 		MessengerRelatedUserID: digest.MessengerRelatedUserID,
@@ -85,6 +100,7 @@ func DigestServiceResponseToDTO(digest *service.DigestResponse) *dto.DigestRespo
 		StartDateTo:            digest.StartDateTo,
 		CompletedBacklogsCount: digest.CompletedBacklogsCount,
 		Tasks:                  tasks,
+		Targets:                targets,
 		Timezone:               digest.Timezone,
 	}
 }

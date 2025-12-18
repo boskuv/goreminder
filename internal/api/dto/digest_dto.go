@@ -34,14 +34,15 @@ type DigestSettingsResponse struct {
 
 // DigestResponse represents the response DTO for a digest
 type DigestResponse struct {
-	UserID                 int64          `json:"user_id" example:"1"`
-	MessengerRelatedUserID *int           `json:"messenger_related_user_id,omitempty" example:"123"`
-	ChatID                 *string        `json:"chat_id,omitempty" example:"123"`
-	StartDateFrom          time.Time      `json:"start_date_from" example:"2024-01-01T00:00:00Z"`
-	StartDateTo            time.Time      `json:"start_date_to" example:"2024-01-07T23:59:59Z"`
-	CompletedBacklogsCount int            `json:"completed_backlogs_count" example:"5"`
-	Tasks                  []TaskResponse `json:"tasks"`
-	Timezone               string         `json:"timezone" example:"UTC"`
+	UserID                 int64            `json:"user_id" example:"1"`
+	MessengerRelatedUserID *int             `json:"messenger_related_user_id,omitempty" example:"123"`
+	ChatID                 *string          `json:"chat_id,omitempty" example:"123"`
+	StartDateFrom          time.Time        `json:"start_date_from" example:"2024-01-01T00:00:00Z"`
+	StartDateTo            time.Time        `json:"start_date_to" example:"2024-01-07T23:59:59Z"`
+	CompletedBacklogsCount int              `json:"completed_backlogs_count" example:"5"`
+	Tasks                  []TaskResponse   `json:"tasks"`
+	Targets                []TargetResponse `json:"targets"`
+	Timezone               string           `json:"timezone" example:"UTC"`
 }
 
 // PaginatedDigestSettingsResponse represents a paginated response for digest settings

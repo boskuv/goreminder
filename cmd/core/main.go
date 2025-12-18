@@ -173,7 +173,7 @@ func main() {
 	messengerService := service.NewMessengerService(messengerRepo, userRepo, log)
 	backlogService := service.NewBacklogService(backlogRepo, userRepo, messengerRepo, log)
 	targetService := service.NewTargetService(targetRepo, userRepo, messengerRepo, log)
-	digestService := service.NewDigestService(digestSettingsRepo, backlogRepo, taskRepo, userRepo, messengerRepo, producer, log)
+	digestService := service.NewDigestService(digestSettingsRepo, backlogRepo, targetRepo, taskRepo, userRepo, messengerRepo, producer, log)
 
 	// setup scheduler
 	taskScheduler := service.NewTaskScheduler(taskRepo, taskService, log)

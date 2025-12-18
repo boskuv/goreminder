@@ -22,6 +22,7 @@ import (
 type DigestService struct {
 	digestSettingsRepo repository.DigestSettingsRepository
 	backlogRepo        repository.BacklogRepository
+	targetRepo         repository.TargetRepository
 	taskRepo           repository.TaskRepository
 	userRepo           repository.UserRepository
 	messengerRepo      repository.MessengerRepository
@@ -34,6 +35,7 @@ type DigestService struct {
 func NewDigestService(
 	digestSettingsRepo repository.DigestSettingsRepository,
 	backlogRepo repository.BacklogRepository,
+	targetRepo repository.TargetRepository,
 	taskRepo repository.TaskRepository,
 	userRepo repository.UserRepository,
 	messengerRepo repository.MessengerRepository,
@@ -43,6 +45,7 @@ func NewDigestService(
 	return &DigestService{
 		digestSettingsRepo: digestSettingsRepo,
 		backlogRepo:        backlogRepo,
+		targetRepo:         targetRepo,
 		taskRepo:           taskRepo,
 		userRepo:           userRepo,
 		messengerRepo:      messengerRepo,
@@ -418,6 +421,18 @@ func (s *DigestService) GetDigest(ctx context.Context, userID int64, messengerRe
 		return nil, errors.WithStack(err)
 	}
 
+	// Get all targets for the user (not filtered by date, as targets are goals/aims)
+	targets, _, err := s.targetRepo.GetAllTargets(ctx, 1, 1000, "created_at DESC", &userID)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("failed to get targets")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.WithStack(err)
+	}
+
 	// Set default dates if not provided
 	var startDateFromFinal, startDateToFinal time.Time
 	if startDateFromInTZ != nil {
@@ -461,6 +476,7 @@ func (s *DigestService) GetDigest(ctx context.Context, userID int64, messengerRe
 		StartDateTo:            startDateToFinal,
 		CompletedBacklogsCount: completedCount,
 		Tasks:                  tasks,
+		Targets:                targets,
 		Timezone:               timezoneStr,
 	}
 
@@ -468,10 +484,12 @@ func (s *DigestService) GetDigest(ctx context.Context, userID int64, messengerRe
 		Int64("user.id", userID).
 		Int("completed_backlogs_count", completedCount).
 		Int("tasks.count", len(tasks)).
+		Int("targets.count", len(targets)).
 		Msg("digest generated successfully")
 	span.SetAttributes(
 		attribute.Int("completed_backlogs_count", completedCount),
 		attribute.Int("tasks.count", len(tasks)),
+		attribute.Int("targets.count", len(targets)),
 	)
 	span.SetStatus(codes.Ok, "digest generated successfully")
 	return digest, nil
@@ -596,14 +614,15 @@ func (s *DigestService) DeleteDigestSettings(ctx context.Context, userID int64, 
 
 // DigestResponse represents the response for a digest
 type DigestResponse struct {
-	UserID                 int64          `json:"user_id"`
-	MessengerRelatedUserID *int           `json:"messenger_related_user_id,omitempty"`
-	ChatID                 *string        `json:"chat_id,omitempty"`
-	StartDateFrom          time.Time      `json:"start_date_from"`
-	StartDateTo            time.Time      `json:"start_date_to"`
-	CompletedBacklogsCount int            `json:"completed_backlogs_count"`
-	Tasks                  []*models.Task `json:"tasks"`
-	Timezone               string         `json:"timezone"`
+	UserID                 int64            `json:"user_id"`
+	MessengerRelatedUserID *int             `json:"messenger_related_user_id,omitempty"`
+	ChatID                 *string          `json:"chat_id,omitempty"`
+	StartDateFrom          time.Time        `json:"start_date_from"`
+	StartDateTo            time.Time        `json:"start_date_to"`
+	CompletedBacklogsCount int              `json:"completed_backlogs_count"`
+	Tasks                  []*models.Task   `json:"tasks"`
+	Targets                []*models.Target `json:"targets"`
+	Timezone               string           `json:"timezone"`
 }
 
 // validateTimeFormat validates that the time string is in HH:MM format
