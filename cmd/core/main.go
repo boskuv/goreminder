@@ -140,6 +140,7 @@ func main() {
 	messengerRepo := repository.NewMessengerRepository(db, log)
 	taskHistoryRepo := repository.NewTaskHistoryRepository(db, log)
 	backlogRepo := repository.NewBacklogRepository(db, log)
+	targetRepo := repository.NewTargetRepository(db, log)
 	digestSettingsRepo := repository.NewDigestSettingsRepository(db, log)
 
 	// producer init
@@ -171,6 +172,7 @@ func main() {
 	userService := service.NewUserService(userRepo, taskRepo, messengerRepo, producer, log)
 	messengerService := service.NewMessengerService(messengerRepo, userRepo, log)
 	backlogService := service.NewBacklogService(backlogRepo, userRepo, messengerRepo, log)
+	targetService := service.NewTargetService(targetRepo, userRepo, messengerRepo, log)
 	digestService := service.NewDigestService(digestSettingsRepo, backlogRepo, taskRepo, userRepo, messengerRepo, producer, log)
 
 	// setup scheduler
@@ -181,6 +183,7 @@ func main() {
 	userHandler := handlers.NewUserHandler(userService, log)
 	messengerHandler := handlers.NewMessengerHandler(messengerService, log)
 	backlogHandler := handlers.NewBacklogHandler(backlogService, log)
+	targetHandler := handlers.NewTargetHandler(targetService, log)
 	digestHandler := handlers.NewDigestHandler(digestService, log)
 
 	// setup swagger info
@@ -251,7 +254,7 @@ func main() {
 	}
 
 	// register application routes
-	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler, backlogHandler, digestHandler)
+	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler, backlogHandler, targetHandler, digestHandler)
 	routes.RegisterSystemRoutes(router, appVersion)
 
 	log.Info().Msg("graceful startup")
@@ -260,7 +263,7 @@ func main() {
 	schedulerCtx, schedulerCancel := context.WithCancel(ctx)
 	defer schedulerCancel()
 	go taskScheduler.StartScheduler(schedulerCtx)
-	log.Info().Msg("task scheduler started (runs at 00:00 and 12:00 UTC)")
+	log.Info().Msg("task scheduler started (runs at 00:00 UTC)")
 
 	// start server
 	port := cfg.Server.Port
