@@ -219,6 +219,10 @@ definitions:
       start_date_to:
         example: "2024-01-07T23:59:59Z"
         type: string
+      targets:
+        items:
+          $ref: '#/definitions/dto.TargetResponse'
+        type: array
       tasks:
         items:
           $ref: '#/definitions/dto.TaskResponse'

@@ -2919,6 +2919,12 @@ const docTemplate = `{
                     "type": "string",
                     "example": "2024-01-07T23:59:59Z"
                 },
+                "targets": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.TargetResponse"
+                    }
+                },
                 "tasks": {
                     "type": "array",
                     "items": {
