@@ -12,13 +12,19 @@ GOFLAGS=-mod=vendor
 GOTEST_FLAGS=-cover -v
 MAIN=cmd/core/main.go
 
+# Version variables
+VERSION := $(shell cat VERSION 2>/dev/null || echo "dev")
+BUILD_TIME := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+GIT_TAG := $(shell git describe --tags --exact-match 2>/dev/null || echo "")
+
 # Docker variables
 DOCKER=docker
 COMPOSE=docker-compose
 POSTGRES_CONTAINER=postgres_container
 PG_PORT=5432
 
-.PHONY: all lint build run test swagger docker-up docker-down clean
+.PHONY: all lint build run test swagger docker-up docker-down clean version
 
 # Default target
 all: build
@@ -29,8 +35,14 @@ lint:
 
 # Build the Go application
 build:
-	@echo "Building the binary..."
-	$(GO) build -o $(BINARY) $(MAIN)
+	@echo "Building version $(VERSION)..."
+	$(GO) build \
+		-ldflags "\
+			-X github.com/boskuv/goreminder/pkg/version.Version=$(VERSION) \
+			-X github.com/boskuv/goreminder/pkg/version.BuildTime=$(BUILD_TIME) \
+			-X github.com/boskuv/goreminder/pkg/version.GitCommit=$(GIT_COMMIT) \
+			-X github.com/boskuv/goreminder/pkg/version.GitTag=$(GIT_TAG)" \
+		-o $(BINARY) $(MAIN)
 	@echo "Copying the configuration file..."
 	cp $(CONFIG_FILEPATH) $(BUILD_DIR)/
 
@@ -62,6 +74,13 @@ docker-down:
 # Check database connectivity
 db-check:
 	$(DOCKER) exec $(POSTGRES_CONTAINER) pg_isready -U postgres -h localhost -p $(PG_PORT)
+
+# Show version information
+version:
+	@echo "Version: $(VERSION)"
+	@echo "Build time: $(BUILD_TIME)"
+	@echo "Git commit: $(GIT_COMMIT)"
+	@echo "Git tag: $(GIT_TAG)"
 
 # Clean the build output
 clean:

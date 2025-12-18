@@ -6,6 +6,8 @@ import (
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+
+	"github.com/boskuv/goreminder/pkg/version"
 )
 
 // VersionHandler contains application version info
@@ -28,13 +30,17 @@ func NewHealthCheckHandler() *HealthCheckHandler {
 
 // Version provides the current version of the application
 // @Summary Get application version
-// @Description Returns the current version of the application
+// @Description Returns the current version and build information of the application
 // @Tags System
 // @Produce json
-// @Success 200 {object} map[string]string
+// @Success 200 {object} map[string]string "Version information"
 // @Router /version [get]
 func (h *VersionHandler) Version(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"version": h.AppVersion})
+	// Return full version information including build metadata
+	versionInfo := version.GetFullVersion()
+	// Override version with the one passed to handler (for consistency)
+	versionInfo["version"] = h.AppVersion
+	c.JSON(http.StatusOK, versionInfo)
 }
 
 // HealthCheck verifies the health of the application

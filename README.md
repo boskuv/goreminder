@@ -847,6 +847,42 @@ python run_messenger_tests.py
 - **Integration Tests**: Test service layer with mocked repositories
 - **E2E Tests**: Test complete API workflows using Python requests
 
+## Versioning
+
+The project uses [Semantic Versioning](https://semver.org/) with version information managed through a `VERSION` file and build-time injection.
+
+### Check Version
+
+```bash
+# Show version information
+make version
+
+# Check version via API
+curl http://localhost:8080/version
+```
+
+### Update Version
+
+1. Update `VERSION` file:
+```bash
+echo "0.7.0-rc.1" > VERSION
+```
+
+2. Update `CHANGELOG.md` (move changes from `[Unreleased]` to version section)
+
+3. Build with version:
+```bash
+make build
+```
+
+4. Tag release:
+```bash
+git tag -a v0.7.0-rc.1 -m "Release v0.7.0-rc.1"
+git push origin v0.7.0-rc.1
+```
+
+For detailed versioning guidelines, see [docs/versioning.md](docs/versioning.md).
+
 ## Development
 
 ### Code Quality

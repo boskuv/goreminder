@@ -31,6 +31,7 @@ import (
 	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/observability"
 	"github.com/boskuv/goreminder/pkg/queue"
+	"github.com/boskuv/goreminder/pkg/version"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -183,9 +184,10 @@ func main() {
 	digestHandler := handlers.NewDigestHandler(digestService, log)
 
 	// setup swagger info
+	appVersion := version.GetVersion()
 	docs.SwaggerInfo.Title = "Task Management API"
 	docs.SwaggerInfo.Description = "API documentation for the Task Management system"
-	docs.SwaggerInfo.Version = "1.0"
+	docs.SwaggerInfo.Version = appVersion
 	docs.SwaggerInfo.Host = "localhost:8080" // TODO: remove hardcode
 	docs.SwaggerInfo.Schemes = []string{"http"}
 
@@ -250,7 +252,7 @@ func main() {
 
 	// register application routes
 	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler, backlogHandler, digestHandler)
-	routes.RegisterSystemRoutes(router, docs.SwaggerInfo.Version)
+	routes.RegisterSystemRoutes(router, appVersion)
 
 	log.Info().Msg("graceful startup")
 
