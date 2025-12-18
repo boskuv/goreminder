@@ -118,6 +118,24 @@ definitions:
     required:
     - name
     type: object
+  dto.CreateTargetRequest:
+    properties:
+      description:
+        example: Master Go programming language
+        type: string
+      messenger_related_user_id:
+        example: 123
+        type: integer
+      title:
+        example: Learn Go programming
+        type: string
+      user_id:
+        example: 1
+        type: integer
+    required:
+    - title
+    - user_id
+    type: object
   dto.CreateTaskRequest:
     properties:
       cron_expression:
@@ -313,6 +331,15 @@ definitions:
       pagination:
         $ref: '#/definitions/dto.PaginationResponse'
     type: object
+  dto.PaginatedTargetsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/dto.TargetResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/dto.PaginationResponse'
+    type: object
   dto.PaginatedTasksResponse:
     properties:
       data:
@@ -364,6 +391,33 @@ definitions:
     - action
     - queue_name
     - task_id
+    type: object
+  dto.TargetResponse:
+    properties:
+      completed_at:
+        example: "2024-01-15T10:00:00Z"
+        type: string
+      created_at:
+        example: "2024-01-10T08:00:00Z"
+        type: string
+      description:
+        example: Master Go programming language
+        type: string
+      id:
+        example: 1
+        type: integer
+      messenger_related_user_id:
+        example: 123
+        type: integer
+      title:
+        example: Learn Go programming
+        type: string
+      updated_at:
+        example: "2024-01-10T08:00:00Z"
+        type: string
+      user_id:
+        example: 1
+        type: integer
     type: object
   dto.TaskHistoryResponse:
     properties:
@@ -468,6 +522,18 @@ definitions:
       weekend_time:
         description: 'Format: HH:MM'
         example: "11:00"
+        type: string
+    type: object
+  dto.UpdateTargetRequest:
+    properties:
+      completed_at:
+        example: "2024-01-15T10:00:00Z"
+        type: string
+      description:
+        example: Updated target description
+        type: string
+      title:
+        example: Updated target title
         type: string
     type: object
   dto.UpdateTaskRequest:
@@ -1391,6 +1457,201 @@ paths:
       summary: Get messenger ID by name
       tags:
       - Messengers
+  /api/v1/targets:
+    get:
+      description: Retrieves all target items with pagination, ordering, and filtering
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - default: created_at DESC
+        description: Order by
+        in: query
+        name: order_by
+        type: string
+      - description: Filter by user ID
+        in: query
+        name: user_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Paginated targets
+          schema:
+            $ref: '#/definitions/dto.PaginatedTargetsResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get all target items
+      tags:
+      - Targets
+    post:
+      consumes:
+      - application/json
+      description: Creates a new target item and associates it with a user
+      parameters:
+      - description: Target to create
+        in: body
+        name: target
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateTargetRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created target ID
+          schema:
+            additionalProperties:
+              type: integer
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a new target item
+      tags:
+      - Targets
+  /api/v1/targets/{id}:
+    delete:
+      description: Deletes a target item by its ID (soft delete)
+      parameters:
+      - description: Target ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete target item
+      tags:
+      - Targets
+    get:
+      description: Retrieves a target item by its ID
+      parameters:
+      - description: Target ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Target item
+          schema:
+            $ref: '#/definitions/dto.TargetResponse'
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get target by ID
+      tags:
+      - Targets
+    put:
+      consumes:
+      - application/json
+      description: Updates a target item by its ID
+      parameters:
+      - description: Target ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Target update data
+        in: body
+        name: target
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateTargetRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Updated target item
+          schema:
+            $ref: '#/definitions/dto.TargetResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update target item
+      tags:
+      - Targets
   /api/v1/tasks:
     get:
       description: Retrieves all tasks with pagination, ordering, and filtering (by
@@ -2088,12 +2349,12 @@ paths:
       - System
   /version:
     get:
-      description: Returns the current version of the application
+      description: Returns the current version and build information of the application
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Version information
           schema:
             additionalProperties:
               type: string

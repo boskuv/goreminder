@@ -1268,6 +1268,299 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/targets": {
+            "get": {
+                "description": "Retrieves all target items with pagination, ordering, and filtering",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Targets"
+                ],
+                "summary": "Get all target items",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "created_at DESC",
+                        "description": "Order by",
+                        "name": "order_by",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by user ID",
+                        "name": "user_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated targets",
+                        "schema": {
+                            "$ref": "#/definitions/dto.PaginatedTargetsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a new target item and associates it with a user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Targets"
+                ],
+                "summary": "Create a new target item",
+                "parameters": [
+                    {
+                        "description": "Target to create",
+                        "name": "target",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateTargetRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created target ID",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "integer"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable entity",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/targets/{id}": {
+            "get": {
+                "description": "Retrieves a target item by its ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Targets"
+                ],
+                "summary": "Get target by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Target item",
+                        "schema": {
+                            "$ref": "#/definitions/dto.TargetResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Updates a target item by its ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Targets"
+                ],
+                "summary": "Update target item",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Target update data",
+                        "name": "target",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateTargetRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated target item",
+                        "schema": {
+                            "$ref": "#/definitions/dto.TargetResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable entity",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Deletes a target item by its ID (soft delete)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Targets"
+                ],
+                "summary": "Delete target item",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/tasks": {
             "get": {
                 "description": "Retrieves all tasks with pagination, ordering, and filtering (by status, start_date_from, start_date_to, user_id)",
@@ -2308,7 +2601,7 @@ const docTemplate = `{
         },
         "/version": {
             "get": {
-                "description": "Returns the current version of the application",
+                "description": "Returns the current version and build information of the application",
                 "produces": [
                     "application/json"
                 ],
@@ -2318,7 +2611,7 @@ const docTemplate = `{
                 "summary": "Get application version",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Version information",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -2486,6 +2779,31 @@ const docTemplate = `{
                 "name": {
                     "type": "string",
                     "example": "telegram"
+                }
+            }
+        },
+        "dto.CreateTargetRequest": {
+            "type": "object",
+            "required": [
+                "title",
+                "user_id"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "example": "Master Go programming language"
+                },
+                "messenger_related_user_id": {
+                    "type": "integer",
+                    "example": 123
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Learn Go programming"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
                 }
             }
         },
@@ -2761,6 +3079,20 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.PaginatedTargetsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.TargetResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/dto.PaginationResponse"
+                }
+            }
+        },
         "dto.PaginatedTasksResponse": {
             "type": "object",
             "properties": {
@@ -2831,6 +3163,43 @@ const docTemplate = `{
                     "example": "celery"
                 },
                 "task_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "dto.TargetResponse": {
+            "type": "object",
+            "properties": {
+                "completed_at": {
+                    "type": "string",
+                    "example": "2024-01-15T10:00:00Z"
+                },
+                "created_at": {
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Master Go programming language"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "messenger_related_user_id": {
+                    "type": "integer",
+                    "example": 123
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Learn Go programming"
+                },
+                "updated_at": {
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
+                },
+                "user_id": {
                     "type": "integer",
                     "example": 1
                 }
@@ -2974,6 +3343,23 @@ const docTemplate = `{
                     "description": "Format: HH:MM",
                     "type": "string",
                     "example": "11:00"
+                }
+            }
+        },
+        "dto.UpdateTargetRequest": {
+            "type": "object",
+            "properties": {
+                "completed_at": {
+                    "type": "string",
+                    "example": "2024-01-15T10:00:00Z"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Updated target description"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Updated target title"
                 }
             }
         },
