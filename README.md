@@ -8,12 +8,12 @@
 ## Business Features
 - [x] **Auto-rescheduling**: Tasks are automatically rescheduled to the next day if confirmation is not received
 - [x] **Daily Task Digest**: Send daily task summaries at specified times
+- [x] **Backlog Zone**: Tasks without fixed time and confirmation requirements
 - [ ] **Task Muting**: Temporarily mute notifications for specific tasks
 - [ ] **Task Postponement**: Ability to postpone tasks to a later time
 - [ ] **Reminder Groups**: Group related tasks together for batch management
 - [ ] **ICS Import**: Import tasks from iCalendar (.ics) files
 - [ ] **Advanced Reminders**: Pre-reminders before task deadlines
-- [ ] **Chaos Zone**: Tasks without fixed time and confirmation requirements
 
 ## Tech Features
 - **Task Management**: Create, fetch, update, and delete tasks with soft delete support
@@ -35,7 +35,7 @@
 
 ## Prerequisites
 - Docker and Docker Compose
-- Go 1.22 or later
+- Go 1.24 or later
 - `make` for build automation
 - `golangci-lint` for code linting
 - `goose` for database migrations
@@ -602,8 +602,8 @@ GoReminder supports two types of tasks: **one-time tasks** and **recurring tasks
 
 | Field | One-time Task | Recurring Task (Parent) | Recurring Task (Child) |
 |-------|---------------|------------------------|------------------------|
-| `cron_expr` | `null` | Required (e.g., `"0 9 * * *"`) | `null` |
-| `requires_confirmation` | `true` or `false` | `true` | `true` (inherited) |
+| `cron_expression` | `null` | Required (e.g., `"0 9 * * *"`) | `null` |
+| `requires_confirmation` | `true` | `true` or `false` | `true` only |
 | `parent_id` | `null` | `null` | Points to parent task ID |
 | Execution | Executes once at `start_date` | Does not execute directly | Executes at calculated `start_date` |
 | Auto-creates child | No | Yes (on creation and when child is done) | No |
@@ -618,7 +618,7 @@ GoReminder supports two types of tasks: **one-time tasks** and **recurring tasks
 
 Rescheduling occurs when a task with `requires_confirmation=true` is not confirmed by the user.
 
-#### One-time Task (no `cron_expr`, `requires_confirmation=true`)
+#### One-time Task (no `cron_expression`, `requires_confirmation=true`)
 
 1. Task is sent at `start_date`
 2. User does not confirm
@@ -636,7 +636,7 @@ Rescheduling occurs when a task with `requires_confirmation=true` is not confirm
    - **If conflict**: Rescheduling is skipped (parent will create a new child)
    - **If no conflict**: `start_date` is moved forward by 24 hours, task is re-published
 
-#### Recurring Task Parent (has `cron_expr`, `requires_confirmation=false`)
+#### Recurring Task Parent (has `cron_expression`, `requires_confirmation=false`)
 
 1. `RescheduleCronTasks` is called for parent tasks without confirmation
 2. `start_date` is updated to next cron execution time
