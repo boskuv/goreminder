@@ -236,7 +236,7 @@ func (s *TaskService) GetTask(ctx context.Context, taskID int64) (*models.Task, 
 }
 
 // GetUserTasks implements BL of retrieving existing tasks by user id with pagination and ordering
-func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool) ([]*models.Task, int, error) {
+func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool) ([]*models.Task, int, error) {
 	ctx, span := s.tracer.Start(ctx, "task_service.GetUserTasks",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
@@ -269,7 +269,28 @@ func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, page
 		return nil, 0, errors.WithStack(err)
 	}
 
-	tasks, totalCount, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation)
+	if status != nil {
+		span.SetAttributes(attribute.String("filter.status", *status))
+		log = log.With().Str("filter.status", *status).Logger()
+	}
+	if statusNot != nil {
+		span.SetAttributes(attribute.String("filter.status_not", *statusNot))
+		log = log.With().Str("filter.status_not", *statusNot).Logger()
+	}
+	if cronExpression != nil {
+		span.SetAttributes(attribute.String("filter.cron_expression", *cronExpression))
+		log = log.With().Str("filter.cron_expression", *cronExpression).Logger()
+	}
+	if cronExpressionIsNull != nil {
+		span.SetAttributes(attribute.Bool("filter.cron_expression_is_null", *cronExpressionIsNull))
+		log = log.With().Bool("filter.cron_expression_is_null", *cronExpressionIsNull).Logger()
+	}
+	if excludeCronWithConfirmation != nil {
+		span.SetAttributes(attribute.Bool("filter.exclude_cron_with_confirmation", *excludeCronWithConfirmation))
+		log = log.With().Bool("filter.exclude_cron_with_confirmation", *excludeCronWithConfirmation).Logger()
+	}
+
+	tasks, totalCount, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation)
 	if err != nil {
 		log.Debug().
 			Err(err).

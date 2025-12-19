@@ -410,7 +410,7 @@ func (s *DigestService) GetDigest(ctx context.Context, userID int64, messengerRe
 	}
 
 	// Get tasks for the period
-	tasks, _, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, 1, 1000, "start_date ASC", startDateFromInTZ, startDateToInTZ, nil, nil, nil)
+	tasks, _, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, 1, 1000, "start_date ASC", startDateFromInTZ, startDateToInTZ, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		log.Debug().
 			Err(err).

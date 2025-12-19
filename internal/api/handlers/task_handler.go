@@ -152,18 +152,23 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 }
 
 // @Summary Get all user's tasks by userID
-// @Description Retrieves all tasks by userID with pagination, ordering, and filtering
+// @Description Retrieves all tasks by userID with pagination, ordering, and filtering (by status, status_not, start_date_from, start_date_to, created_at_from, created_at_to, cron_expression, cron_expression_is_null, requires_confirmation, exclude_cron_with_confirmation)
 // @Tags Tasks
 // @Produce json
 // @Param user_id path int true "User ID"
 // @Param page query int false "Page number (default: 1)" default(1)
 // @Param page_size query int false "Page size (default: 50)" default(50)
 // @Param order_by query string false "Order by field (default: created_at DESC)" default(created_at DESC)
+// @Param status query string false "Filter by status (pending, scheduled, done, rescheduled, postponed, deleted)"
+// @Param status_not query string false "Filter by status not equal to value (pending, scheduled, done, rescheduled, postponed, deleted)"
 // @Param start_date_from query string false "Filter by start_date from (RFC3339 format, inclusive)"
 // @Param start_date_to query string false "Filter by start_date to (RFC3339 format, inclusive)"
 // @Param created_at_from query string false "Filter by created_at from (RFC3339 format, inclusive)"
 // @Param created_at_to query string false "Filter by created_at to (RFC3339 format, inclusive)"
+// @Param cron_expression query string false "Filter by exact cron_expression value"
+// @Param cron_expression_is_null query bool false "Filter by cron_expression IS NULL (true) or IS NOT NULL (false)"
 // @Param requires_confirmation query bool false "Filter by requires_confirmation (true/false)"
+// @Param exclude_cron_with_confirmation query bool false "Exclude tasks where cron_expression IS NOT NULL AND requires_confirmation == True (implements: NOT (cron_expression IS NOT NULL AND requires_confirmation == True))"
 // @Success 200 {object} dto.PaginatedTasksResponse "Paginated list of tasks"
 // @Failure 400 {object} map[string]string "Bad request"
 // @Failure 422 {object} map[string]string "Unprocessable entity"
@@ -243,6 +248,53 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		return
 	}
 
+	status, err := validation.ValidateOptionalStringQuery(c, "status")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid status query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	var statusPtr *string
+	if status != "" {
+		statusPtr = &status
+	}
+
+	statusNot, err := validation.ValidateOptionalStringQuery(c, "status_not")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid status_not query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	var statusNotPtr *string
+	if statusNot != "" {
+		statusNotPtr = &statusNot
+	}
+
+	cronExpression, err := validation.ValidateOptionalStringQuery(c, "cron_expression")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid cron_expression query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	var cronExpressionPtr *string
+	if cronExpression != "" {
+		cronExpressionPtr = &cronExpression
+	}
+
+	cronExpressionIsNull, err := validation.ValidateOptionalBoolQuery(c, "cron_expression_is_null")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid cron_expression_is_null query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	excludeCronWithConfirmation, err := validation.ValidateOptionalBoolQuery(c, "exclude_cron_with_confirmation")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid exclude_cron_with_confirmation query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
 	log.Info().
 		Int64("user.id", userID).
 		Int64("page", page).
@@ -250,7 +302,7 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		Str("order_by", orderBy).
 		Msg("getting user tasks")
 
-	tasks, totalCount, err := h.taskService.GetUserTasks(ctx, userID, int(page), int(pageSize), orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation)
+	tasks, totalCount, err := h.taskService.GetUserTasks(ctx, userID, int(page), int(pageSize), orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, statusPtr, statusNotPtr, cronExpressionPtr, cronExpressionIsNull, excludeCronWithConfirmation)
 	if err != nil {
 		log.Error().
 			Stack().
