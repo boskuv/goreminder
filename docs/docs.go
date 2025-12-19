@@ -1563,7 +1563,7 @@ const docTemplate = `{
         },
         "/api/v1/tasks": {
             "get": {
-                "description": "Retrieves all tasks with pagination, ordering, and filtering (by status, start_date_from, start_date_to, user_id)",
+                "description": "Retrieves all tasks with pagination, ordering, and filtering (by status, status_not, start_date_from, start_date_to, user_id, cron_expression, cron_expression_is_null, requires_confirmation)",
                 "produces": [
                     "application/json"
                 ],
@@ -1601,6 +1601,12 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "Filter by status not equal to value (pending, scheduled, done, rescheduled, postponed, deleted)",
+                        "name": "status_not",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "Filter by start_date from (RFC3339 format, inclusive)",
                         "name": "start_date_from",
                         "in": "query"
@@ -1615,6 +1621,30 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Filter by user_id",
                         "name": "user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by exact cron_expression value",
+                        "name": "cron_expression",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter by cron_expression IS NULL (true) or IS NOT NULL (false)",
+                        "name": "cron_expression_is_null",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter by requires_confirmation (true/false)",
+                        "name": "requires_confirmation",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Exclude tasks where cron_expression IS NOT NULL AND requires_confirmation == True (implements: NOT (cron_expression IS NOT NULL AND requires_confirmation == True))",
+                        "name": "exclude_cron_with_confirmation",
                         "in": "query"
                     }
                 ],

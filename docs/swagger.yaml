@@ -1659,7 +1659,8 @@ paths:
   /api/v1/tasks:
     get:
       description: Retrieves all tasks with pagination, ordering, and filtering (by
-        status, start_date_from, start_date_to, user_id)
+        status, status_not, start_date_from, start_date_to, user_id, cron_expression,
+        cron_expression_is_null, requires_confirmation)
       parameters:
       - default: 1
         description: 'Page number (default: 1)'
@@ -1681,6 +1682,11 @@ paths:
         in: query
         name: status
         type: string
+      - description: Filter by status not equal to value (pending, scheduled, done,
+          rescheduled, postponed, deleted)
+        in: query
+        name: status_not
+        type: string
       - description: Filter by start_date from (RFC3339 format, inclusive)
         in: query
         name: start_date_from
@@ -1693,6 +1699,24 @@ paths:
         in: query
         name: user_id
         type: integer
+      - description: Filter by exact cron_expression value
+        in: query
+        name: cron_expression
+        type: string
+      - description: Filter by cron_expression IS NULL (true) or IS NOT NULL (false)
+        in: query
+        name: cron_expression_is_null
+        type: boolean
+      - description: Filter by requires_confirmation (true/false)
+        in: query
+        name: requires_confirmation
+        type: boolean
+      - description: 'Exclude tasks where cron_expression IS NOT NULL AND requires_confirmation
+          == True (implements: NOT (cron_expression IS NOT NULL AND requires_confirmation
+          == True))'
+        in: query
+        name: exclude_cron_with_confirmation
+        type: boolean
       produces:
       - application/json
       responses:
