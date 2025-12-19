@@ -329,8 +329,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	oldRequiresConfirmation := oldTask.RequiresConfirmation
 	oldFinishDate := oldTask.FinishDate
 
-	// Check if this is a parent task (has cron_expression)
-	isParentTask := oldTask.CronExpression != nil
+	// Check if this is a parent task (has cron_expression and requires_confirmation)
+	isParentTask := oldTask.CronExpression != nil && oldTask.RequiresConfirmation
 
 	// update the task fields (partial update)
 	if updateRequest.Title != nil {
@@ -2009,7 +2009,7 @@ func (s *TaskService) RescheduleCronTasks(ctx context.Context, tasks []*models.T
 }
 
 // GetAllTasks implements BL of retrieving all tasks with pagination, ordering, and filtering
-func (s *TaskService) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64) ([]*models.Task, int, error) {
+func (s *TaskService) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, statusNot *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64, cronExpression *string, cronExpressionIsNull *bool, requiresConfirmation *bool, excludeCronWithConfirmation *bool) ([]*models.Task, int, error) {
 	ctx, span := s.tracer.Start(ctx, "task_service.GetAllTasks",
 		trace.WithAttributes(
 			attribute.Int("page", page),
@@ -2029,6 +2029,10 @@ func (s *TaskService) GetAllTasks(ctx context.Context, page, pageSize int, order
 		span.SetAttributes(attribute.String("filter.status", *status))
 		log = log.With().Str("filter.status", *status).Logger()
 	}
+	if statusNot != nil {
+		span.SetAttributes(attribute.String("filter.status_not", *statusNot))
+		log = log.With().Str("filter.status_not", *statusNot).Logger()
+	}
 	if startDateFrom != nil {
 		span.SetAttributes(attribute.String("filter.start_date_from", startDateFrom.Format(time.RFC3339)))
 		log = log.With().Time("filter.start_date_from", *startDateFrom).Logger()
@@ -2041,8 +2045,24 @@ func (s *TaskService) GetAllTasks(ctx context.Context, page, pageSize int, order
 		span.SetAttributes(attribute.Int64("filter.user_id", *userID))
 		log = log.With().Int64("filter.user_id", *userID).Logger()
 	}
+	if cronExpression != nil {
+		span.SetAttributes(attribute.String("filter.cron_expression", *cronExpression))
+		log = log.With().Str("filter.cron_expression", *cronExpression).Logger()
+	}
+	if cronExpressionIsNull != nil {
+		span.SetAttributes(attribute.Bool("filter.cron_expression_is_null", *cronExpressionIsNull))
+		log = log.With().Bool("filter.cron_expression_is_null", *cronExpressionIsNull).Logger()
+	}
+	if requiresConfirmation != nil {
+		span.SetAttributes(attribute.Bool("filter.requires_confirmation", *requiresConfirmation))
+		log = log.With().Bool("filter.requires_confirmation", *requiresConfirmation).Logger()
+	}
+	if excludeCronWithConfirmation != nil {
+		span.SetAttributes(attribute.Bool("filter.exclude_cron_with_confirmation", *excludeCronWithConfirmation))
+		log = log.With().Bool("filter.exclude_cron_with_confirmation", *excludeCronWithConfirmation).Logger()
+	}
 
-	tasks, totalCount, err := s.taskRepo.GetAllTasks(ctx, page, pageSize, orderBy, status, startDateFrom, startDateTo, userID)
+	tasks, totalCount, err := s.taskRepo.GetAllTasks(ctx, page, pageSize, orderBy, status, statusNot, startDateFrom, startDateTo, userID, cronExpression, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation)
 	if err != nil {
 		log.Debug().
 			Err(err).

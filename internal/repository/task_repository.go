@@ -35,7 +35,7 @@ type TaskRepository interface {
 	GetTasksNeedingRescheduling(ctx context.Context) ([]*models.Task, error)
 	GetTasksWithCronNeedingRescheduling(ctx context.Context) ([]*models.Task, error)
 	GetDB() *sqlx.DB
-	GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64) ([]*models.Task, int, error)
+	GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, statusNot *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64, cronExpression *string, cronExpressionIsNull *bool, requiresConfirmation *bool, excludeCronWithConfirmation *bool) ([]*models.Task, int, error)
 }
 
 type taskRepository struct {
@@ -853,7 +853,7 @@ func (r *taskRepository) GetTasksWithCronNeedingRescheduling(ctx context.Context
 }
 
 // GetAllTasks retrieves all tasks with pagination, ordering, and filtering
-func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64) ([]*models.Task, int, error) {
+func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, statusNot *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64, cronExpression *string, cronExpressionIsNull *bool, requiresConfirmation *bool, excludeCronWithConfirmation *bool) ([]*models.Task, int, error) {
 	ctx, span := r.tracer.Start(ctx, "task_repository.GetAllTasks",
 		trace.WithAttributes(
 			attribute.Int("page", page),
@@ -890,6 +890,10 @@ func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, or
 		countBuilder = countBuilder.Where(squirrel.Eq{"status": *status})
 		span.SetAttributes(attribute.String("filter.status", *status))
 	}
+	if statusNot != nil && *statusNot != "" {
+		countBuilder = countBuilder.Where(squirrel.NotEq{"status": *statusNot})
+		span.SetAttributes(attribute.String("filter.status_not", *statusNot))
+	}
 	if startDateFrom != nil {
 		countBuilder = countBuilder.Where(squirrel.GtOrEq{"start_date": *startDateFrom})
 		span.SetAttributes(attribute.String("filter.start_date_from", startDateFrom.Format(time.RFC3339)))
@@ -901,6 +905,30 @@ func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, or
 	if userID != nil {
 		countBuilder = countBuilder.Where(squirrel.Eq{"user_id": *userID})
 		span.SetAttributes(attribute.Int64("filter.user_id", *userID))
+	}
+	if cronExpression != nil && *cronExpression != "" {
+		countBuilder = countBuilder.Where(squirrel.Eq{"cron_expression": *cronExpression})
+		span.SetAttributes(attribute.String("filter.cron_expression", *cronExpression))
+	}
+	if cronExpressionIsNull != nil {
+		if *cronExpressionIsNull {
+			countBuilder = countBuilder.Where(squirrel.Eq{"cron_expression": nil})
+			span.SetAttributes(attribute.Bool("filter.cron_expression_is_null", true))
+		} else {
+			countBuilder = countBuilder.Where(squirrel.NotEq{"cron_expression": nil})
+			span.SetAttributes(attribute.Bool("filter.cron_expression_is_null", false))
+		}
+	}
+	if requiresConfirmation != nil {
+		countBuilder = countBuilder.Where(squirrel.Eq{"requires_confirmation": *requiresConfirmation})
+		span.SetAttributes(attribute.Bool("filter.requires_confirmation", *requiresConfirmation))
+	}
+	// Exclude tasks where cron_expression IS NOT NULL AND requires_confirmation == True at the same time
+	// This implements: NOT (cron_expression IS NOT NULL AND requires_confirmation == True)
+	// Using raw SQL expression to properly exclude: (cron_expression IS NULL OR requires_confirmation = false)
+	if excludeCronWithConfirmation != nil && *excludeCronWithConfirmation {
+		countBuilder = countBuilder.Where(squirrel.Expr("(cron_expression IS NULL OR requires_confirmation = false)"))
+		span.SetAttributes(attribute.Bool("filter.exclude_cron_with_confirmation", true))
 	}
 
 	countQuery, countArgs, err := countBuilder.ToSql()
@@ -927,6 +955,9 @@ func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, or
 	if status != nil && *status != "" {
 		dataBuilder = dataBuilder.Where(squirrel.Eq{"status": *status})
 	}
+	if statusNot != nil && *statusNot != "" {
+		dataBuilder = dataBuilder.Where(squirrel.NotEq{"status": *statusNot})
+	}
 	if startDateFrom != nil {
 		dataBuilder = dataBuilder.Where(squirrel.GtOrEq{"start_date": *startDateFrom})
 	}
@@ -935,6 +966,25 @@ func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, or
 	}
 	if userID != nil {
 		dataBuilder = dataBuilder.Where(squirrel.Eq{"user_id": *userID})
+	}
+	if cronExpression != nil && *cronExpression != "" {
+		dataBuilder = dataBuilder.Where(squirrel.Eq{"cron_expression": *cronExpression})
+	}
+	if cronExpressionIsNull != nil {
+		if *cronExpressionIsNull {
+			dataBuilder = dataBuilder.Where(squirrel.Eq{"cron_expression": nil})
+		} else {
+			dataBuilder = dataBuilder.Where(squirrel.NotEq{"cron_expression": nil})
+		}
+	}
+	if requiresConfirmation != nil {
+		dataBuilder = dataBuilder.Where(squirrel.Eq{"requires_confirmation": *requiresConfirmation})
+	}
+	// Exclude tasks where cron_expression IS NOT NULL AND requires_confirmation == True
+	// This implements: NOT (cron_expression IS NOT NULL AND requires_confirmation == True)
+	// Using raw SQL expression to properly exclude: (cron_expression IS NULL OR requires_confirmation = false)
+	if excludeCronWithConfirmation != nil && *excludeCronWithConfirmation {
+		dataBuilder = dataBuilder.Where(squirrel.Expr("(cron_expression IS NULL OR requires_confirmation = false)"))
 	}
 
 	query, args, err := dataBuilder.
