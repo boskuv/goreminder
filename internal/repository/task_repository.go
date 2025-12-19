@@ -73,7 +73,7 @@ func (r *taskRepository) CreateTask(ctx context.Context, task *models.Task) (int
 
 	query, args, err := r.sb.Insert("tasks").
 		Columns("title", "description", "user_id", "messenger_related_user_id", "status", "parent_id", "start_date", "finish_date", "cron_expression", "requires_confirmation").
-		Values(task.Title, task.Description, task.UserID, task.MessengerRelatedUserID, task.ParentID, task.Status, task.StartDate, task.FinishDate, task.CronExpression, task.RequiresConfirmation).
+		Values(task.Title, task.Description, task.UserID, task.MessengerRelatedUserID, task.Status, task.ParentID, task.StartDate, task.FinishDate, task.CronExpression, task.RequiresConfirmation).
 		Suffix("RETURNING id").
 		ToSql()
 	if err != nil {
