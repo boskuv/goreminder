@@ -350,8 +350,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	oldRequiresConfirmation := oldTask.RequiresConfirmation
 	oldFinishDate := oldTask.FinishDate
 
-	// Check if this is a parent task (has cron_expression and requires_confirmation)
-	isParentTask := oldTask.CronExpression != nil && oldTask.RequiresConfirmation
+	// Check if this was a parent task before update (has cron_expression and requires_confirmation)
+	wasParentTask := oldTask.CronExpression != nil && oldTask.RequiresConfirmation
 
 	// update the task fields (partial update)
 	if updateRequest.Title != nil {
@@ -372,7 +372,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			return nil, errors.Wrap(errs.ErrValidation, err.Error())
 		}
 		if oldTask.Status != *updateRequest.Status {
-			statusChanged = true // TODO: why here?
+			statusChanged = true
 		}
 		oldTask.Status = *updateRequest.Status
 	}
@@ -390,11 +390,15 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		oldTask.RequiresConfirmation = *updateRequest.RequiresConfirmation
 	}
 
+	// Check if this is a parent task after update (has cron_expression and requires_confirmation)
+	isParentTask := oldTask.CronExpression != nil && oldTask.RequiresConfirmation
+
 	// Get database connection for transaction if we need to update child tasks
+	// Transaction is needed if task was or is a parent task (to handle child tasks synchronization)
 	var db *sqlx.DB
 	var tx *sqlx.Tx
 	var hasActiveTransaction = false
-	if isParentTask {
+	if wasParentTask || isParentTask {
 		db = s.taskRepo.GetDB()
 		if db == nil {
 			err := errors.New("database connection not available")
@@ -439,22 +443,40 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	// Use transaction if available (for parent tasks that may update child tasks)
 	if hasActiveTransaction {
 		err = s.taskRepo.UpdateTaskWithTx(ctx, tx, oldTask)
+		if err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Msg("failed to update task in transaction")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, errors.WithStack(err)
+		}
+		log.Debug().
+			Int64("task.id", taskID).
+			Msg("task updated successfully in transaction")
 	} else {
 		err = s.taskRepo.UpdateTask(ctx, oldTask)
-	}
-	if err != nil {
+		if err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Msg("failed to update task")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, errors.WithStack(err)
+		}
 		log.Debug().
-			Err(err).
 			Int64("task.id", taskID).
-			Msg("failed to update task")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, errors.WithStack(err)
+			Msg("task updated successfully")
 	}
 
 	// Handle queue publishing for single tasks (without cron) or parent tasks when status changes
 	// For parent tasks, we only publish if status changes to deleted (parent tasks don't execute directly)
 	// For single tasks, we publish schedule_task or delete_task based on changes
+	// Note: isParentTask is checked after update, so it reflects the current state
 	if !isParentTask {
 		// For single tasks (without cron), publish to queue based on changes
 		titleChanged := updateRequest.Title != nil && *updateRequest.Title != oldTitle
@@ -465,7 +487,6 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			(updateRequest.CronExpression != nil && oldCronExpression != nil && *updateRequest.CronExpression != *oldCronExpression)
 		statusChangedToDeleted := statusChanged && oldTask.Status == string(models.TaskStatusDeleted)
 		statusChangedToScheduled := statusChanged && oldTask.Status == string(models.TaskStatusScheduled)
-		// TODO: reqConf?
 
 		// Publish delete_task if status changed to deleted
 		if statusChangedToDeleted {
@@ -526,8 +547,17 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		}
 	}
 
-	// Handle child tasks synchronization if this is a parent task
-	if isParentTask {
+	// Handle child tasks synchronization if this is or was a parent task
+	// Need to handle child tasks if task was a parent (to clean up) or is a parent (to sync)
+	if wasParentTask || isParentTask {
+		_, childTasksSpan := s.tracer.Start(ctx, "task_service.sync_child_tasks",
+			trace.WithAttributes(
+				attribute.Int64("task.id", taskID),
+				attribute.Bool("was_parent_task", wasParentTask),
+				attribute.Bool("is_parent_task", isParentTask),
+			))
+		defer childTasksSpan.End()
+
 		// Get all child tasks
 		childTasks, err := s.taskRepo.GetChildTasksByParentID(ctx, taskID)
 		if err != nil {
@@ -536,10 +566,17 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				Err(err).
 				Int64("task.id", taskID).
 				Msg("failed to get child tasks for synchronization")
+			childTasksSpan.RecordError(err)
+			childTasksSpan.SetStatus(codes.Error, err.Error())
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, errors.WithStack(err)
 		}
+		childTasksSpan.SetAttributes(attribute.Int("child_tasks.count", len(childTasks)))
+		log.Debug().
+			Int64("task.id", taskID).
+			Int("child_tasks.count", len(childTasks)).
+			Msg("retrieved child tasks for synchronization")
 
 		// Check if requires_confirmation was removed (true -> false)
 		requiresConfirmationRemoved := oldRequiresConfirmation && !oldTask.RequiresConfirmation
@@ -626,6 +663,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			}
 		} else if len(childTasks) > 0 {
 			// Update child tasks based on parent changes
+			// Only update if parent task still exists (isParentTask is true)
+			// or if it was a parent task (wasParentTask is true) - in this case we might need cleanup
 			titleChanged := updateRequest.Title != nil && *updateRequest.Title != oldTitle
 			descriptionChanged := updateRequest.Description != nil && *updateRequest.Description != oldDescription
 			startDateChanged := updateRequest.StartDate != nil && !updateRequest.StartDate.Equal(oldStartDate)
@@ -668,20 +707,20 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				if cronExpressionChanged || startDateChanged {
 					if oldTask.CronExpression != nil {
 						// Calculate next execution time from new cron expression
-						// Use current time or the new start_date as base
-						// If startDate has already passed, use time.Now().UTC() instead
+						// Use current time as base, or start_date if it's in the future
 						baseTime := time.Now().UTC()
 						if startDateChanged {
-							// Check if the new startDate has already passed
+							// If new startDate is in the future, use it as base time
 							if oldTask.StartDate.After(time.Now().UTC()) {
-								// startDate has already passed, use current time
 								baseTime = oldTask.StartDate
 							}
+							// If startDate is in the past, baseTime remains time.Now().UTC()
 						} else if !childTask.StartDate.IsZero() {
-							// Check if childTask.StartDate has not already passed
+							// If childTask.StartDate is in the future, use it as base time
 							if childTask.StartDate.After(time.Now().UTC()) {
 								baseTime = childTask.StartDate
 							}
+							// If childTask.StartDate is in the past, baseTime remains time.Now().UTC()
 						}
 						nextTime := cronexpr.MustParse(*oldTask.CronExpression).Next(baseTime)
 						childTask.StartDate = nextTime
@@ -693,12 +732,19 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 							Int64("child_task.id", childTask.ID).
 							Time("new_start_date", nextTime).
 							Time("base_time", baseTime).
+							Bool("start_date_in_future", oldTask.StartDate.After(time.Now().UTC())).
 							Msg("recalculated child task start_date from cron expression")
 					} else if startDateChanged {
 						// If cron expression was removed but start_date changed, update start_date
 						childTask.StartDate = oldTask.StartDate
 						childUpdated = true
 						startDateUpdated = true
+
+						log.Debug().
+							Int64("task.id", taskID).
+							Int64("child_task.id", childTask.ID).
+							Time("new_start_date", oldTask.StartDate).
+							Msg("updated child task start_date (cron expression removed)")
 					}
 				}
 
@@ -778,6 +824,10 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				return nil, errors.Wrap(err, "failed to commit transaction")
 			}
 			hasActiveTransaction = false
+			log.Debug().
+				Int64("task.id", taskID).
+				Msg("transaction committed successfully")
+			span.SetAttributes(attribute.Bool("transaction.committed", true))
 		}
 	}
 
@@ -812,13 +862,21 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		}
 
 		// Calculate next execution time from cron expression
-		// If startDate has already passed, use current time
+		// Use current time as base, or start_date if it's in the future
 		baseTime := time.Now().UTC()
-		// Check if startDate is in the future, use it as base time
+		// If startDate is in the future, use it as base time for cron calculation
 		if oldTask.StartDate.After(time.Now().UTC()) {
 			baseTime = oldTask.StartDate
 		}
+		// If startDate is in the past, baseTime remains time.Now().UTC()
 		nextTime := cronexpr.MustParse(*oldTask.CronExpression).Next(baseTime)
+
+		log.Debug().
+			Int64("task.id", taskID).
+			Time("base_time", baseTime).
+			Time("next_time", nextTime).
+			Bool("start_date_in_future", oldTask.StartDate.After(time.Now().UTC())).
+			Msg("calculated next execution time from cron expression")
 
 		// Create child task
 		childTask := &models.Task{
@@ -905,10 +963,21 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			NewValue: map[string]interface{}{"status": oldTask.Status},
 		}
 		if err := s.taskHistoryRepo.CreateTaskHistory(ctx, statusHistory); err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Str("status.old", oldStatus).
+				Str("status.new", oldTask.Status).
+				Msg("failed to record status change history")
 			statusHistorySpan.RecordError(err)
 			statusHistorySpan.SetStatus(codes.Error, err.Error())
-			// TODO: log error
 		} else {
+			log.Debug().
+				Int64("task.id", taskID).
+				Str("status.old", oldStatus).
+				Str("status.new", oldTask.Status).
+				Msg("status change history recorded successfully")
 			statusHistorySpan.SetStatus(codes.Ok, "status change history recorded")
 		}
 		statusHistorySpan.End()
@@ -933,10 +1002,19 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			NewValue: s.taskToMap(oldTask),
 		}
 		if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Int64("user.id", oldTask.UserID).
+				Msg("failed to record task update history")
 			updateHistorySpan.RecordError(err)
 			updateHistorySpan.SetStatus(codes.Error, err.Error())
-			// TODO: log error
 		} else {
+			log.Debug().
+				Int64("task.id", taskID).
+				Int64("user.id", oldTask.UserID).
+				Msg("task update history recorded successfully")
 			updateHistorySpan.SetStatus(codes.Ok, "update history recorded")
 		}
 		updateHistorySpan.End()
