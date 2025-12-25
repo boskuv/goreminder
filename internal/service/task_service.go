@@ -587,6 +587,40 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					Int("child_tasks.count", len(childTasks)).
 					Msg("child tasks deleted and queued successfully")
 			}
+
+			// Publish parent task to queue with updated requires_confirmation (false)
+			if oldTask.MessengerRelatedUserID != nil {
+				messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *oldTask.MessengerRelatedUserID)
+				if err != nil {
+					log.Error().
+						Stack().
+						Err(err).
+						Int64("task.id", taskID).
+						Msg("failed to get messenger related user for parent task queue update")
+					// Don't fail the operation, just log the error
+					// The database update was successful, queue update failure is non-critical
+				} else {
+					parentTaskQueueMessage := map[string]interface{}{
+						"task": "worker.schedule_task",
+						"args": []interface{}{"telegram", messengerRelatedUser.ChatID, oldTask.ID, oldTask.Title, oldTask.Description, oldTask.StartDate, oldTask.CronExpression, oldTask.RequiresConfirmation},
+					}
+
+					err = s.producer.Publish(ctx, parentTaskQueueMessage)
+					if err != nil {
+						log.Error().
+							Stack().
+							Err(err).
+							Int64("task.id", taskID).
+							Msg("failed to queue schedule_task message for parent task without confirmation")
+						// Don't fail the operation, just log the error
+						// The database update was successful, queue update failure is non-critical
+					} else {
+						log.Debug().
+							Int64("task.id", taskID).
+							Msg("parent task schedule_task message queued successfully without confirmation")
+					}
+				}
+			}
 		} else if len(childTasks) > 0 {
 			// Update child tasks based on parent changes
 			titleChanged := updateRequest.Title != nil && *updateRequest.Title != oldTitle
