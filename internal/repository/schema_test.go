@@ -64,6 +64,13 @@ func TestTableSchemasMatchModels(t *testing.T) {
 				"id", "task_id", "user_id", "action", "old_value", "new_value", "created_at",
 			},
 		},
+		{
+			tableName: "targets",
+			expectedColumns: []string{
+				"id", "title", "description", "user_id", "messenger_related_user_id",
+				"created_at", "updated_at", "completed_at", "deleted_at",
+			},
+		},
 	}
 
 	t.Setenv("TEST_DATABASE_DSN", "postgres://postgres:password@localhost:5432/task_manager?sslmode=disable")
