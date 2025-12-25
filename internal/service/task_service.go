@@ -436,8 +436,12 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	}
 
 	// Update parent task first
-	// TODO: tx?
-	err = s.taskRepo.UpdateTask(ctx, oldTask)
+	// Use transaction if available (for parent tasks that may update child tasks)
+	if hasActiveTransaction {
+		err = s.taskRepo.UpdateTaskWithTx(ctx, tx, oldTask)
+	} else {
+		err = s.taskRepo.UpdateTask(ctx, oldTask)
+	}
 	if err != nil {
 		log.Debug().
 			Err(err).
