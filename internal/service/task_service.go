@@ -391,10 +391,9 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	}
 
 	// Get database connection for transaction if we need to update child tasks
-	// TODO: what for
 	var db *sqlx.DB
 	var tx *sqlx.Tx
-	var shouldRollback = false
+	var hasActiveTransaction = false
 	if isParentTask {
 		db = s.taskRepo.GetDB()
 		if db == nil {
@@ -422,9 +421,9 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			return nil, errors.Wrap(err, "failed to begin transaction")
 		}
 
-		shouldRollback = true
+		hasActiveTransaction = true
 		defer func() {
-			if shouldRollback {
+			if hasActiveTransaction {
 				if rollbackErr := tx.Rollback(); rollbackErr != nil {
 					log.Error().
 						Stack().
@@ -762,8 +761,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		}
 
 		// Commit transaction if we started one
-		if shouldRollback {
-			// TODO: why in rollback?
+		if hasActiveTransaction {
 			err = tx.Commit()
 			if err != nil {
 				log.Error().
@@ -775,7 +773,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				span.SetStatus(codes.Error, err.Error())
 				return nil, errors.Wrap(err, "failed to commit transaction")
 			}
-			shouldRollback = false
+			hasActiveTransaction = false
 		}
 	}
 
@@ -999,10 +997,10 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		return errors.Wrap(err, "failed to begin transaction")
 	}
 
-	// Track if we need to rollback
-	var shouldRollback = true
+	// Track if transaction is active (will be rolled back in defer if not committed)
+	var hasActiveTransaction = true
 	defer func() {
-		if shouldRollback {
+		if hasActiveTransaction {
 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
 				log.Error().
 					Stack().
@@ -1124,7 +1122,7 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 	}
 
 	// Mark that we've committed, so defer won't rollback
-	shouldRollback = false
+	hasActiveTransaction = false
 
 	// Record history (outside transaction, as it's not critical if it fails)
 	_, deleteHistorySpan := s.tracer.Start(ctx, "task_service.record_task_deleted_history",
@@ -1319,10 +1317,10 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 		return nil, errors.Wrap(err, "failed to begin transaction")
 	}
 
-	// Track if we need to rollback
-	var shouldRollback = true
+	// Track if transaction is active (will be rolled back in defer if not committed)
+	var hasActiveTransaction = true
 	defer func() {
-		if shouldRollback {
+		if hasActiveTransaction {
 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
 				log.Error().
 					Stack().
@@ -1383,7 +1381,7 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 	}
 
 	// Mark that we've committed, so defer won't rollback
-	shouldRollback = false
+	hasActiveTransaction = false
 
 	// Handle child task logic after transaction commit
 	// If this is a child task and parent is not done, create next child task
