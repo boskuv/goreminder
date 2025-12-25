@@ -372,7 +372,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			return nil, errors.Wrap(errs.ErrValidation, err.Error())
 		}
 		if oldTask.Status != *updateRequest.Status {
-			statusChanged = true
+			statusChanged = true // TODO: why here?
 		}
 		oldTask.Status = *updateRequest.Status
 	}
@@ -382,7 +382,6 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	if updateRequest.FinishDate != nil {
 		oldTask.FinishDate = updateRequest.FinishDate
 	}
-	// TODO: check if cron expression is valid -> remove UpdateModel -> TaskModel
 	if updateRequest.CronExpression != nil {
 		oldTask.CronExpression = updateRequest.CronExpression
 	}
@@ -392,6 +391,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	}
 
 	// Get database connection for transaction if we need to update child tasks
+	// TODO: what for
 	var db *sqlx.DB
 	var tx *sqlx.Tx
 	var shouldRollback = false
@@ -437,6 +437,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	}
 
 	// Update parent task first
+	// TODO: tx?
 	err = s.taskRepo.UpdateTask(ctx, oldTask)
 	if err != nil {
 		log.Debug().
@@ -456,8 +457,12 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		titleChanged := updateRequest.Title != nil && *updateRequest.Title != oldTitle
 		descriptionChanged := updateRequest.Description != nil && *updateRequest.Description != oldDescription
 		startDateChanged := updateRequest.StartDate != nil && !updateRequest.StartDate.Equal(oldStartDate)
+		cronExpressionChanged := (updateRequest.CronExpression != nil && oldCronExpression == nil) ||
+			(updateRequest.CronExpression == nil && oldCronExpression != nil) ||
+			(updateRequest.CronExpression != nil && oldCronExpression != nil && *updateRequest.CronExpression != *oldCronExpression)
 		statusChangedToDeleted := statusChanged && oldTask.Status == string(models.TaskStatusDeleted)
 		statusChangedToScheduled := statusChanged && oldTask.Status == string(models.TaskStatusScheduled)
+		// TODO: reqConf?
 
 		// Publish delete_task if status changed to deleted
 		if statusChangedToDeleted {
@@ -482,7 +487,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 						Msg("delete_task message queued successfully for deleted task")
 				}
 			}
-		} else if statusChangedToScheduled || startDateChanged || titleChanged || descriptionChanged {
+		} else if statusChangedToScheduled || titleChanged || descriptionChanged || startDateChanged || cronExpressionChanged {
 			// Publish schedule_task if status changed to scheduled or relevant fields changed
 			if oldTask.MessengerRelatedUserID != nil {
 				messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *oldTask.MessengerRelatedUserID)
@@ -513,33 +518,6 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 							Int64("task.id", taskID).
 							Msg("schedule_task message queued successfully for updated task")
 					}
-				}
-			}
-		}
-	} else if statusChanged {
-		// For parent tasks, only publish if status changed to deleted
-		// Parent tasks don't execute directly, so we don't publish schedule_task for them
-		statusChangedToDeleted := oldTask.Status == string(models.TaskStatusDeleted)
-		if statusChangedToDeleted {
-			if oldTask.MessengerRelatedUserID != nil {
-				taskQueueMessage := map[string]interface{}{
-					"task": "worker.delete_task",
-					"args": []interface{}{oldTask.ID, "telegram"},
-				}
-
-				err = s.producer.Publish(ctx, taskQueueMessage)
-				if err != nil {
-					log.Error().
-						Stack().
-						Err(err).
-						Int64("task.id", taskID).
-						Msg("failed to queue delete_task message for parent task with deleted status")
-					// Don't fail the operation, just log the error
-					// The database update was successful, queue update failure is non-critical
-				} else {
-					log.Debug().
-						Int64("task.id", taskID).
-						Msg("delete_task message queued successfully for deleted parent task")
 				}
 			}
 		}
@@ -659,15 +637,13 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 						if startDateChanged {
 							// Check if the new startDate has already passed
 							if oldTask.StartDate.After(time.Now().UTC()) {
-								baseTime = oldTask.StartDate
-							} else {
 								// startDate has already passed, use current time
-								baseTime = time.Now().UTC()
+								baseTime = oldTask.StartDate
 							}
 						} else if !childTask.StartDate.IsZero() {
-							// Check if childTask.StartDate has already passed, use current time
-							if childTask.StartDate.Before(time.Now().UTC()) {
-								baseTime = time.Now().UTC()
+							// Check if childTask.StartDate has not already passed
+							if childTask.StartDate.After(time.Now().UTC()) {
+								baseTime = childTask.StartDate
 							}
 						}
 						nextTime := cronexpr.MustParse(*oldTask.CronExpression).Next(baseTime)
@@ -704,7 +680,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 						return nil, errors.WithStack(err)
 					}
 
-					// Publish update to queue if start_date, title, or description changed
+					// Publish update to queue if start_date, title, description changed
 					// This is needed to update the task in scheduler
 					if startDateUpdated || titleChanged || descriptionChanged {
 						if childTask.MessengerRelatedUserID != nil {
@@ -753,6 +729,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 
 		// Commit transaction if we started one
 		if shouldRollback {
+			// TODO: why in rollback?
 			err = tx.Commit()
 			if err != nil {
 				log.Error().
@@ -769,14 +746,43 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	}
 
 	// If requires_confirmation was added (false -> true) and task has cron_expression, create child tasks
-	if !oldRequiresConfirmation && oldTask.RequiresConfirmation && oldTask.CronExpression != nil {
+	// TODO
+	if updateRequest.RequiresConfirmation != nil && !oldTask.RequiresConfirmation && oldTask.CronExpression != nil {
 		log.Debug().
 			Int64("task.id", taskID).
 			Str("cron_expression", *oldTask.CronExpression).
 			Msg("requires_confirmation added, creating child tasks")
 
+		if oldTask.MessengerRelatedUserID != nil {
+			taskQueueMessage := map[string]interface{}{
+				"task": "worker.delete_task",
+				"args": []interface{}{oldTask.ID, "telegram"},
+			}
+
+			err = s.producer.Publish(ctx, taskQueueMessage)
+			if err != nil {
+				log.Error().
+					Stack().
+					Err(err).
+					Int64("task.id", taskID).
+					Msg("failed to queue delete_task message for task ...")
+				// Don't fail the operation, just log the error
+				// The database update was successful, queue update failure is non-critical
+			} else {
+				log.Debug().
+					Int64("task.id", taskID).
+					Msg("delete_task message queued successfully for ...")
+			}
+		}
+
 		// Calculate next execution time from cron expression
-		nextTime := cronexpr.MustParse(*oldTask.CronExpression).Next(time.Now().UTC())
+		baseTime := time.Now().UTC()
+		// Check if the new startDate has already passed
+		if oldTask.StartDate.After(time.Now().UTC()) {
+			// startDate has already passed, use current time
+			baseTime = oldTask.StartDate
+		}
+		nextTime := cronexpr.MustParse(*oldTask.CronExpression).Next(baseTime)
 
 		// Create child task
 		childTask := &models.Task{
@@ -789,7 +795,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			FinishDate:             oldTask.FinishDate,
 			CronExpression:         nil, // Child tasks don't have cron expression
 			RequiresConfirmation:   oldTask.RequiresConfirmation,
-			Status:                 string(models.TaskStatusPending),
+			Status:                 string(models.TaskStatusScheduled),
 		}
 
 		childTaskID, err := s.taskRepo.CreateTask(ctx, childTask)
@@ -807,6 +813,39 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				Time("child_start_date", nextTime).
 				Msg("child task created successfully after adding requires_confirmation")
 			span.SetAttributes(attribute.Int64("child_task.id", childTaskID))
+		}
+
+		if childTask.MessengerRelatedUserID != nil {
+			messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *childTask.MessengerRelatedUserID)
+			if err != nil {
+				log.Error().
+					Stack().
+					Err(err).
+					Int64("task.id", taskID).
+					Int64("child_task.id", childTask.ID).
+					Msg("failed to get messenger related user for child task queue update")
+				// Don't fail the operation, just log the error
+			}
+
+			taskQueueMessage := map[string]interface{}{
+				"task": "worker.schedule_task",
+				"args": []interface{}{"telegram", messengerRelatedUser.ChatID, childTask.ID, childTask.Title, childTask.Description, childTask.StartDate, childTask.CronExpression, childTask.RequiresConfirmation},
+			}
+
+			err = s.producer.Publish(ctx, taskQueueMessage)
+			if err != nil {
+				log.Error().
+					Stack().
+					Err(err).
+					Int64("task.id", taskID).
+					Msg("failed to queue schedule_task message for ... task")
+				// Don't fail the operation, just log the error
+				// The database update was successful, queue update failure is non-critical
+			} else {
+				log.Debug().
+					Int64("task.id", taskID).
+					Msg("schedule_task message queued successfully for ... task")
+			}
 		}
 	}
 
