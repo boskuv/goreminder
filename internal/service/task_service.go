@@ -1567,11 +1567,11 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 		}
 	}
 
-	// If this is a parent task (has cron_expression), sync changes to child tasks and mark them as done
+	// If this is a parent task (has cron_expression), mark all child tasks (not done/deleted) as done and delete from queue
 	if task.CronExpression != nil {
 		log.Debug().
 			Int64("task.id", taskID).
-			Msg("parent task marked as done, syncing changes to child tasks and marking them as done")
+			Msg("parent task marked as done, marking all child tasks (not done/deleted) as done and deleting from queue")
 
 		// Get all child tasks
 		childTasks, err := s.taskRepo.GetChildTasksByParentID(ctx, taskID)
@@ -1617,12 +1617,20 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 						}
 					}()
 
-					// Sync parent task changes to child tasks and mark them as done
+					// Mark all child tasks (not done/deleted) as done and delete from queue
 					now := time.Now().UTC()
 					hasErrors := false
+					processedCount := 0
+					skippedCount := 0
 					for _, childTask := range childTasks {
 						// Skip already done or deleted tasks
-						if childTask.Status == string(models.TaskStatusDone) {
+						if childTask.Status == string(models.TaskStatusDone) || childTask.Status == string(models.TaskStatusDeleted) {
+							skippedCount++
+							log.Debug().
+								Int64("task.id", taskID).
+								Int64("child_task.id", childTask.ID).
+								Str("child_status", childTask.Status).
+								Msg("skipping child task (already done or deleted)")
 							continue
 						}
 
@@ -1656,7 +1664,7 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 								Err(err).
 								Int64("task.id", taskID).
 								Int64("child_task.id", childTask.ID).
-								Msg("failed to update child task with parent changes and mark as done")
+								Msg("failed to update child task and mark as done")
 							hasErrors = true
 							break
 						}
@@ -1678,6 +1686,12 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 							hasErrors = true
 							break
 						}
+
+						processedCount++
+						log.Debug().
+							Int64("task.id", taskID).
+							Int64("child_task.id", childTask.ID).
+							Msg("child task marked as done and delete_task queued")
 					}
 
 					// Commit transaction if no errors
@@ -1699,9 +1713,15 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 							childCommitted = true
 							log.Debug().
 								Int64("task.id", taskID).
-								Int("child_tasks.count", len(childTasks)).
-								Msg("parent task changes synced to child tasks and all child tasks marked as done successfully")
-							span.SetAttributes(attribute.Int("child_tasks.count", len(childTasks)))
+								Int("child_tasks.total", len(childTasks)).
+								Int("child_tasks.processed", processedCount).
+								Int("child_tasks.skipped", skippedCount).
+								Msg("all child tasks (not done/deleted) marked as done and deleted from queue successfully")
+							span.SetAttributes(
+								attribute.Int("child_tasks.total", len(childTasks)),
+								attribute.Int("child_tasks.processed", processedCount),
+								attribute.Int("child_tasks.skipped", skippedCount),
+							)
 						}
 					}
 				}
