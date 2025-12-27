@@ -707,22 +707,19 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				if cronExpressionChanged || startDateChanged {
 					if oldTask.CronExpression != nil {
 						// Calculate next execution time from new cron expression
-						// Use current time as base, or start_date if it's in the future
-						baseTime := time.Now().UTC()
-						if startDateChanged {
-							// If new startDate is in the future, use it as base time
-							if oldTask.StartDate.After(time.Now().UTC()) {
-								baseTime = oldTask.StartDate
-							}
-							// If startDate is in the past, baseTime remains time.Now().UTC()
-						} else if !childTask.StartDate.IsZero() {
-							// If childTask.StartDate is in the future, use it as base time
-							if childTask.StartDate.After(time.Now().UTC()) {
-								baseTime = childTask.StartDate
-							}
-							// If childTask.StartDate is in the past, baseTime remains time.Now().UTC()
-						}
+						// For child tasks, always use current time (now) as baseTime
+						// Child tasks are created dynamically and should be calculated from current moment
+						now := time.Now().UTC()
+						baseTime := now
+
 						nextTime := cronexpr.MustParse(*oldTask.CronExpression).Next(baseTime)
+
+						// Ensure calculated time is not in the past
+						if nextTime.Before(now) {
+							// If calculated time is in the past, calculate next occurrence
+							nextTime = cronexpr.MustParse(*oldTask.CronExpression).Next(nextTime)
+						}
+
 						childTask.StartDate = nextTime
 						childUpdated = true
 						startDateUpdated = true
@@ -732,8 +729,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 							Int64("child_task.id", childTask.ID).
 							Time("new_start_date", nextTime).
 							Time("base_time", baseTime).
-							Bool("start_date_in_future", oldTask.StartDate.After(time.Now().UTC())).
-							Msg("recalculated child task start_date from cron expression")
+							Time("parent_start_date", oldTask.StartDate).
+							Msg("recalculated child task start_date from cron expression (using now as base)")
 					} else if startDateChanged {
 						// If cron expression was removed but start_date changed, update start_date
 						childTask.StartDate = oldTask.StartDate
@@ -862,21 +859,25 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		}
 
 		// Calculate next execution time from cron expression
-		// Use current time as base, or start_date if it's in the future
-		baseTime := time.Now().UTC()
-		// If startDate is in the future, use it as base time for cron calculation
-		if oldTask.StartDate.After(time.Now().UTC()) {
-			baseTime = oldTask.StartDate
-		}
-		// If startDate is in the past, baseTime remains time.Now().UTC()
+		// For child tasks, always use current time (now) as baseTime
+		// Child tasks are created dynamically and should be calculated from current moment
+		now := time.Now().UTC()
+		baseTime := now
+
 		nextTime := cronexpr.MustParse(*oldTask.CronExpression).Next(baseTime)
+
+		// Ensure calculated time is not in the past
+		if nextTime.Before(now) {
+			// If calculated time is in the past, calculate next occurrence
+			nextTime = cronexpr.MustParse(*oldTask.CronExpression).Next(nextTime)
+		}
 
 		log.Debug().
 			Int64("task.id", taskID).
 			Time("base_time", baseTime).
 			Time("next_time", nextTime).
-			Bool("start_date_in_future", oldTask.StartDate.After(time.Now().UTC())).
-			Msg("calculated next execution time from cron expression")
+			Time("parent_start_date", oldTask.StartDate).
+			Msg("calculated next execution time from cron expression for child task (using now as base)")
 
 		// Create child task
 		childTask := &models.Task{
