@@ -513,36 +513,47 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			}
 		} else if statusChangedToScheduled || titleChanged || descriptionChanged || startDateChanged || cronExpressionChanged {
 			// Publish schedule_task if status changed to scheduled or relevant fields changed
-			if oldTask.MessengerRelatedUserID != nil {
-				messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *oldTask.MessengerRelatedUserID)
-				if err != nil {
-					log.Error().
-						Stack().
-						Err(err).
-						Int64("task.id", taskID).
-						Msg("failed to get messenger related user for task queue update")
-					// Don't fail the operation, just log the error
-				} else {
-					taskQueueMessage := map[string]interface{}{
-						"task": "worker.schedule_task",
-						"args": []interface{}{"telegram", messengerRelatedUser.ChatID, oldTask.ID, oldTask.Title, oldTask.Description, oldTask.StartDate, oldTask.CronExpression, oldTask.RequiresConfirmation},
-					}
+			// But only if startDate is not in the past (if startDate is in the past, only update DB, don't publish to queue)
+			now := time.Now().UTC()
+			shouldPublishToQueue := oldTask.StartDate.After(now) || oldTask.StartDate.Equal(now)
 
-					err = s.producer.Publish(ctx, taskQueueMessage)
+			if shouldPublishToQueue {
+				if oldTask.MessengerRelatedUserID != nil {
+					messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *oldTask.MessengerRelatedUserID)
 					if err != nil {
 						log.Error().
 							Stack().
 							Err(err).
 							Int64("task.id", taskID).
-							Msg("failed to queue schedule_task message for updated task")
+							Msg("failed to get messenger related user for task queue update")
 						// Don't fail the operation, just log the error
-						// The database update was successful, queue update failure is non-critical
 					} else {
-						log.Debug().
-							Int64("task.id", taskID).
-							Msg("schedule_task message queued successfully for updated task")
+						taskQueueMessage := map[string]interface{}{
+							"task": "worker.schedule_task",
+							"args": []interface{}{"telegram", messengerRelatedUser.ChatID, oldTask.ID, oldTask.Title, oldTask.Description, oldTask.StartDate, oldTask.CronExpression, oldTask.RequiresConfirmation},
+						}
+
+						err = s.producer.Publish(ctx, taskQueueMessage)
+						if err != nil {
+							log.Error().
+								Stack().
+								Err(err).
+								Int64("task.id", taskID).
+								Msg("failed to queue schedule_task message for updated task")
+							// Don't fail the operation, just log the error
+							// The database update was successful, queue update failure is non-critical
+						} else {
+							log.Debug().
+								Int64("task.id", taskID).
+								Msg("schedule_task message queued successfully for updated task")
+						}
 					}
 				}
+			} else {
+				log.Debug().
+					Int64("task.id", taskID).
+					Time("start_date", oldTask.StartDate).
+					Msg("task startDate is in the past, skipping queue publication (only DB update)")
 			}
 		}
 	}
@@ -629,37 +640,48 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			}
 
 			// Publish parent task to queue with updated requires_confirmation (false)
-			if oldTask.MessengerRelatedUserID != nil {
-				messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *oldTask.MessengerRelatedUserID)
-				if err != nil {
-					log.Error().
-						Stack().
-						Err(err).
-						Int64("task.id", taskID).
-						Msg("failed to get messenger related user for parent task queue update")
-					// Don't fail the operation, just log the error
-					// The database update was successful, queue update failure is non-critical
-				} else {
-					parentTaskQueueMessage := map[string]interface{}{
-						"task": "worker.schedule_task",
-						"args": []interface{}{"telegram", messengerRelatedUser.ChatID, oldTask.ID, oldTask.Title, oldTask.Description, oldTask.StartDate, oldTask.CronExpression, oldTask.RequiresConfirmation},
-					}
+			// But only if startDate is not in the past (if startDate is in the past, only update DB, don't publish to queue)
+			now := time.Now().UTC()
+			shouldPublishToQueue := oldTask.StartDate.After(now) || oldTask.StartDate.Equal(now)
 
-					err = s.producer.Publish(ctx, parentTaskQueueMessage)
+			if shouldPublishToQueue {
+				if oldTask.MessengerRelatedUserID != nil {
+					messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *oldTask.MessengerRelatedUserID)
 					if err != nil {
 						log.Error().
 							Stack().
 							Err(err).
 							Int64("task.id", taskID).
-							Msg("failed to queue schedule_task message for parent task without confirmation")
+							Msg("failed to get messenger related user for parent task queue update")
 						// Don't fail the operation, just log the error
 						// The database update was successful, queue update failure is non-critical
 					} else {
-						log.Debug().
-							Int64("task.id", taskID).
-							Msg("parent task schedule_task message queued successfully without confirmation")
+						parentTaskQueueMessage := map[string]interface{}{
+							"task": "worker.schedule_task",
+							"args": []interface{}{"telegram", messengerRelatedUser.ChatID, oldTask.ID, oldTask.Title, oldTask.Description, oldTask.StartDate, oldTask.CronExpression, oldTask.RequiresConfirmation},
+						}
+
+						err = s.producer.Publish(ctx, parentTaskQueueMessage)
+						if err != nil {
+							log.Error().
+								Stack().
+								Err(err).
+								Int64("task.id", taskID).
+								Msg("failed to queue schedule_task message for parent task without confirmation")
+							// Don't fail the operation, just log the error
+							// The database update was successful, queue update failure is non-critical
+						} else {
+							log.Debug().
+								Int64("task.id", taskID).
+								Msg("parent task schedule_task message queued successfully without confirmation")
+						}
 					}
 				}
+			} else {
+				log.Debug().
+					Int64("task.id", taskID).
+					Time("start_date", oldTask.StartDate).
+					Msg("parent task startDate is in the past, skipping queue publication (only DB update)")
 			}
 		} else if len(childTasks) > 0 {
 			// Update child tasks based on parent changes
@@ -762,40 +784,52 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 
 					// Publish update to queue if start_date, title, description changed
 					// This is needed to update the task in scheduler
+					// But only if startDate is not in the past (if startDate is in the past, only update DB, don't publish to queue)
 					if startDateUpdated || titleChanged || descriptionChanged {
-						if childTask.MessengerRelatedUserID != nil {
-							messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *childTask.MessengerRelatedUserID)
-							if err != nil {
-								log.Error().
-									Stack().
-									Err(err).
-									Int64("task.id", taskID).
-									Int64("child_task.id", childTask.ID).
-									Msg("failed to get messenger related user for child task queue update")
-								// Don't fail the operation, just log the error
-							} else {
-								childTaskQueueMessage := map[string]interface{}{
-									"task": "worker.schedule_task",
-									"args": []interface{}{"telegram", messengerRelatedUser.ChatID, childTask.ID, childTask.Title, childTask.Description, childTask.StartDate, childTask.CronExpression, childTask.RequiresConfirmation},
-								}
+						now := time.Now().UTC()
+						shouldPublishToQueue := childTask.StartDate.After(now) || childTask.StartDate.Equal(now)
 
-								err = s.producer.Publish(ctx, childTaskQueueMessage)
+						if shouldPublishToQueue {
+							if childTask.MessengerRelatedUserID != nil {
+								messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *childTask.MessengerRelatedUserID)
 								if err != nil {
 									log.Error().
 										Stack().
 										Err(err).
 										Int64("task.id", taskID).
 										Int64("child_task.id", childTask.ID).
-										Msg("failed to queue schedule_task message for updated child task")
+										Msg("failed to get messenger related user for child task queue update")
 									// Don't fail the operation, just log the error
-									// The database update was successful, queue update failure is non-critical
 								} else {
-									log.Debug().
-										Int64("task.id", taskID).
-										Int64("child_task.id", childTask.ID).
-										Msg("child task update queued successfully")
+									childTaskQueueMessage := map[string]interface{}{
+										"task": "worker.schedule_task",
+										"args": []interface{}{"telegram", messengerRelatedUser.ChatID, childTask.ID, childTask.Title, childTask.Description, childTask.StartDate, childTask.CronExpression, childTask.RequiresConfirmation},
+									}
+
+									err = s.producer.Publish(ctx, childTaskQueueMessage)
+									if err != nil {
+										log.Error().
+											Stack().
+											Err(err).
+											Int64("task.id", taskID).
+											Int64("child_task.id", childTask.ID).
+											Msg("failed to queue schedule_task message for updated child task")
+										// Don't fail the operation, just log the error
+										// The database update was successful, queue update failure is non-critical
+									} else {
+										log.Debug().
+											Int64("task.id", taskID).
+											Int64("child_task.id", childTask.ID).
+											Msg("child task update queued successfully")
+									}
 								}
 							}
+						} else {
+							log.Debug().
+								Int64("task.id", taskID).
+								Int64("child_task.id", childTask.ID).
+								Time("start_date", childTask.StartDate).
+								Msg("child task startDate is in the past, skipping queue publication (only DB update)")
 						}
 					}
 				}
@@ -911,39 +945,51 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			span.SetAttributes(attribute.Int64("child_task.id", childTaskID))
 
 			// Publish child task to queue
-			if childTask.MessengerRelatedUserID != nil {
-				messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *childTask.MessengerRelatedUserID)
-				if err != nil {
-					log.Error().
-						Stack().
-						Err(err).
-						Int64("task.id", taskID).
-						Int64("child_task.id", childTaskID).
-						Msg("failed to get messenger related user for child task queue update")
-					// Don't fail the operation, just log the error
-				} else {
-					childTaskQueueMessage := map[string]interface{}{
-						"task": "worker.schedule_task",
-						"args": []interface{}{"telegram", messengerRelatedUser.ChatID, childTaskID, childTask.Title, childTask.Description, childTask.StartDate, childTask.CronExpression, childTask.RequiresConfirmation},
-					}
+			// But only if startDate is not in the past (if startDate is in the past, only update DB, don't publish to queue)
+			now := time.Now().UTC()
+			shouldPublishToQueue := childTask.StartDate.After(now) || childTask.StartDate.Equal(now)
 
-					err = s.producer.Publish(ctx, childTaskQueueMessage)
+			if shouldPublishToQueue {
+				if childTask.MessengerRelatedUserID != nil {
+					messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *childTask.MessengerRelatedUserID)
 					if err != nil {
 						log.Error().
 							Stack().
 							Err(err).
 							Int64("task.id", taskID).
 							Int64("child_task.id", childTaskID).
-							Msg("failed to queue schedule_task message for child task")
+							Msg("failed to get messenger related user for child task queue update")
 						// Don't fail the operation, just log the error
-						// The database update was successful, queue update failure is non-critical
 					} else {
-						log.Debug().
-							Int64("task.id", taskID).
-							Int64("child_task.id", childTaskID).
-							Msg("schedule_task message queued successfully for child task")
+						childTaskQueueMessage := map[string]interface{}{
+							"task": "worker.schedule_task",
+							"args": []interface{}{"telegram", messengerRelatedUser.ChatID, childTaskID, childTask.Title, childTask.Description, childTask.StartDate, childTask.CronExpression, childTask.RequiresConfirmation},
+						}
+
+						err = s.producer.Publish(ctx, childTaskQueueMessage)
+						if err != nil {
+							log.Error().
+								Stack().
+								Err(err).
+								Int64("task.id", taskID).
+								Int64("child_task.id", childTaskID).
+								Msg("failed to queue schedule_task message for child task")
+							// Don't fail the operation, just log the error
+							// The database update was successful, queue update failure is non-critical
+						} else {
+							log.Debug().
+								Int64("task.id", taskID).
+								Int64("child_task.id", childTaskID).
+								Msg("schedule_task message queued successfully for child task")
+						}
 					}
 				}
+			} else {
+				log.Debug().
+					Int64("task.id", taskID).
+					Int64("child_task.id", childTaskID).
+					Time("start_date", childTask.StartDate).
+					Msg("child task startDate is in the past, skipping queue publication (only DB update)")
 			}
 		}
 	}
