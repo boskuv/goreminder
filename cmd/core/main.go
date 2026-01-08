@@ -259,11 +259,23 @@ func main() {
 
 	log.Info().Msg("graceful startup")
 
-	// start scheduler in background
-	schedulerCtx, schedulerCancel := context.WithCancel(ctx)
-	defer schedulerCancel()
-	go taskScheduler.StartScheduler(schedulerCtx)
-	log.Info().Msg("task scheduler started (runs at 00:00 UTC)")
+	// start scheduler in background (only if autoreschedule is enabled)
+	var schedulerCancel context.CancelFunc
+	if cfg.Autoreschedule.Enabled {
+		schedulerCtx, cancel := context.WithCancel(ctx)
+		schedulerCancel = cancel
+		defer schedulerCancel()
+		scheduleTime := cfg.Autoreschedule.Time
+		if scheduleTime == "" {
+			scheduleTime = "00:00" // Default to 00:00 if not specified
+		}
+		go taskScheduler.StartScheduler(schedulerCtx, scheduleTime)
+		log.Info().
+			Str("schedule_time", scheduleTime).
+			Msg("task scheduler started")
+	} else {
+		log.Info().Msg("task scheduler disabled (autoreschedule.enabled = false)")
+	}
 
 	// start server
 	port := cfg.Server.Port

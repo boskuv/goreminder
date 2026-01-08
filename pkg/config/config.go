@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,14 +15,25 @@ var Config *Configuration
 
 var validate = validator.New()
 
+// validateTimeFormat validates time format HH:MM
+func validateTimeFormat(fl validator.FieldLevel) bool {
+	timeStr := fl.Field().String()
+	if timeStr == "" {
+		return true // Allow empty string (optional field)
+	}
+	matched, _ := regexp.MatchString(`^([0-1][0-9]|2[0-3]):[0-5][0-9]$`, timeStr)
+	return matched
+}
+
 type Configuration struct {
-	Server    ServerConfiguration    `mapstructure:"server"`
-	Database  DatabaseConfiguration  `mapstructure:"database"`
-	Producer  ProducerConfiguration  `mapstructure:"producer"`
-	Tracing   TracingConfiguration   `mapstructure:"tracing"`
-	Metrics   MetricsConfiguration   `mapstructure:"metrics"`
-	RateLimit RateLimitConfiguration `mapstructure:"ratelimit"`
-	Cors      CorsConfiguration      `mapstructure:"cors"`
+	Server         ServerConfiguration         `mapstructure:"server"`
+	Database       DatabaseConfiguration       `mapstructure:"database"`
+	Producer       ProducerConfiguration       `mapstructure:"producer"`
+	Tracing        TracingConfiguration        `mapstructure:"tracing"`
+	Metrics        MetricsConfiguration        `mapstructure:"metrics"`
+	RateLimit      RateLimitConfiguration      `mapstructure:"ratelimit"`
+	Cors           CorsConfiguration           `mapstructure:"cors"`
+	Autoreschedule AutorescheduleConfiguration `mapstructure:"autoreschedule"`
 }
 
 type DatabaseConfiguration struct {
@@ -84,6 +96,11 @@ type CorsConfiguration struct {
 	MaxAge           int      `mapstructure:"maxAge" default:"3600" validate:"gte=0"`
 }
 
+type AutorescheduleConfiguration struct {
+	Enabled bool   `mapstructure:"enabled" default:"false"`
+	Time    string `mapstructure:"time" default:"00:00" validate:"omitempty,time_format"`
+}
+
 // Setup configuration
 // Configuration can be loaded from YAML file and optionally overridden by environment variables.
 // Environment variables use the prefix GOREMINDER_ and nested keys are separated by underscores.
@@ -133,6 +150,22 @@ func Setup(configPath string) error {
 	if configuration.RateLimit.Window != "" {
 		if _, err := time.ParseDuration(configuration.RateLimit.Window); err != nil {
 			return fmt.Errorf("invalid ratelimit.window duration: %w", err)
+		}
+	}
+
+	// Register custom validator for time format
+	if err := validate.RegisterValidation("time_format", validateTimeFormat); err != nil {
+		return fmt.Errorf("failed to register time_format validator: %w", err)
+	}
+
+	// Validate autoreschedule time format if enabled
+	if configuration.Autoreschedule.Enabled {
+		if configuration.Autoreschedule.Time == "" {
+			configuration.Autoreschedule.Time = "00:00" // Default to 00:00 if enabled but time not specified
+		}
+		matched, _ := regexp.MatchString(`^([0-1][0-9]|2[0-3]):[0-5][0-9]$`, configuration.Autoreschedule.Time)
+		if !matched {
+			return fmt.Errorf("invalid autoreschedule.time format: expected HH:MM (24-hour format), got: %s", configuration.Autoreschedule.Time)
 		}
 	}
 

@@ -339,6 +339,40 @@ cors:
     - X-Request-ID
   allowCredentials: false       # Allow credentials
   maxAge: 3600                  # Preflight cache max age (seconds)
+
+autoreschedule:
+  enabled: false                # Enable automatic rescheduling of tasks whose startDate is already in the past
+  time: "00:00"                 # Daily run time in UTC (HH:MM, 24-hour). Default 00:00 when enabled.
+```
+
+#### Autoreschedule Configuration
+
+The `autoreschedule` option controls whether the task scheduler should run automatically to reschedule tasks.
+
+**Behavior:**
+- **When `enabled: false`** (default): The task scheduler is **not** started. Tasks are not automatically rescheduled.
+- **When `enabled: true`**: The task scheduler runs daily at the specified UTC time to automatically reschedule tasks that need rescheduling.
+
+**Time Format:**
+- The `time` field specifies the UTC time when the scheduler should run daily (format: `HH:MM`, 24-hour format)
+- Default value: `"00:00"` (midnight UTC) if `enabled: true` but `time` is not specified
+- Valid format: `00:00` to `23:59`
+- Example: `"14:30"` means the scheduler runs daily at 2:30 PM UTC
+
+**What the Scheduler Does:**
+- Finds tasks that need rescheduling (tasks with `startDate` in the past that require confirmation)
+- Finds parent tasks with cron expressions that need their `startDate` updated
+- Automatically reschedules these tasks
+
+**Use Cases:**
+- Enable autoreschedule to automatically handle tasks that have passed their scheduled time
+- Useful for maintaining task schedules without manual intervention
+- When disabled, tasks must be manually rescheduled or updated
+
+**Environment Variable:**
+```bash
+GOREMINDER_AUTORESCHEDULE_ENABLED=true
+GOREMINDER_AUTORESCHEDULE_TIME=00:00
 ```
 
 ### Docker/Kubernetes Example
@@ -360,6 +394,8 @@ services:
       - GOREMINDER_PRODUCER_HOST=rabbitmq
       - GOREMINDER_PRODUCER_USER=guest
       - GOREMINDER_PRODUCER_PASSWORD=guest
+      - GOREMINDER_AUTORESCHEDULE_ENABLED=true
+      - GOREMINDER_AUTORESCHEDULE_TIME=00:00
 ```
 
 Or in Kubernetes:

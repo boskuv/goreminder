@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-co-op/gocron"
@@ -130,29 +131,55 @@ func (s *TaskScheduler) RunScheduledRescheduling(ctx context.Context) error {
 	return nil
 }
 
-// StartScheduler starts the scheduler that runs at 00:00 daily
+// StartScheduler starts the scheduler that runs at the specified time daily
 // It uses go-co-op/gocron for efficient scheduling and continues until the context is cancelled
-func (s *TaskScheduler) StartScheduler(ctx context.Context) {
+// scheduleTime should be in format "HH:MM" (24-hour format, UTC)
+func (s *TaskScheduler) StartScheduler(ctx context.Context, scheduleTime string) {
 	log := s.logger.With().
 		Str("component", "task_scheduler").
 		Logger()
 
 	log.Info().
+		Str("schedule_time", scheduleTime).
 		Msg("starting task scheduler service")
 
-	// Schedule job for 00:00 UTC
-	_, err := s.scheduler.Cron("0 0 * * *").Do(func() {
+	// Parse schedule time to get hour and minute
+	// Format: "HH:MM"
+	var hour, minute int
+	_, err := fmt.Sscanf(scheduleTime, "%d:%d", &hour, &minute)
+	if err != nil {
+		log.Fatal().
+			Err(err).
+			Str("schedule_time", scheduleTime).
+			Msg("failed to parse schedule time, expected format HH:MM")
+		return
+	}
+
+	if hour < 0 || hour > 23 || minute < 0 || minute > 59 {
+		log.Fatal().
+			Int("hour", hour).
+			Int("minute", minute).
+			Msg("invalid schedule time: hour must be 0-23, minute must be 0-59")
+		return
+	}
+
+	// Build cron expression: "minute hour * * *"
+	cronExpr := fmt.Sprintf("%d %d * * *", minute, hour)
+
+	// Schedule job at specified time UTC
+	_, err = s.scheduler.Cron(cronExpr).Do(func() {
 		now := time.Now().UTC()
 		log.Info().
 			Time("run_time", now).
-			Msg("triggering scheduled task rescheduling check (00:00 UTC)")
+			Str("schedule_time", scheduleTime).
+			Msg("triggering scheduled task rescheduling check")
 
 		// Create a new context from the background context for the cron job
 		// This ensures the job has its own context that can be traced
 		schedulerCtx, span := s.tracer.Start(context.Background(), "task_scheduler.triggered_check",
 			trace.WithAttributes(
 				attribute.String("run_time", now.Format(time.RFC3339)),
-				attribute.String("schedule", "00:00 UTC"),
+				attribute.String("schedule", scheduleTime+" UTC"),
 			))
 
 		if err := s.RunScheduledRescheduling(schedulerCtx); err != nil {
@@ -171,14 +198,17 @@ func (s *TaskScheduler) StartScheduler(ctx context.Context) {
 	if err != nil {
 		log.Fatal().
 			Err(err).
-			Msg("failed to schedule task rescheduling job for 00:00 UTC")
+			Str("schedule_time", scheduleTime).
+			Str("cron_expr", cronExpr).
+			Msg("failed to schedule task rescheduling job")
 		return
 	}
 
 	// Start the scheduler
 	s.scheduler.StartAsync()
 	log.Info().
-		Msg("task scheduler started (runs at 00:00 UTC)")
+		Str("schedule_time", scheduleTime).
+		Msg("task scheduler started")
 
 	// Wait for context cancellation
 	<-ctx.Done()

@@ -56,3 +56,7 @@ cors:
     - "X-Request-ID"
   allowCredentials: false  # Allow credentials in CORS requests
   maxAge: 3600          # Max age for preflight requests (in seconds)
+
+autoreschedule:
+  enabled: false        # Enable automatic rescheduling of tasks with startDate in the past
+  time: "00:00"         # UTC time (HH:MM format) when autoreschedule should run (default: "00:00" if enabled)
