@@ -2135,6 +2135,12 @@ paths:
             additionalProperties:
               type: string
             type: object
+        "422":
+          description: Unprocessable entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "500":
           description: Internal server error
           schema:

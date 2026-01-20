@@ -169,6 +169,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 // @Success 204 "No content"
 // @Failure 400 {object} map[string]string "Bad request"
 // @Failure 404 {object} map[string]string "User not found"
+// @Failure 422 {object} map[string]string "Unprocessable entity"
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/users/{user_id} [delete]
 func (h *UserHandler) DeleteUser(c *gin.Context) {
@@ -186,6 +187,12 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 		if errors.Is(err, errs.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": fmt.Sprintf("user with id `%d` not found", userID),
+			})
+			return
+		}
+		if errors.Is(err, errs.ErrUnprocessableEntity) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error": err.Error(),
 			})
 			return
 		}

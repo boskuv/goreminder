@@ -62,6 +62,7 @@ func TestTaskService_CreateTask_WithMessengerRelatedUser_Success(t *testing.T) {
 	service, taskRepo, userRepo, messengerRepo, taskHistoryRepo, _ := setup(t)
 	ctx := context.Background()
 	messengerUserID := 123
+	messengerID := int64(1)
 	task := &models.Task{
 		UserID:                 1,
 		Title:                  "Test Task",
@@ -72,7 +73,8 @@ func TestTaskService_CreateTask_WithMessengerRelatedUser_Success(t *testing.T) {
 	}
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
-	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), messengerUserID).Return(&models.MessengerRelatedUser{ID: int64(messengerUserID)}, nil)
+	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), messengerUserID).Return(&models.MessengerRelatedUser{ID: int64(messengerUserID), MessengerID: &messengerID}, nil)
+	messengerRepo.EXPECT().GetMessengerByID(gomock.Any(), messengerID).Return(&models.Messenger{ID: messengerID, Name: "Telegram"}, nil)
 	taskRepo.EXPECT().CreateTask(gomock.Any(), task).Return(int64(42), nil)
 	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
 

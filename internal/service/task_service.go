@@ -45,6 +45,35 @@ func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.User
 	}
 }
 
+func (s *TaskService) getMessengerNameFromRelatedUser(ctx context.Context, messengerRelatedUser *models.MessengerRelatedUser) (string, error) {
+	if messengerRelatedUser == nil {
+		return "", errors.Wrap(errs.ErrUnprocessableEntity, "messenger_related_user is nil")
+	}
+	if messengerRelatedUser.MessengerID == nil {
+		return "", errors.Wrap(errs.ErrUnprocessableEntity, "messenger_id is nil in messenger_related_user")
+	}
+
+	messenger, err := s.messengerRepo.GetMessengerByID(ctx, *messengerRelatedUser.MessengerID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			return "", errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
+		}
+		return "", errors.WithStack(err)
+	}
+	return messenger.Name, nil
+}
+
+func (s *TaskService) getMessengerName(ctx context.Context, messengerRelatedUserID int) (string, error) {
+	messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, messengerRelatedUserID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			return "", errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
+		}
+		return "", errors.WithStack(err)
+	}
+	return s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
+}
+
 // CreateTask implements BL of adding new task
 func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64, int64, error) {
 	ctx, span := s.tracer.Start(ctx, "task_service.CreateTask",
@@ -95,11 +124,17 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 	if task.MessengerRelatedUserID != nil {
 		span.SetAttributes(attribute.Int("messenger_related_user.id", *task.MessengerRelatedUserID))
 		// check if messenger related user exists
-		_, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *task.MessengerRelatedUserID)
+		messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *task.MessengerRelatedUserID)
 		if err != nil {
 			if errors.Is(err, errs.ErrNotFound) {
 				err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
 			}
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return 0, 0, errors.WithStack(err)
+		}
+		// validate that messenger exists (prevents hard-coded messenger usage later)
+		if _, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser); err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return 0, 0, errors.WithStack(err)
@@ -491,24 +526,35 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		// Publish delete_task if status changed to deleted
 		if statusChangedToDeleted {
 			if oldTask.MessengerRelatedUserID != nil {
-				taskQueueMessage := map[string]interface{}{
-					"task": "worker.delete_task",
-					"args": []interface{}{oldTask.ID, "telegram"},
-				}
-
-				err = s.producer.Publish(ctx, taskQueueMessage)
+				messengerName, err := s.getMessengerName(ctx, *oldTask.MessengerRelatedUserID)
 				if err != nil {
 					log.Error().
 						Stack().
 						Err(err).
 						Int64("task.id", taskID).
-						Msg("failed to queue delete_task message for task with deleted status")
+						Msg("failed to get messenger name for delete_task queue publish")
 					// Don't fail the operation, just log the error
 					// The database update was successful, queue update failure is non-critical
 				} else {
-					log.Debug().
-						Int64("task.id", taskID).
-						Msg("delete_task message queued successfully for deleted task")
+					taskQueueMessage := map[string]interface{}{
+						"task": "worker.delete_task",
+						"args": []interface{}{oldTask.ID, messengerName},
+					}
+
+					err = s.producer.Publish(ctx, taskQueueMessage)
+					if err != nil {
+						log.Error().
+							Stack().
+							Err(err).
+							Int64("task.id", taskID).
+							Msg("failed to queue delete_task message for task with deleted status")
+						// Don't fail the operation, just log the error
+						// The database update was successful, queue update failure is non-critical
+					} else {
+						log.Debug().
+							Int64("task.id", taskID).
+							Msg("delete_task message queued successfully for deleted task")
+					}
 				}
 			}
 		} else if statusChangedToScheduled || titleChanged || descriptionChanged || startDateChanged || cronExpressionChanged {
@@ -528,24 +574,34 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 							Msg("failed to get messenger related user for task queue update")
 						// Don't fail the operation, just log the error
 					} else {
-						taskQueueMessage := map[string]interface{}{
-							"task": "worker.schedule_task",
-							"args": []interface{}{"telegram", messengerRelatedUser.ChatID, oldTask.ID, oldTask.Title, oldTask.Description, oldTask.StartDate, oldTask.CronExpression, oldTask.RequiresConfirmation},
-						}
-
-						err = s.producer.Publish(ctx, taskQueueMessage)
+						messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
 						if err != nil {
 							log.Error().
 								Stack().
 								Err(err).
 								Int64("task.id", taskID).
-								Msg("failed to queue schedule_task message for updated task")
+								Msg("failed to get messenger name for task queue update")
 							// Don't fail the operation, just log the error
-							// The database update was successful, queue update failure is non-critical
 						} else {
-							log.Debug().
-								Int64("task.id", taskID).
-								Msg("schedule_task message queued successfully for updated task")
+							taskQueueMessage := map[string]interface{}{
+								"task": "worker.schedule_task",
+								"args": []interface{}{messengerName, messengerRelatedUser.ChatID, oldTask.ID, oldTask.Title, oldTask.Description, oldTask.StartDate, oldTask.CronExpression, oldTask.RequiresConfirmation},
+							}
+
+							err = s.producer.Publish(ctx, taskQueueMessage)
+							if err != nil {
+								log.Error().
+									Stack().
+									Err(err).
+									Int64("task.id", taskID).
+									Msg("failed to queue schedule_task message for updated task")
+								// Don't fail the operation, just log the error
+								// The database update was successful, queue update failure is non-critical
+							} else {
+								log.Debug().
+									Int64("task.id", taskID).
+									Msg("schedule_task message queued successfully for updated task")
+							}
 						}
 					}
 				}
@@ -599,6 +655,19 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				Msg("requires_confirmation removed, deleting all child tasks")
 
 			if len(childTasks) > 0 {
+				if oldTask.MessengerRelatedUserID == nil {
+					err := errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", oldTask.ID))
+					span.RecordError(err)
+					span.SetStatus(codes.Error, err.Error())
+					return nil, err
+				}
+				messengerName, err := s.getMessengerName(ctx, *oldTask.MessengerRelatedUserID)
+				if err != nil {
+					span.RecordError(err)
+					span.SetStatus(codes.Error, err.Error())
+					return nil, errors.WithStack(err)
+				}
+
 				// Delete all child tasks in transaction
 				err = s.taskRepo.DeleteChildTasksWithTx(ctx, tx, taskID)
 				if err != nil {
@@ -616,7 +685,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				for _, childTask := range childTasks {
 					childTaskQueueMessage := map[string]interface{}{
 						"task": "worker.delete_task",
-						"args": []interface{}{childTask.ID, "telegram"},
+						"args": []interface{}{childTask.ID, messengerName},
 					}
 
 					err = s.producer.Publish(ctx, childTaskQueueMessage)
@@ -656,24 +725,34 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 						// Don't fail the operation, just log the error
 						// The database update was successful, queue update failure is non-critical
 					} else {
-						parentTaskQueueMessage := map[string]interface{}{
-							"task": "worker.schedule_task",
-							"args": []interface{}{"telegram", messengerRelatedUser.ChatID, oldTask.ID, oldTask.Title, oldTask.Description, oldTask.StartDate, oldTask.CronExpression, oldTask.RequiresConfirmation},
-						}
-
-						err = s.producer.Publish(ctx, parentTaskQueueMessage)
+						messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
 						if err != nil {
 							log.Error().
 								Stack().
 								Err(err).
 								Int64("task.id", taskID).
-								Msg("failed to queue schedule_task message for parent task without confirmation")
+								Msg("failed to get messenger name for parent task queue update")
 							// Don't fail the operation, just log the error
-							// The database update was successful, queue update failure is non-critical
 						} else {
-							log.Debug().
-								Int64("task.id", taskID).
-								Msg("parent task schedule_task message queued successfully without confirmation")
+							parentTaskQueueMessage := map[string]interface{}{
+								"task": "worker.schedule_task",
+								"args": []interface{}{messengerName, messengerRelatedUser.ChatID, oldTask.ID, oldTask.Title, oldTask.Description, oldTask.StartDate, oldTask.CronExpression, oldTask.RequiresConfirmation},
+							}
+
+							err = s.producer.Publish(ctx, parentTaskQueueMessage)
+							if err != nil {
+								log.Error().
+									Stack().
+									Err(err).
+									Int64("task.id", taskID).
+									Msg("failed to queue schedule_task message for parent task without confirmation")
+								// Don't fail the operation, just log the error
+								// The database update was successful, queue update failure is non-critical
+							} else {
+								log.Debug().
+									Int64("task.id", taskID).
+									Msg("parent task schedule_task message queued successfully without confirmation")
+							}
 						}
 					}
 				}
@@ -801,26 +880,37 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 										Msg("failed to get messenger related user for child task queue update")
 									// Don't fail the operation, just log the error
 								} else {
-									childTaskQueueMessage := map[string]interface{}{
-										"task": "worker.schedule_task",
-										"args": []interface{}{"telegram", messengerRelatedUser.ChatID, childTask.ID, childTask.Title, childTask.Description, childTask.StartDate, childTask.CronExpression, childTask.RequiresConfirmation},
-									}
-
-									err = s.producer.Publish(ctx, childTaskQueueMessage)
+									messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
 									if err != nil {
 										log.Error().
 											Stack().
 											Err(err).
 											Int64("task.id", taskID).
 											Int64("child_task.id", childTask.ID).
-											Msg("failed to queue schedule_task message for updated child task")
+											Msg("failed to get messenger name for child task queue update")
 										// Don't fail the operation, just log the error
-										// The database update was successful, queue update failure is non-critical
 									} else {
-										log.Debug().
-											Int64("task.id", taskID).
-											Int64("child_task.id", childTask.ID).
-											Msg("child task update queued successfully")
+										childTaskQueueMessage := map[string]interface{}{
+											"task": "worker.schedule_task",
+											"args": []interface{}{messengerName, messengerRelatedUser.ChatID, childTask.ID, childTask.Title, childTask.Description, childTask.StartDate, childTask.CronExpression, childTask.RequiresConfirmation},
+										}
+
+										err = s.producer.Publish(ctx, childTaskQueueMessage)
+										if err != nil {
+											log.Error().
+												Stack().
+												Err(err).
+												Int64("task.id", taskID).
+												Int64("child_task.id", childTask.ID).
+												Msg("failed to queue schedule_task message for updated child task")
+											// Don't fail the operation, just log the error
+											// The database update was successful, queue update failure is non-critical
+										} else {
+											log.Debug().
+												Int64("task.id", taskID).
+												Int64("child_task.id", childTask.ID).
+												Msg("child task update queued successfully")
+										}
 									}
 								}
 							}
@@ -871,24 +961,34 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 
 		// Delete parent task from queue (it should no longer execute directly)
 		if oldTask.MessengerRelatedUserID != nil {
-			taskQueueMessage := map[string]interface{}{
-				"task": "worker.delete_task",
-				"args": []interface{}{oldTask.ID, "telegram"},
-			}
-
-			err = s.producer.Publish(ctx, taskQueueMessage)
+			messengerName, err := s.getMessengerName(ctx, *oldTask.MessengerRelatedUserID)
 			if err != nil {
 				log.Error().
 					Stack().
 					Err(err).
 					Int64("task.id", taskID).
-					Msg("failed to queue delete_task message for parent task")
+					Msg("failed to get messenger name for delete_task queue publish (parent task)")
 				// Don't fail the operation, just log the error
-				// The database update was successful, queue update failure is non-critical
 			} else {
-				log.Debug().
-					Int64("task.id", taskID).
-					Msg("delete_task message queued successfully for parent task")
+				taskQueueMessage := map[string]interface{}{
+					"task": "worker.delete_task",
+					"args": []interface{}{oldTask.ID, messengerName},
+				}
+
+				err = s.producer.Publish(ctx, taskQueueMessage)
+				if err != nil {
+					log.Error().
+						Stack().
+						Err(err).
+						Int64("task.id", taskID).
+						Msg("failed to queue delete_task message for parent task")
+					// Don't fail the operation, just log the error
+					// The database update was successful, queue update failure is non-critical
+				} else {
+					log.Debug().
+						Int64("task.id", taskID).
+						Msg("delete_task message queued successfully for parent task")
+				}
 			}
 		}
 
@@ -961,26 +1061,37 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 							Msg("failed to get messenger related user for child task queue update")
 						// Don't fail the operation, just log the error
 					} else {
-						childTaskQueueMessage := map[string]interface{}{
-							"task": "worker.schedule_task",
-							"args": []interface{}{"telegram", messengerRelatedUser.ChatID, childTaskID, childTask.Title, childTask.Description, childTask.StartDate, childTask.CronExpression, childTask.RequiresConfirmation},
-						}
-
-						err = s.producer.Publish(ctx, childTaskQueueMessage)
+						messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
 						if err != nil {
 							log.Error().
 								Stack().
 								Err(err).
 								Int64("task.id", taskID).
 								Int64("child_task.id", childTaskID).
-								Msg("failed to queue schedule_task message for child task")
+								Msg("failed to get messenger name for child task queue update")
 							// Don't fail the operation, just log the error
-							// The database update was successful, queue update failure is non-critical
 						} else {
-							log.Debug().
-								Int64("task.id", taskID).
-								Int64("child_task.id", childTaskID).
-								Msg("schedule_task message queued successfully for child task")
+							childTaskQueueMessage := map[string]interface{}{
+								"task": "worker.schedule_task",
+								"args": []interface{}{messengerName, messengerRelatedUser.ChatID, childTaskID, childTask.Title, childTask.Description, childTask.StartDate, childTask.CronExpression, childTask.RequiresConfirmation},
+							}
+
+							err = s.producer.Publish(ctx, childTaskQueueMessage)
+							if err != nil {
+								log.Error().
+									Stack().
+									Err(err).
+									Int64("task.id", taskID).
+									Int64("child_task.id", childTaskID).
+									Msg("failed to queue schedule_task message for child task")
+								// Don't fail the operation, just log the error
+								// The database update was successful, queue update failure is non-critical
+							} else {
+								log.Debug().
+									Int64("task.id", taskID).
+									Int64("child_task.id", childTaskID).
+									Msg("schedule_task message queued successfully for child task")
+							}
 						}
 					}
 				}
@@ -1102,15 +1213,57 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 	// Get database connection for transaction
 	db := s.taskRepo.GetDB()
 	if db == nil {
-		err := errors.New("database connection not available")
+		// Fallback path for environments where TaskRepository can't provide a DB handle (e.g. unit tests).
+		// This path is non-transactional and does not interact with the queue to avoid partial failures.
 		log.Error().
 			Stack().
-			Err(err).
 			Int64("task.id", taskID).
-			Msg("failed to get database connection for transaction")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return errors.WithStack(err)
+			Msg("database connection not available for transaction; falling back to non-transactional delete")
+
+		if task.CronExpression != nil {
+			err := errors.New("database connection not available for transactional delete of parent task")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return errors.WithStack(err)
+		}
+
+		err := s.taskRepo.DeleteTask(ctx, taskID)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return errors.WithStack(err)
+		}
+
+		// Record history (outside transaction, as it's not critical if it fails)
+		_, deleteHistorySpan := s.tracer.Start(ctx, "task_service.record_task_deleted_history",
+			trace.WithAttributes(
+				attribute.Int64("task.id", taskID),
+				attribute.Int64("user.id", task.UserID),
+			))
+		history := &models.TaskHistory{
+			TaskID:   taskID,
+			UserID:   task.UserID,
+			Action:   string(models.TaskHistoryActionDeleted),
+			OldValue: s.taskToMap(task),
+		}
+		if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Msg("failed to record task deleted history")
+			deleteHistorySpan.RecordError(err)
+			deleteHistorySpan.SetStatus(codes.Error, err.Error())
+		} else {
+			deleteHistorySpan.SetStatus(codes.Ok, "delete history recorded")
+		}
+		deleteHistorySpan.End()
+
+		log.Debug().
+			Int64("task.id", taskID).
+			Msg("task deleted successfully (non-transactional fallback)")
+		span.SetStatus(codes.Ok, "task deleted successfully (non-transactional fallback)")
+		return nil
 	}
 
 	// Begin transaction
@@ -1160,6 +1313,19 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		}
 
 		if len(childTasks) > 0 {
+			if task.MessengerRelatedUserID == nil {
+				err := errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return err
+			}
+			messengerName, err := s.getMessengerName(ctx, *task.MessengerRelatedUserID)
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return errors.WithStack(err)
+			}
+
 			// Delete all child tasks in transaction
 			err = s.taskRepo.DeleteChildTasksWithTx(ctx, tx, taskID)
 			if err != nil {
@@ -1178,7 +1344,7 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 			for _, childTask := range childTasks {
 				childTaskQueueMessage := map[string]interface{}{
 					"task": "worker.delete_task",
-					"args": []interface{}{childTask.ID, "telegram"},
+					"args": []interface{}{childTask.ID, messengerName},
 				}
 
 				err = s.producer.Publish(ctx, childTaskQueueMessage)
@@ -1219,9 +1385,21 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 
 	// Queue delete_task message for the task
 	// If this fails, we'll rollback the transaction
+	if task.MessengerRelatedUserID == nil {
+		err := errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	messengerName, err := s.getMessengerName(ctx, *task.MessengerRelatedUserID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.WithStack(err)
+	}
 	taskQueueMessage := map[string]interface{}{
 		"task": "worker.delete_task",
-		"args": []interface{}{task.ID, "telegram"},
+		"args": []interface{}{task.ID, messengerName},
 	}
 
 	err = s.producer.Publish(ctx, taskQueueMessage)
@@ -1344,15 +1522,34 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 			return errors.WithStack(err)
 		}
 
+		messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return errors.WithStack(err)
+		}
+
 		taskQueueMessage = map[string]interface{}{
 			"task": "worker.schedule_task",
-			"args": []interface{}{"telegram", messengerRelatedUser.ChatID, task.ID, task.Title, task.Description, task.StartDate, task.CronExpression, task.RequiresConfirmation},
+			"args": []interface{}{messengerName, messengerRelatedUser.ChatID, task.ID, task.Title, task.Description, task.StartDate, task.CronExpression, task.RequiresConfirmation},
 		}
 
 	} else {
+		if task.MessengerRelatedUserID == nil {
+			err := errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return err
+		}
+		messengerName, err := s.getMessengerName(ctx, *task.MessengerRelatedUserID)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return errors.WithStack(err)
+		}
 		taskQueueMessage = map[string]interface{}{
 			"task": "worker.delete_task",
-			"args": []interface{}{task.ID, "telegram"},
+			"args": []interface{}{task.ID, messengerName},
 		}
 	}
 
@@ -1478,9 +1675,21 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 
 	// Queue delete_task message
 	// If this fails, we'll rollback the transaction
+	if task.MessengerRelatedUserID == nil {
+		err := errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+	messengerName, err := s.getMessengerName(ctx, *task.MessengerRelatedUserID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.WithStack(err)
+	}
 	taskQueueMessage := map[string]interface{}{
 		"task": "worker.delete_task",
-		"args": []interface{}{task.ID, "telegram"},
+		"args": []interface{}{task.ID, messengerName},
 	}
 
 	err = s.producer.Publish(ctx, taskQueueMessage)
@@ -1579,33 +1788,44 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 						Msg("failed to get messenger related user for child task queue publish")
 					// Don't fail, just log
 				} else {
-					childTaskQueueMessage := map[string]interface{}{
-						"task": "worker.schedule_task",
-						"args": []interface{}{
-							"telegram",
-							messengerRelatedUser.ChatID,
-							childTaskID,
-							childTask.Title,
-							childTask.Description,
-							childTask.StartDate,
-							childTask.CronExpression,
-							childTask.RequiresConfirmation,
-						},
-					}
-					err = s.producer.Publish(ctx, childTaskQueueMessage)
+					messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
 					if err != nil {
 						log.Error().
 							Stack().
 							Err(err).
 							Int64("task.id", taskID).
 							Int64("child_task.id", childTaskID).
-							Msg("failed to queue schedule_task for new child task")
-						// Don't fail the operation, just log the error
+							Msg("failed to get messenger name for child task queue publish")
+						// Don't fail, just log
 					} else {
-						log.Debug().
-							Int64("task.id", taskID).
-							Int64("child_task.id", childTaskID).
-							Msg("schedule_task queued successfully for new child task")
+						childTaskQueueMessage := map[string]interface{}{
+							"task": "worker.schedule_task",
+							"args": []interface{}{
+								messengerName,
+								messengerRelatedUser.ChatID,
+								childTaskID,
+								childTask.Title,
+								childTask.Description,
+								childTask.StartDate,
+								childTask.CronExpression,
+								childTask.RequiresConfirmation,
+							},
+						}
+						err = s.producer.Publish(ctx, childTaskQueueMessage)
+						if err != nil {
+							log.Error().
+								Stack().
+								Err(err).
+								Int64("task.id", taskID).
+								Int64("child_task.id", childTaskID).
+								Msg("failed to queue schedule_task for new child task")
+							// Don't fail the operation, just log the error
+						} else {
+							log.Debug().
+								Int64("task.id", taskID).
+								Int64("child_task.id", childTaskID).
+								Msg("schedule_task queued successfully for new child task")
+						}
 					}
 				}
 			}
@@ -1618,6 +1838,14 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 		log.Debug().
 			Int64("task.id", taskID).
 			Msg("parent task marked as done, marking all child tasks (not done/deleted) as done and deleting from queue")
+
+		if task.MessengerRelatedUserID == nil {
+			return nil, errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
+		}
+		messengerName, err := s.getMessengerName(ctx, *task.MessengerRelatedUserID)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
 
 		// Get all child tasks
 		childTasks, err := s.taskRepo.GetChildTasksByParentID(ctx, taskID)
@@ -1718,7 +1946,7 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 						// Queue delete_task message for child task
 						childTaskQueueMessage := map[string]interface{}{
 							"task": "worker.delete_task",
-							"args": []interface{}{childTask.ID, "telegram"},
+							"args": []interface{}{childTask.ID, messengerName},
 						}
 
 						err = s.producer.Publish(ctx, childTaskQueueMessage)
@@ -2045,9 +2273,15 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 	}
 
 	// Prepare task data for queue with new start date and cron expression
+	messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.WithStack(err)
+	}
 	taskQueueMessage := map[string]interface{}{
 		"task": "worker.schedule_task",
-		"args": []interface{}{"telegram", messengerRelatedUser.ChatID, task.ID, task.Title, task.Description, newStartDate, nil, task.RequiresConfirmation},
+		"args": []interface{}{messengerName, messengerRelatedUser.ChatID, task.ID, task.Title, task.Description, newStartDate, nil, task.RequiresConfirmation},
 	}
 
 	// Publish to queue - if this fails, we don't reschedule

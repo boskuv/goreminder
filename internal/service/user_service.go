@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/repository"
 	"github.com/boskuv/goreminder/pkg/logger"
@@ -36,6 +37,29 @@ func NewUserService(userRepo repository.UserRepository, taskRepo repository.Task
 		tracer:        otel.Tracer("user-service"),
 		logger:        logger,
 	}
+}
+
+// getMessengerName gets messenger name from MessengerRelatedUser
+// Returns messenger name or empty string if not found
+func (s *UserService) getMessengerName(ctx context.Context, messengerRelatedUserID int) (string, error) {
+	messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, messengerRelatedUserID)
+	if err != nil {
+		return "", errors.WithStack(err)
+	}
+
+	if messengerRelatedUser.MessengerID == nil {
+		return "", errors.Wrap(errs.ErrUnprocessableEntity, "messenger_id is nil in messenger_related_user")
+	}
+
+	messenger, err := s.messengerRepo.GetMessengerByID(ctx, *messengerRelatedUser.MessengerID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			return "", errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
+		}
+		return "", errors.WithStack(err)
+	}
+
+	return messenger.Name, nil
 }
 
 // CreateUser implements BL of adding new user
@@ -233,9 +257,31 @@ func (s *UserService) DeleteUser(ctx context.Context, userID int64) error {
 			// retry or rollback
 		}
 
+		var messengerName string
+		if task.MessengerRelatedUserID != nil {
+			messengerName, err = s.getMessengerName(ctx, int(*task.MessengerRelatedUserID))
+			if err != nil {
+				log.Error().
+					Stack().
+					Err(err).
+					Int64("task.id", task.ID).
+					Msg("failed to get messenger name for delete_task")
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				// Continue with next task
+				continue
+			}
+		} else {
+			log.Error().
+				Int64("task.id", task.ID).
+				Msg("task has no messenger_related_user_id")
+			// Continue with next task
+			continue
+		}
+
 		taskQueueMessage := map[string]interface{}{
 			"task": "worker.delete_task",
-			"args": []interface{}{task.ID, "telegram"},
+			"args": []interface{}{task.ID, messengerName},
 		}
 
 		err = s.producer.Publish(ctx, taskQueueMessage)
