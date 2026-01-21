@@ -1,0 +1,116 @@
+# Git
+.git
+.gitignore
+.gitattributes
+.gitmodules
+
+# Documentation
+README.md
+CHANGELOG.md
+LICENSE
+docs/
+*.md
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.classpath
+.settings/
+*.sublime-*
+
+# Build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/bin/
+/dist/
+/build/
+/core
+/goreminder
+
+# Test files and coverage
+*_test.go
+*_test.py
+testdata/
+coverage.out
+coverage.html
+*.coverprofile
+.pytest_cache/
+__pycache__/
+tests/
+pytest.ini
+
+# Logs
+*.log
+gorem.log
+logs/
+
+# Environment and config (keep examples)
+.env
+.env.local
+.env.*.local
+config.yaml
+config.docker.yaml
+!cmd/core/config.yaml.example
+!cmd/core/config.docker.yaml.example
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+*.bak
+*.cache
+
+# Examples (not needed in production image)
+examples/
+
+# Docker files (don't copy into image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+Jenkinsfile
+
+# Python (if any)
+venv/
+env/
+ENV/
+.venv
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Node (if any)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Misc
+TODO
+*.orig
+*.rej
+.cache/
+.mypy_cache/
+.ruff_cache/
