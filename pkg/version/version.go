@@ -29,7 +29,7 @@ func GetVersion() string {
 			return strings.TrimSpace(string(data))
 		}
 		// Try relative path from bin directory
-		if data, err := os.ReadFile("../VERSION"); err == nil {
+		if data, err := os.ReadFile("../../VERSION"); err == nil {
 			return strings.TrimSpace(string(data))
 		}
 	}
