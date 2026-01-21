@@ -482,6 +482,14 @@ MIGRATIONS_DIR=custom_migrations make run
 ```
 
 ### 5. Run the Application
+
+#### Debug Mode
+Enable debug mode for enhanced logging and development features:
+```bash
+DEBUG=true make run
+```
+
+#### Release Mode
 ```bash
 make run
 ```

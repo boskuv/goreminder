@@ -53,10 +53,11 @@ func main() {
 
 	// determine minimum logging level based on flag input
 	var minlvl zerolog.Level
-	minlvl, _ = zerolog.ParseLevel("debug") // TODO: from cfg
-	//if err != nil {
-	//return errs.E(op, err)
-	//}
+	var debugMode bool
+	if os.Getenv("DEBUG") == "true" {
+		minlvl, _ = zerolog.ParseLevel("debug")
+	}
+	minlvl, _ = zerolog.ParseLevel("info")
 
 	// setup logger with appropriate defaults
 	log := logger.New(os.Stdout, minlvl, true)
@@ -77,10 +78,9 @@ func main() {
 	}
 
 	// DB init
-	// TODO: move to config validation
 	maxLifetime, err := time.ParseDuration(cfg.Database.ConnMaxLifetime)
 	if err != nil {
-		//return fmt.Errorf("error while parsing db max_lifetime: %w", err)
+		log.Fatal().Stack().Err(err).Msg("error while setting max max_lifetime for DB connection")
 	}
 
 	dbConfig := &database.DBConfig{
@@ -188,13 +188,18 @@ func main() {
 
 	// setup swagger info
 	appVersion := version.GetVersion()
-	docs.SwaggerInfo.Title = "Task Management API"
-	docs.SwaggerInfo.Description = "API documentation for the Task Management system"
+	log.Info().Str("version", appVersion).Msg("printing current app version...")
+
+	docs.SwaggerInfo.Title = "GoReminder API"
+	docs.SwaggerInfo.Description = "API documentation for the GoReminder system"
 	docs.SwaggerInfo.Version = appVersion
-	docs.SwaggerInfo.Host = "localhost:8080" // TODO: remove hardcode
 	docs.SwaggerInfo.Schemes = []string{"http"}
 
 	// setup router
+	if !debugMode {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	router := gin.Default()
 
 	// Register custom validators
@@ -279,7 +284,6 @@ func main() {
 
 	// start server
 	port := cfg.Server.Port
-	// TODO: add default port if not provided
 	if port == "" {
 		port = "8080"
 	}
