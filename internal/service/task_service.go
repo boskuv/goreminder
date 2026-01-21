@@ -1491,17 +1491,7 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 	}
 
 	var taskQueueMessage map[string]interface{}
-	// TODO: other actions
 	if scheduledTask.Action == "schedule" {
-		// if task.StartDate.IsZero() {
-		// 	return errors.WithStack(errors.Errorf("task with ID %d has no StartDate value: it can't be nil", task.ID))
-		// 	// 409
-		// }
-		// messengerID, err := s.messengerRepo.GetMessengerIDByName(scheduledTask.MessengerName)
-		// if messengerID == 0 { // TODO: nil instead of 0
-		// 	return errors.WithStack(errors.Errorf("messenger with name %s does not exist", scheduledTask.MessengerName))
-		// }
-
 		if task.MessengerRelatedUserID == nil {
 			err := errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
 			span.RecordError(err)
@@ -1560,7 +1550,6 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 			Int64("task.id", scheduledTask.TaskID).
 			Str("action", scheduledTask.Action).
 			Msg("failed to queue task")
-		// TODO: failed to publish message: Exception (504) Reason: \"channel/connection is not open\"
 		err = errors.Errorf("can't publish message %v to rabbitmq: %s",
 			taskQueueMessage,
 			err,

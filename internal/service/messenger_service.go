@@ -291,7 +291,6 @@ func (s *MessengerService) GetMessengerRelatedUser(ctx context.Context, chatID s
 }
 
 // GetUserID implements BL of retrieving existing user by messengerUserID
-// TODO: add messengerUD + messengerUserID 422
 func (s *MessengerService) GetUserID(ctx context.Context, messengerUserID string) (int64, error) {
 	ctx, span := s.tracer.Start(ctx, "messenger_service.GetUserID",
 		trace.WithAttributes(

@@ -250,7 +250,6 @@ func (s *UserService) DeleteUser(ctx context.Context, userID int64) error {
 
 	span.SetAttributes(attribute.Int("tasks.count", len(tasks)))
 	for _, task := range tasks {
-		// TODO: allow validation + check errors
 		err = s.taskRepo.DeleteTask(ctx, task.ID)
 		if err != nil {
 			span.RecordError(err)
@@ -286,7 +285,6 @@ func (s *UserService) DeleteUser(ctx context.Context, userID int64) error {
 
 		err = s.producer.Publish(ctx, taskQueueMessage)
 		if err != nil {
-			// TODO: failed to publish message: Exception (504) Reason: \"channel/connection is not open\"
 			err = errors.Errorf("can't publish message %v to rabbitmq: %s",
 				taskQueueMessage,
 				err,
