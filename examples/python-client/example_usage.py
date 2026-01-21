@@ -71,7 +71,7 @@ def main():
         )
         print("Recurring task created:")
         print_json(recurring_task)
-        recurring_task_id = recurring_task["id"]
+        #recurring_task_id = recurring_task["id"]
     except Exception as e:
         print(f"Error creating recurring task: {e}")
 
@@ -103,13 +103,14 @@ def main():
         print(f"Error updating task: {e}")
 
     # Example 6: Mark task as done
-    print("\n6. Marking task as done...")
-    try:
-        done_task = client.mark_task_as_done(task_id)
-        print("Task marked as done:")
-        print_json(done_task)
-    except Exception as e:
-        print(f"Error marking task as done: {e}")
+    # TODO: task with ID 349 has no MessengerRelatedUserID value: unprocessable entity
+    # print("\n6. Marking task as done...")
+    # try:
+    #     done_task = client.mark_task_as_done(task_id)
+    #     print("Task marked as done:")
+    #     print_json(done_task)
+    # except Exception as e:
+    #     print(f"Error marking task as done: {e}")
 
     # Example 7: Get task history
     print("\n7. Getting task history...")
@@ -130,7 +131,7 @@ def main():
         )
         print("Backlog created:")
         print_json(backlog)
-        backlog_id = backlog["id"]
+        # backlog_id = backlog["id"]
     except Exception as e:
         print(f"Error creating backlog: {e}")
 

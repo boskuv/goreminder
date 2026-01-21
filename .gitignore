@@ -33,3 +33,4 @@
 temp/
 config*.yaml
 __pycache__
+.venv/

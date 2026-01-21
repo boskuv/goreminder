@@ -7,7 +7,6 @@ A simple Python client for interacting with the GoReminder API.
 import requests
 from typing import Optional, Dict, List, Any
 from datetime import datetime, timezone
-import json
 
 
 class GoReminderClient:
@@ -93,7 +92,7 @@ class GoReminderClient:
         data = {
             "title": title,
             "user_id": user_id,
-            "start_date": start_date.isoformat() + "Z"
+            "start_date": start_date.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
         }
 
         if description:
@@ -101,7 +100,7 @@ class GoReminderClient:
         if messenger_related_user_id:
             data["messenger_related_user_id"] = messenger_related_user_id
         if finish_date:
-            data["finish_date"] = finish_date.isoformat() + "Z"
+            data["finish_date"] = finish_date.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
         if cron_expression:
             data["cron_expression"] = cron_expression
         if requires_confirmation:
@@ -150,9 +149,9 @@ class GoReminderClient:
         if status:
             params["status"] = status
         if start_date_from:
-            params["start_date_from"] = start_date_from.isoformat() + "Z"
+            params["start_date_from"] = start_date_from.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
         if start_date_to:
-            params["start_date_to"] = start_date_to.isoformat() + "Z"
+            params["start_date_to"] = start_date_to.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
         if user_id:
             params["user_id"] = user_id
 
@@ -179,9 +178,9 @@ class GoReminderClient:
         if status is not None:
             data["status"] = status
         if start_date is not None:
-            data["start_date"] = start_date.isoformat() + "Z"
+            data["start_date"] = start_date.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
         if finish_date is not None:
-            data["finish_date"] = finish_date.isoformat() + "Z"
+            data["finish_date"] = finish_date.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
         if requires_confirmation is not None:
             data["requires_confirmation"] = requires_confirmation
         if cron_expression is not None:
@@ -222,13 +221,13 @@ class GoReminderClient:
         if order_by:
             params["order_by"] = order_by
         if start_date_from:
-            params["start_date_from"] = start_date_from.isoformat() + "Z"
+            params["start_date_from"] = start_date_from.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
         if start_date_to:
-            params["start_date_to"] = start_date_to.isoformat() + "Z"
+            params["start_date_to"] = start_date_to.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
         if created_at_from:
-            params["created_at_from"] = created_at_from.isoformat() + "Z"
+            params["created_at_from"] = created_at_from.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
         if created_at_to:
-            params["created_at_to"] = created_at_to.isoformat() + "Z"
+            params["created_at_to"] = created_at_to.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
         if requires_confirmation is not None:
             params["requires_confirmation"] = requires_confirmation
 
