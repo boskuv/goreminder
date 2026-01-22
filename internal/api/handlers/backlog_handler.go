@@ -37,10 +37,10 @@ func NewBacklogHandler(backlogService *service.BacklogService, logger zerolog.Lo
 // @Accept json
 // @Produce json
 // @Param backlog body dto.CreateBacklogRequest true "Backlog to create"
-// @Success 201 {object} map[string]int64 "Created backlog ID"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Success 201 {object} dto.CreateResponse "Created backlog ID"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/backlogs [post]
 func (h *BacklogHandler) CreateBacklog(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -102,10 +102,10 @@ func (h *BacklogHandler) CreateBacklog(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param backlog body dto.CreateBacklogsBatchRequest true "Batch backlog items to create"
-// @Success 201 {object} map[string]interface{} "Created backlog IDs"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Success 201 {object} dto.BatchCreateResponse "Created backlog IDs"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/backlogs/batch [post]
 func (h *BacklogHandler) CreateBacklogsBatch(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -164,8 +164,8 @@ func (h *BacklogHandler) CreateBacklogsBatch(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Backlog ID"
 // @Success 200 {object} dto.BacklogResponse "Backlog item"
-// @Failure 404 {object} map[string]string "Not found"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 404 {object} dto.ErrorResponse "Not found"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/backlogs/{id} [get]
 func (h *BacklogHandler) GetBacklog(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -224,8 +224,8 @@ func (h *BacklogHandler) GetBacklog(c *gin.Context) {
 // @Param order_by query string false "Order by" default(created_at DESC)
 // @Param user_id query int false "Filter by user ID"
 // @Success 200 {object} dto.PaginatedBacklogsResponse "Paginated backlogs"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/backlogs [get]
 func (h *BacklogHandler) GetAllBacklogs(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -324,10 +324,10 @@ func (h *BacklogHandler) GetAllBacklogs(c *gin.Context) {
 // @Param id path int true "Backlog ID"
 // @Param backlog body dto.UpdateBacklogRequest true "Backlog update data"
 // @Success 200 {object} dto.BacklogResponse "Updated backlog item"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 404 {object} map[string]string "Not found"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "Not found"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/backlogs/{id} [put]
 func (h *BacklogHandler) UpdateBacklog(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -408,8 +408,8 @@ func (h *BacklogHandler) UpdateBacklog(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Backlog ID"
 // @Success 204 "No Content"
-// @Failure 404 {object} map[string]string "Not found"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 404 {object} dto.ErrorResponse "Not found"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/backlogs/{id} [delete]
 func (h *BacklogHandler) DeleteBacklog(c *gin.Context) {
 	ctx := c.Request.Context()

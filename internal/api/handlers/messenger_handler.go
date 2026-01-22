@@ -36,9 +36,9 @@ func NewMessengerHandler(messengerService *service.MessengerService, logger zero
 // @Accept json
 // @Produce json
 // @Param messenger body dto.CreateMessengerRequest true "Messenger to create"
-// @Success 201 {object} map[string]int64 "Created messenger ID"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Success 201 {object} dto.CreateResponse "Created messenger ID"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/messengers [post]
 func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -73,9 +73,9 @@ func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Messenger ID"
 // @Success 200 {object} dto.MessengerResponse "Messenger details"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 404 {object} map[string]string "Messenger not found"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "Messenger not found"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/messengers/{messenger_id} [get]
 func (h *MessengerHandler) GetMessenger(c *gin.Context) {
 	messengerID, err := validation.ValidateInt64Param(c, "messenger_id")
@@ -109,10 +109,10 @@ func (h *MessengerHandler) GetMessenger(c *gin.Context) {
 // @Tags Messengers
 // @Produce json
 // @Param messenger_name path string true "Messenger name"
-// @Success 200 {object} map[string]int64 "Messenger ID"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 404 {object} map[string]string "Messenger not found"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Success 200 {object} dto.IDResponse "Messenger ID"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "Messenger not found"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/messengers/by-name/{messenger_name} [get]
 func (h *MessengerHandler) GetMessengerIDByName(c *gin.Context) {
 	messengerName, err := validation.ValidateStringParam(c, "messenger_name", true)
@@ -145,10 +145,10 @@ func (h *MessengerHandler) GetMessengerIDByName(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param messenger body dto.CreateMessengerRelatedUserRequest true "MessengerRelatedUser to create"
-// @Success 201 {object} map[string]int64 "Created messenger-related user ID"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Success 201 {object} dto.CreateResponse "Created messenger-related user ID"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/messengerRelatedUsers [post]
 func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -192,10 +192,10 @@ func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
 // @Param user_id query int false "User ID"
 // @Param messenger_id query int false "Messenger ID"
 // @Success 200 {object} dto.MessengerRelatedUserResponse "Messenger-related user details"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 404 {object} map[string]string "Messenger-related user not found"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "Messenger-related user not found"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/messengerRelatedUsers [get]
 func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 	chatID, err := validation.ValidateStringQuery(c, "chat_id", true)
@@ -250,10 +250,10 @@ func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 // @Tags Messengers
 // @Produce json
 // @Param messenger_user_id path string true "Messenger UserID"
-// @Success 200 {object} map[string]int64 "User ID"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 404 {object} map[string]string "User not found"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Success 200 {object} dto.UserIDResponse "User ID"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "User not found"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/messengerRelatedUsers/{messenger_user_id}/user [get]
 func (h *MessengerHandler) GetUserID(c *gin.Context) {
 	messengerUserID, err := validation.ValidateStringParam(c, "messenger_user_id", true)
@@ -286,8 +286,8 @@ func (h *MessengerHandler) GetUserID(c *gin.Context) {
 // @Param page_size query int false "Page size (default: 50)" default(50)
 // @Param order_by query string false "Order by field (default: created_at DESC)" default(created_at DESC)
 // @Success 200 {object} dto.PaginatedMessengersResponse "Paginated list of messengers"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/messengers [get]
 func (h *MessengerHandler) GetAllMessengers(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -368,8 +368,8 @@ func (h *MessengerHandler) GetAllMessengers(c *gin.Context) {
 // @Param page_size query int false "Page size (default: 50)" default(50)
 // @Param order_by query string false "Order by field (default: created_at DESC)" default(created_at DESC)
 // @Success 200 {object} dto.PaginatedMessengerRelatedUsersResponse "Paginated list of messenger-related users"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/messengerRelatedUsers/all [get]
 func (h *MessengerHandler) GetAllMessengerRelatedUsers(c *gin.Context) {
 	ctx := c.Request.Context()

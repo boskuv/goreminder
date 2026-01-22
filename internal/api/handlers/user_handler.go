@@ -36,9 +36,9 @@ func NewUserHandler(userService *service.UserService, logger zerolog.Logger) *Us
 // @Accept json
 // @Produce json
 // @Param user body dto.CreateUserRequest true "User to create"
-// @Success 201 {object} map[string]int64 "Created user ID"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Success 201 {object} dto.CreateResponse "Created user ID"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/users [post]
 func (h *UserHandler) CreateUser(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -74,9 +74,9 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 // @Produce json
 // @Param user_id path int true "User ID"
 // @Success 200 {object} dto.UserResponse "User details"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 404 {object} map[string]string "User not found"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "User not found"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/users/{user_id} [get]
 func (h *UserHandler) GetUser(c *gin.Context) {
 	userID, err := validation.ValidateInt64Param(c, "user_id")
@@ -113,10 +113,10 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 // @Param user_id path int true "User ID"
 // @Param user body dto.UpdateUserRequest true "User update details"
 // @Success 200 {object} dto.UserResponse "Updated user"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 404 {object} map[string]string "User not found"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "User not found"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/users/{user_id} [put]
 func (h *UserHandler) UpdateUser(c *gin.Context) {
 	userID, err := validation.ValidateInt64Param(c, "user_id")
@@ -167,10 +167,10 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 // @Produce json
 // @Param user_id path int true "User ID"
 // @Success 204 "No content"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 404 {object} map[string]string "User not found"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "User not found"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/users/{user_id} [delete]
 func (h *UserHandler) DeleteUser(c *gin.Context) {
 	userID, err := validation.ValidateInt64Param(c, "user_id")
@@ -212,8 +212,8 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 // @Param page_size query int false "Page size (default: 50)" default(50)
 // @Param order_by query string false "Order by field (default: created_at DESC)" default(created_at DESC)
 // @Success 200 {object} dto.PaginatedUsersResponse "Paginated list of users"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/users [get]
 func (h *UserHandler) GetAllUsers(c *gin.Context) {
 	ctx := c.Request.Context()

@@ -64,19 +64,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -108,37 +102,25 @@ const docTemplate = `{
                     "201": {
                         "description": "Created backlog ID",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "integer"
-                            }
+                            "$ref": "#/definitions/dto.CreateResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -172,35 +154,25 @@ const docTemplate = `{
                     "201": {
                         "description": "Created backlog IDs",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/dto.BatchCreateResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -235,19 +207,13 @@ const docTemplate = `{
                     "404": {
                         "description": "Not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -292,37 +258,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -352,19 +306,13 @@ const docTemplate = `{
                     "404": {
                         "description": "Not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -417,28 +365,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -479,28 +418,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -551,37 +481,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -613,37 +531,25 @@ const docTemplate = `{
                     "201": {
                         "description": "Created digest settings ID",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "integer"
-                            }
+                            "$ref": "#/definitions/dto.CreateResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -679,28 +585,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -755,19 +652,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -821,37 +712,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Messenger-related user not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -883,37 +762,25 @@ const docTemplate = `{
                     "201": {
                         "description": "Created messenger-related user ID",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "integer"
-                            }
+                            "$ref": "#/definitions/dto.CreateResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -962,19 +829,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -1003,37 +864,25 @@ const docTemplate = `{
                     "200": {
                         "description": "User ID",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "integer"
-                            }
+                            "$ref": "#/definitions/dto.UserIDResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "User not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -1082,19 +931,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -1126,28 +969,19 @@ const docTemplate = `{
                     "201": {
                         "description": "Created messenger ID",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "integer"
-                            }
+                            "$ref": "#/definitions/dto.CreateResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -1176,37 +1010,25 @@ const docTemplate = `{
                     "200": {
                         "description": "Messenger ID",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "integer"
-                            }
+                            "$ref": "#/definitions/dto.IDResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Messenger not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -1241,28 +1063,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Messenger not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -1317,19 +1130,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -1361,37 +1168,25 @@ const docTemplate = `{
                     "201": {
                         "description": "Created target ID",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "integer"
-                            }
+                            "$ref": "#/definitions/dto.CreateResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -1426,19 +1221,13 @@ const docTemplate = `{
                     "404": {
                         "description": "Not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -1483,37 +1272,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -1543,19 +1320,13 @@ const docTemplate = `{
                     "404": {
                         "description": "Not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -1658,19 +1429,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -1702,37 +1467,25 @@ const docTemplate = `{
                     "201": {
                         "description": "Created task ID",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "integer"
-                            }
+                            "$ref": "#/definitions/dto.TaskCreateResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -1766,46 +1519,31 @@ const docTemplate = `{
                     "201": {
                         "description": "Task ID",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "integer"
-                            }
+                            "$ref": "#/definitions/dto.CreateResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Task not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -1840,28 +1578,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Task not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -1906,37 +1635,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Task not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -1967,30 +1684,21 @@ const docTemplate = `{
                         "description": "No Content"
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Task not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -2028,28 +1736,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Invalid task ID parameter",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Task not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error or transaction failure",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -2087,28 +1786,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Task not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -2157,19 +1847,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -2201,28 +1885,19 @@ const docTemplate = `{
                     "201": {
                         "description": "Created user ID",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "integer"
-                            }
+                            "$ref": "#/definitions/dto.CreateResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -2257,28 +1932,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "User not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -2323,37 +1989,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "User not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -2386,37 +2040,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "User not found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -2532,28 +2174,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -2605,28 +2238,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -2727,6 +2351,21 @@ const docTemplate = `{
                 "user_id": {
                     "type": "integer",
                     "example": 1
+                }
+            }
+        },
+        "dto.BatchCreateResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },
@@ -2848,6 +2487,15 @@ const docTemplate = `{
                 "name": {
                     "type": "string",
                     "example": "telegram"
+                }
+            }
+        },
+        "dto.CreateResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer",
+                    "example": 1
                 }
             }
         },
@@ -3046,6 +2694,24 @@ const docTemplate = `{
                 "weekend_time": {
                     "type": "string",
                     "example": "10:00"
+                }
+            }
+        },
+        "dto.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "error message"
+                }
+            }
+        },
+        "dto.IDResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer",
+                    "example": 1
                 }
             }
         },
@@ -3280,6 +2946,19 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.TaskCreateResponse": {
+            "type": "object",
+            "properties": {
+                "child_id": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
         "dto.TaskHistoryResponse": {
             "type": "object",
             "properties": {
@@ -3509,6 +3188,15 @@ const docTemplate = `{
                 "timezone": {
                     "type": "string",
                     "example": "America/New_York"
+                }
+            }
+        },
+        "dto.UserIDResponse": {
+            "type": "object",
+            "properties": {
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
                 }
             }
         },

@@ -26,6 +26,16 @@ definitions:
         example: 1
         type: integer
     type: object
+  dto.BatchCreateResponse:
+    properties:
+      count:
+        example: 3
+        type: integer
+      ids:
+        items:
+          type: integer
+        type: array
+    type: object
   dto.CreateBacklogRequest:
     properties:
       description:
@@ -117,6 +127,12 @@ definitions:
         type: string
     required:
     - name
+    type: object
+  dto.CreateResponse:
+    properties:
+      id:
+        example: 1
+        type: integer
     type: object
   dto.CreateTargetRequest:
     properties:
@@ -262,6 +278,18 @@ definitions:
       weekend_time:
         example: "10:00"
         type: string
+    type: object
+  dto.ErrorResponse:
+    properties:
+      message:
+        example: error message
+        type: string
+    type: object
+  dto.IDResponse:
+    properties:
+      id:
+        example: 1
+        type: integer
     type: object
   dto.MessengerRelatedUserResponse:
     properties:
@@ -420,6 +448,15 @@ definitions:
         example: "2024-01-10T08:00:00Z"
         type: string
       user_id:
+        example: 1
+        type: integer
+    type: object
+  dto.TaskCreateResponse:
+    properties:
+      child_id:
+        example: 2
+        type: integer
+      id:
         example: 1
         type: integer
     type: object
@@ -595,6 +632,12 @@ definitions:
         example: America/New_York
         type: string
     type: object
+  dto.UserIDResponse:
+    properties:
+      user_id:
+        example: 1
+        type: integer
+    type: object
   dto.UserResponse:
     properties:
       created_at:
@@ -659,15 +702,11 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get all backlog items
       tags:
       - Backlogs
@@ -688,27 +727,19 @@ paths:
         "201":
           description: Created backlog ID
           schema:
-            additionalProperties:
-              type: integer
-            type: object
+            $ref: '#/definitions/dto.CreateResponse'
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Create a new backlog item
       tags:
       - Backlogs
@@ -729,15 +760,11 @@ paths:
         "404":
           description: Not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Delete backlog item
       tags:
       - Backlogs
@@ -759,15 +786,11 @@ paths:
         "404":
           description: Not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get backlog by ID
       tags:
       - Backlogs
@@ -797,27 +820,19 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: Not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Update backlog item
       tags:
       - Backlogs
@@ -840,26 +855,19 @@ paths:
         "201":
           description: Created backlog IDs
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/dto.BatchCreateResponse'
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Create multiple backlog items from batch
       tags:
       - Backlogs
@@ -894,21 +902,15 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get digest
       tags:
       - Digests
@@ -933,21 +935,15 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: Not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Delete digest settings
       tags:
       - Digests
@@ -973,21 +969,15 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: Not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get digest settings
       tags:
       - Digests
@@ -1008,27 +998,19 @@ paths:
         "201":
           description: Created digest settings ID
           schema:
-            additionalProperties:
-              type: integer
-            type: object
+            $ref: '#/definitions/dto.CreateResponse'
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Create digest settings
       tags:
       - Digests
@@ -1062,27 +1044,19 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: Not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Update digest settings
       tags:
       - Digests
@@ -1119,15 +1093,11 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get all digest settings
       tags:
       - Digests
@@ -1164,27 +1134,19 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: Messenger-related user not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get messenger-related user by chatID, messengerUserID, userID and messengerID
       tags:
       - Messengers
@@ -1205,27 +1167,19 @@ paths:
         "201":
           description: Created messenger-related user ID
           schema:
-            additionalProperties:
-              type: integer
-            type: object
+            $ref: '#/definitions/dto.CreateResponse'
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Create a new messenger-related user
       tags:
       - Messengers
@@ -1244,27 +1198,19 @@ paths:
         "200":
           description: User ID
           schema:
-            additionalProperties:
-              type: integer
-            type: object
+            $ref: '#/definitions/dto.UserIDResponse'
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: User not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get a userID by messengerUserID
       tags:
       - Messengers
@@ -1297,15 +1243,11 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get all messenger-related users
       tags:
       - Messengers
@@ -1338,15 +1280,11 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get all messengers
       tags:
       - Messengers
@@ -1367,21 +1305,15 @@ paths:
         "201":
           description: Created messenger ID
           schema:
-            additionalProperties:
-              type: integer
-            type: object
+            $ref: '#/definitions/dto.CreateResponse'
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Create a new messenger type
       tags:
       - Messengers
@@ -1404,21 +1336,15 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: Messenger not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get messenger by ID
       tags:
       - Messengers
@@ -1437,27 +1363,19 @@ paths:
         "200":
           description: Messenger ID
           schema:
-            additionalProperties:
-              type: integer
-            type: object
+            $ref: '#/definitions/dto.IDResponse'
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: Messenger not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get messenger ID by name
       tags:
       - Messengers
@@ -1494,15 +1412,11 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get all target items
       tags:
       - Targets
@@ -1523,27 +1437,19 @@ paths:
         "201":
           description: Created target ID
           schema:
-            additionalProperties:
-              type: integer
-            type: object
+            $ref: '#/definitions/dto.CreateResponse'
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Create a new target item
       tags:
       - Targets
@@ -1564,15 +1470,11 @@ paths:
         "404":
           description: Not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Delete target item
       tags:
       - Targets
@@ -1594,15 +1496,11 @@ paths:
         "404":
           description: Not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get target by ID
       tags:
       - Targets
@@ -1632,27 +1530,19 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: Not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Update target item
       tags:
       - Targets
@@ -1727,15 +1617,11 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get all tasks
       tags:
       - Tasks
@@ -1756,27 +1642,19 @@ paths:
         "201":
           description: Created task ID
           schema:
-            additionalProperties:
-              type: integer
-            type: object
+            $ref: '#/definitions/dto.TaskCreateResponse'
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Create a new task
       tags:
       - Tasks
@@ -1797,23 +1675,17 @@ paths:
         "204":
           description: No Content
         "400":
-          description: Bad Request
+          description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
-          description: Not Found
+          description: Task not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
-          description: Internal Server Error
+          description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Soft delete a task
       tags:
       - Tasks
@@ -1835,21 +1707,15 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: Task not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get task by ID
       tags:
       - Tasks
@@ -1879,27 +1745,19 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: Task not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Update a task
       tags:
       - Tasks
@@ -1926,21 +1784,15 @@ paths:
         "400":
           description: Invalid task ID parameter
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: Task not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error or transaction failure
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Mark task as done
       tags:
       - Tasks
@@ -1965,21 +1817,15 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: Task not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get task history by task ID
       tags:
       - Tasks
@@ -2001,33 +1847,23 @@ paths:
         "201":
           description: Task ID
           schema:
-            additionalProperties:
-              type: integer
-            type: object
+            $ref: '#/definitions/dto.CreateResponse'
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: Task not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Send task to queue
       tags:
       - Tasks
@@ -2060,15 +1896,11 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get all users
       tags:
       - Users
@@ -2089,21 +1921,15 @@ paths:
         "201":
           description: Created user ID
           schema:
-            additionalProperties:
-              type: integer
-            type: object
+            $ref: '#/definitions/dto.CreateResponse'
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Create a new user
       tags:
       - Users
@@ -2126,27 +1952,19 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: User not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Soft delete a user
       tags:
       - Users
@@ -2168,21 +1986,15 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: User not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get user by userID
       tags:
       - Users
@@ -2212,27 +2024,19 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: User not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Update a user
       tags:
       - Users
@@ -2316,21 +2120,15 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get all user's tasks by userID
       tags:
       - Tasks
@@ -2365,21 +2163,15 @@ paths:
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.ErrorResponse'
       summary: Get task history by user ID
       tags:
       - Tasks

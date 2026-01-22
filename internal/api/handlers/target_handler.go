@@ -37,10 +37,10 @@ func NewTargetHandler(targetService *service.TargetService, logger zerolog.Logge
 // @Accept json
 // @Produce json
 // @Param target body dto.CreateTargetRequest true "Target to create"
-// @Success 201 {object} map[string]int64 "Created target ID"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Success 201 {object} dto.CreateResponse "Created target ID"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/targets [post]
 func (h *TargetHandler) CreateTarget(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -102,8 +102,8 @@ func (h *TargetHandler) CreateTarget(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Target ID"
 // @Success 200 {object} dto.TargetResponse "Target item"
-// @Failure 404 {object} map[string]string "Not found"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 404 {object} dto.ErrorResponse "Not found"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/targets/{id} [get]
 func (h *TargetHandler) GetTarget(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -162,8 +162,8 @@ func (h *TargetHandler) GetTarget(c *gin.Context) {
 // @Param order_by query string false "Order by" default(created_at DESC)
 // @Param user_id query int false "Filter by user ID"
 // @Success 200 {object} dto.PaginatedTargetsResponse "Paginated targets"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/targets [get]
 func (h *TargetHandler) GetAllTargets(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -262,10 +262,10 @@ func (h *TargetHandler) GetAllTargets(c *gin.Context) {
 // @Param id path int true "Target ID"
 // @Param target body dto.UpdateTargetRequest true "Target update data"
 // @Success 200 {object} dto.TargetResponse "Updated target item"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 404 {object} map[string]string "Not found"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "Not found"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/targets/{id} [put]
 func (h *TargetHandler) UpdateTarget(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -346,8 +346,8 @@ func (h *TargetHandler) UpdateTarget(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Target ID"
 // @Success 204 "No Content"
-// @Failure 404 {object} map[string]string "Not found"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 404 {object} dto.ErrorResponse "Not found"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/targets/{id} [delete]
 func (h *TargetHandler) DeleteTarget(c *gin.Context) {
 	ctx := c.Request.Context()

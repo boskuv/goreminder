@@ -38,10 +38,10 @@ func NewDigestHandler(digestService *service.DigestService, logger zerolog.Logge
 // @Accept json
 // @Produce json
 // @Param settings body dto.CreateDigestSettingsRequest true "Digest settings to create"
-// @Success 201 {object} map[string]int64 "Created digest settings ID"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Success 201 {object} dto.CreateResponse "Created digest settings ID"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/digests/settings [post]
 func (h *DigestHandler) CreateDigestSettings(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -103,9 +103,9 @@ func (h *DigestHandler) CreateDigestSettings(c *gin.Context) {
 // @Param user_id query int true "User ID"
 // @Param messenger_related_user_id query int false "Messenger Related User ID"
 // @Success 200 {object} dto.DigestSettingsResponse "Digest settings"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 404 {object} map[string]string "Not found"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "Not found"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/digests/settings [get]
 func (h *DigestHandler) GetDigestSettings(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -172,10 +172,10 @@ func (h *DigestHandler) GetDigestSettings(c *gin.Context) {
 // @Param messenger_related_user_id query int false "Messenger Related User ID"
 // @Param settings body dto.UpdateDigestSettingsRequest true "Digest settings update data"
 // @Success 200 {object} dto.DigestSettingsResponse "Updated digest settings"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 404 {object} map[string]string "Not found"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "Not found"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/digests/settings [put]
 func (h *DigestHandler) UpdateDigestSettings(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -267,9 +267,9 @@ func (h *DigestHandler) UpdateDigestSettings(c *gin.Context) {
 // @Param start_date_from query string false "Filter by start_date from (RFC3339 format, inclusive)"
 // @Param start_date_to query string false "Filter by start_date to (RFC3339 format, inclusive)"
 // @Success 200 {object} dto.DigestResponse "Digest data"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/digests [get]
 func (h *DigestHandler) GetDigest(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -372,8 +372,8 @@ func (h *DigestHandler) GetDigest(c *gin.Context) {
 // @Param order_by query string false "Order by" default(created_at DESC)
 // @Param user_id query int false "Filter by user ID"
 // @Success 200 {object} dto.PaginatedDigestSettingsResponse "Paginated digest settings"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/digests/settings/all [get]
 func (h *DigestHandler) GetAllDigestSettings(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -467,9 +467,9 @@ func (h *DigestHandler) GetAllDigestSettings(c *gin.Context) {
 // @Param user_id query int true "User ID"
 // @Param messenger_related_user_id query int false "Messenger Related User ID"
 // @Success 204 "No Content"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 404 {object} map[string]string "Not found"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "Not found"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/digests/settings [delete]
 func (h *DigestHandler) DeleteDigestSettings(c *gin.Context) {
 	ctx := c.Request.Context()

@@ -36,10 +36,10 @@ func NewTaskHandler(taskService *service.TaskService, logger zerolog.Logger) *Ta
 // @Accept json
 // @Produce json
 // @Param task body dto.CreateTaskRequest true "Task to create"
-// @Success 201 {object} map[string]int64 "Created task ID"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Success 201 {object} dto.TaskCreateResponse "Created task ID"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/tasks [post]
 func (h *TaskHandler) CreateTask(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -101,9 +101,9 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Task ID"
 // @Success 200 {object} dto.TaskResponse "Task details"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 404 {object} map[string]string "Task not found"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "Task not found"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/tasks/{id} [get]
 func (h *TaskHandler) GetTask(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -170,9 +170,9 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 // @Param requires_confirmation query bool false "Filter by requires_confirmation (true/false)"
 // @Param exclude_cron_with_confirmation query bool false "Exclude tasks where cron_expression IS NOT NULL AND requires_confirmation == True (implements: NOT (cron_expression IS NOT NULL AND requires_confirmation == True))"
 // @Success 200 {object} dto.PaginatedTasksResponse "Paginated list of tasks"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/users/{user_id}/tasks [get]
 func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -360,10 +360,10 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 // @Param id path int true "Task ID"
 // @Param task body dto.UpdateTaskRequest true "Task update details"
 // @Success 200 {object} dto.TaskResponse "Updated task"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 404 {object} map[string]string "Task not found"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "Task not found"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/tasks/{id} [put]
 func (h *TaskHandler) UpdateTask(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -442,10 +442,10 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Task ID"
-// @Success 204 {object} nil
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Success 204 "No Content"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "Task not found"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/tasks/{id} [delete]
 func (h *TaskHandler) DeleteTask(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -497,11 +497,11 @@ func (h *TaskHandler) DeleteTask(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param task body dto.QueueTaskRequest true "Task to enqueue"
-// @Success 201 {object} map[string]int64 "Task ID"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 404 {object} map[string]string "Task not found"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Success 201 {object} dto.CreateResponse "Task ID"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "Task not found"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/tasks/queue [post]
 func (h *TaskHandler) QueueTask(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -564,9 +564,9 @@ func (h *TaskHandler) QueueTask(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Task ID"
 // @Success 200 {object} dto.TaskResponse "Task marked as done successfully"
-// @Failure 400 {object} map[string]string "Invalid task ID parameter"
-// @Failure 404 {object} map[string]string "Task not found"
-// @Failure 500 {object} map[string]string "Internal server error or transaction failure"
+// @Failure 400 {object} dto.ErrorResponse "Invalid task ID parameter"
+// @Failure 404 {object} dto.ErrorResponse "Task not found"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error or transaction failure"
 // @Router /api/v1/tasks/{id}/done [post]
 func (h *TaskHandler) MarkTaskAsDone(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -620,9 +620,9 @@ func (h *TaskHandler) MarkTaskAsDone(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Task ID"
 // @Success 200 {array} dto.TaskHistoryResponse "Task history entries"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 404 {object} map[string]string "Task not found"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 404 {object} dto.ErrorResponse "Task not found"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/tasks/{id}/history [get]
 func (h *TaskHandler) GetTaskHistory(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -679,9 +679,9 @@ func (h *TaskHandler) GetTaskHistory(c *gin.Context) {
 // @Param limit query int false "Limit (default: 50)" default(50)
 // @Param offset query int false "Offset (default: 0)" default(0)
 // @Success 200 {array} dto.TaskHistoryResponse "Task history entries"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 422 {object} map[string]string "Unprocessable entity"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/users/{user_id}/tasks/history [get]
 func (h *TaskHandler) GetUserTaskHistory(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -765,8 +765,8 @@ func (h *TaskHandler) GetUserTaskHistory(c *gin.Context) {
 // @Param requires_confirmation query bool false "Filter by requires_confirmation (true/false)"
 // @Param exclude_cron_with_confirmation query bool false "Exclude tasks where cron_expression IS NOT NULL AND requires_confirmation == True (implements: NOT (cron_expression IS NOT NULL AND requires_confirmation == True))"
 // @Success 200 {object} dto.PaginatedTasksResponse "Paginated list of tasks"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/tasks [get]
 func (h *TaskHandler) GetAllTasks(c *gin.Context) {
 	ctx := c.Request.Context()
