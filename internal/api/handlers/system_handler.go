@@ -33,7 +33,7 @@ func NewHealthCheckHandler() *HealthCheckHandler {
 // @Description Returns the current version and build information of the application
 // @Tags System
 // @Produce json
-// @Success 200 {object} map[string]string "Version information"
+// @Success 200 {object} dto.VersionResponse "Version information"
 // @Router /version [get]
 func (h *VersionHandler) Version(c *gin.Context) {
 	// Return full version information including build metadata
@@ -48,7 +48,7 @@ func (h *VersionHandler) Version(c *gin.Context) {
 // @Description Checks if the application is running and healthy
 // @Tags System
 // @Produce json
-// @Success 200 {object} map[string]string
+// @Success 200 {object} dto.HealthCheckResponse "Health status"
 // @Router /healthcheck [get]
 func (h *HealthCheckHandler) HealthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "alive"})

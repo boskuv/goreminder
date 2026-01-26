@@ -2281,12 +2281,9 @@ const docTemplate = `{
                 "summary": "Check application health",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Health status",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.HealthCheckResponse"
                         }
                     }
                 }
@@ -2306,10 +2303,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Version information",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/dto.VersionResponse"
                         }
                     }
                 }
@@ -2703,6 +2697,15 @@ const docTemplate = `{
                 "message": {
                     "type": "string",
                     "example": "error message"
+                }
+            }
+        },
+        "dto.HealthCheckResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "alive"
                 }
             }
         },
@@ -3235,6 +3238,27 @@ const docTemplate = `{
                 "timezone": {
                     "type": "string",
                     "example": "UTC"
+                }
+            }
+        },
+        "dto.VersionResponse": {
+            "type": "object",
+            "properties": {
+                "buildTime": {
+                    "type": "string",
+                    "example": "unknown"
+                },
+                "gitCommit": {
+                    "type": "string",
+                    "example": "unknown"
+                },
+                "gitTag": {
+                    "type": "string",
+                    "example": "unknown"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "dev"
                 }
             }
         }

@@ -285,6 +285,12 @@ definitions:
         example: error message
         type: string
     type: object
+  dto.HealthCheckResponse:
+    properties:
+      status:
+        example: alive
+        type: string
+    type: object
   dto.IDResponse:
     properties:
       id:
@@ -664,6 +670,21 @@ definitions:
         type: string
       timezone:
         example: UTC
+        type: string
+    type: object
+  dto.VersionResponse:
+    properties:
+      buildTime:
+        example: unknown
+        type: string
+      gitCommit:
+        example: unknown
+        type: string
+      gitTag:
+        example: unknown
+        type: string
+      version:
+        example: dev
         type: string
     type: object
 info:
@@ -2191,11 +2212,9 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Health status
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.HealthCheckResponse'
       summary: Check application health
       tags:
       - System
@@ -2208,9 +2227,7 @@ paths:
         "200":
           description: Version information
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/dto.VersionResponse'
       summary: Get application version
       tags:
       - System
