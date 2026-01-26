@@ -7,45 +7,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-## [v0.6.0-rc.1] - 2025-03-12
-### Added
-- Implement tracing
-- Add services to docker-compose: otel-collector, jager
-
-## [v0.5.0-rc.1] - 2025-03-10
-### Added
-- Implement prometheus server on port :9191
-- Add prometheus metrics to middleware: http_request_duration_seconds, http_requests_total
-
-## [v0.4.0-rc.1] - 2025-03-10
-### Added
-- Add integration with rabbitmq with retries
-- endpoints and dependent on it services/repositories: ScheduleTask
-
-
-## [v0.3.0-rc.1] - 2025-01-16
-### Added
-- sample test for getting task by id
-- entities: messenger, messengerRelatedUser
-- endpoints and dependent on it services/repositories: CreateMessenger, GetMessenger, GetMessengerIDByName, CreateMessengerRelatedUser, GetMessengerRelatedUser, GetUserID (using messengerUserID)
-
-
-## [v0.2.0-rc.1] - 2025-01-05
+## [v0.1.0] - 2026-01-25
 ### Changed
-- Add 'deleted_at' to predicates in queries
-- Update dependencies
+- **Breaking**: Version management system now uses build-time injection
+  - Version is now defined in VERSION file instead of hardcoded
+  - Build process requires ldflags for version injection
+  - Swagger documentation now uses dynamic versioning
+- Refactored version handling into dedicated package (`pkg/version`)
 
 ### Added
-- LICENSE
-- endpoints: DeleteTask, UpdateUser, DeleteUser
-
-### Fixed
-- update model's tags to hide some fields 
-
+- Makefile targets for version management (`make bump-version`, `make show-version`)
+- Enhanced `/version` endpoint with build metadata
 
 <!-- links -->
-[v0.2.0-rc.1]: https://github.com/boskuv/goreminder/compare/v0.1.0-rc.1...v0.2.0-rc.1
-[v0.3.0-rc.1]: https://github.com/boskuv/goreminder/compare/v0.2.0-rc.1...v0.3.0-rc.1
-[v0.4.0-rc.1]: https://github.com/boskuv/goreminder/compare/v0.3.0-rc.1...v0.4.0-rc.1
-[v0.5.0-rc.1]: https://github.com/boskuv/goreminder/compare/v0.4.0-rc.1...v0.5.0-rc.1
-[v0.6.0-rc.1]: https://github.com/boskuv/goreminder/compare/v0.5.0-rc.1...v0.6.0-rc.1
+[v0.1.0]: https://github.com/boskuv/goreminder/releases/tag/v0.1.0

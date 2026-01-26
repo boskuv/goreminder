@@ -2,7 +2,7 @@ name: Build and Push GoReminder API Docker Image
 
 on:
   push:
-    branches: [ dev, main, prod-* ]
+    branches: [ main ]
 
 env:
   DOCKER_USERNAME: boris24kv
