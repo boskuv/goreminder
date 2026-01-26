@@ -1,6 +1,6 @@
 # Project variables
 APP_NAME=goreminder
-DOCKER_COMPOSE=docker-compose.yml
+DOCKER_COMPOSE=docker-compose.dev.yml
 CONFIG_FILENAME=config.yaml
 CONFIG_FILEPATH=cmd/core/$(CONFIG_FILENAME)
 BUILD_DIR=bin
@@ -20,7 +20,7 @@ GIT_TAG := $(shell git describe --tags --exact-match 2>/dev/null || echo "")
 
 # Docker variables
 DOCKER=docker
-COMPOSE=docker-compose
+COMPOSE=docker compose
 POSTGRES_CONTAINER=postgres_container
 PG_PORT=5432
 
@@ -31,7 +31,7 @@ all: build
 
 # Run golangci-lint
 lint:
-	@golangci-lint run ./...
+	@golangci-lint run ./... --config=./.golangci.yml
 
 # Build the Go application
 build:
@@ -61,7 +61,7 @@ coverage:
 
 # Generate Swagger documentation
 swagger:
-	swag init --dir ./cmd/core,./internal/api/handlers,./internal/models --output ./docs
+	swag init --dir ./cmd/core,./internal/api/handlers,./internal/api/dto --output ./docs
 
 # Start Docker containers
 docker-up:
