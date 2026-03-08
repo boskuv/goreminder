@@ -558,12 +558,12 @@ func (h *TaskHandler) QueueTask(c *gin.Context) {
 }
 
 // @Summary Mark task as done
-// @Description Marks a task as done, updates it in the database, and queues worker.delete_task in a transactional manner. If queueing fails, the database update is rolled back.
+// @Description Marks a task as done, updates it in the database, and queues worker.delete_task in a transactional manner. If queueing fails, the database update is rolled back. Returns task DTO without status (assumed "done") to avoid extra repo fetch.
 // @Tags Tasks
 // @Accept json
 // @Produce json
 // @Param id path int true "Task ID"
-// @Success 200 {object} dto.TaskResponse "Task marked as done successfully"
+// @Success 200 {object} dto.TaskMarkedDoneResponse "Task marked as done successfully"
 // @Failure 400 {object} dto.ErrorResponse "Invalid task ID parameter"
 // @Failure 404 {object} dto.ErrorResponse "Task not found"
 // @Failure 500 {object} dto.ErrorResponse "Internal server error or transaction failure"
@@ -609,8 +609,7 @@ func (h *TaskHandler) MarkTaskAsDone(c *gin.Context) {
 		Int64("task.id", taskID).
 		Msg("task marked as done successfully")
 
-	// Convert model to response DTO
-	response := mapper.TaskModelToResponse(task)
+	response := mapper.TaskModelToMarkedDoneResponse(task)
 	c.JSON(http.StatusOK, response)
 }
 

@@ -36,6 +36,49 @@ definitions:
           type: integer
         type: array
     type: object
+  dto.CalendarOccurrenceResponse:
+    properties:
+      created_at:
+        example: "2024-01-10T08:00:00Z"
+        type: string
+      description:
+        example: Write comprehensive documentation for the API
+        type: string
+      finish_date:
+        example: "2024-01-20T18:00:00Z"
+        type: string
+      id:
+        example: 1
+        type: integer
+      messenger_related_user_id:
+        example: 123
+        type: integer
+      parent_id:
+        example: 5
+        type: integer
+      start_date:
+        example: "2024-01-15T10:00:00Z"
+        type: string
+      status:
+        enum:
+        - pending
+        - scheduled
+        - done
+        - rescheduled
+        - postponed
+        - deleted
+        example: pending
+        type: string
+      title:
+        example: Complete project documentation
+        type: string
+      user_id:
+        example: 1
+        type: integer
+      virtual:
+        example: false
+        type: boolean
+    type: object
   dto.CreateBacklogRequest:
     properties:
       description:
@@ -492,6 +535,42 @@ definitions:
       task_id:
         example: 1
         type: integer
+      user_id:
+        example: 1
+        type: integer
+    type: object
+  dto.TaskMarkedDoneResponse:
+    properties:
+      created_at:
+        example: "2024-01-10T08:00:00Z"
+        type: string
+      cron_expression:
+        example: 0 9 * * *
+        type: string
+      description:
+        example: Write comprehensive documentation for the API
+        type: string
+      finish_date:
+        example: "2024-01-20T18:00:00Z"
+        type: string
+      id:
+        example: 1
+        type: integer
+      messenger_related_user_id:
+        example: 123
+        type: integer
+      parent_id:
+        example: 5
+        type: integer
+      requires_confirmation:
+        example: true
+        type: boolean
+      start_date:
+        example: "2024-01-15T10:00:00Z"
+        type: string
+      title:
+        example: Complete project documentation
+        type: string
       user_id:
         example: 1
         type: integer
@@ -1788,7 +1867,8 @@ paths:
       - application/json
       description: Marks a task as done, updates it in the database, and queues worker.delete_task
         in a transactional manner. If queueing fails, the database update is rolled
-        back.
+        back. Returns task DTO without status (assumed "done") to avoid extra repo
+        fetch.
       parameters:
       - description: Task ID
         in: path
@@ -1801,7 +1881,7 @@ paths:
         "200":
           description: Task marked as done successfully
           schema:
-            $ref: '#/definitions/dto.TaskResponse'
+            $ref: '#/definitions/dto.TaskMarkedDoneResponse'
         "400":
           description: Invalid task ID parameter
           schema:
@@ -2151,6 +2231,50 @@ paths:
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: Get all user's tasks by userID
+      tags:
+      - Tasks
+  /api/v1/users/{user_id}/tasks/calendar:
+    get:
+      description: 'Returns task occurrences in a date range: real tasks plus virtual
+        recurrences from cron parents (phantom occurrences for editing parent only)'
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      - description: Range start (RFC3339)
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: Range end (RFC3339)
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Calendar occurrences (virtual=true for phantom)
+          schema:
+            items:
+              $ref: '#/definitions/dto.CalendarOccurrenceResponse'
+            type: array
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "422":
+          description: Unprocessable entity
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get user tasks for calendar view
       tags:
       - Tasks
   /api/v1/users/{user_id}/tasks/history:

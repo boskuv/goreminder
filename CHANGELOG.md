@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **POST /api/v1/tasks/{id}/done**: response body is now `TaskMarkedDoneResponse` (task DTO without `status`). Status is implied as `"done"`; omitting it avoids an extra repository fetch after the update.
+
 ## [v0.1.0] - 2026-01-25
 ### Changed
 - **Breaking**: Version management system now uses build-time injection

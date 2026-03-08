@@ -1695,7 +1695,7 @@
         },
         "/api/v1/tasks/{id}/done": {
             "post": {
-                "description": "Marks a task as done, updates it in the database, and queues worker.delete_task in a transactional manner. If queueing fails, the database update is rolled back.",
+                "description": "Marks a task as done, updates it in the database, and queues worker.delete_task in a transactional manner. If queueing fails, the database update is rolled back. Returns task DTO without status (assumed \"done\") to avoid extra repo fetch.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1719,7 +1719,7 @@
                     "200": {
                         "description": "Task marked as done successfully",
                         "schema": {
-                            "$ref": "#/definitions/dto.TaskResponse"
+                            "$ref": "#/definitions/dto.TaskMarkedDoneResponse"
                         }
                     },
                     "400": {
@@ -2181,6 +2181,70 @@
                 }
             }
         },
+        "/api/v1/users/{user_id}/tasks/calendar": {
+            "get": {
+                "description": "Returns task occurrences in a date range: real tasks plus virtual recurrences from cron parents (phantom occurrences for editing parent only)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tasks"
+                ],
+                "summary": "Get user tasks for calendar view",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Range start (RFC3339)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Range end (RFC3339)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Calendar occurrences (virtual=true for phantom)",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/dto.CalendarOccurrenceResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable entity",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users/{user_id}/tasks/history": {
             "get": {
                 "description": "Retrieves task history entries for a user with pagination",
@@ -2349,6 +2413,63 @@
                     "items": {
                         "type": "integer"
                     }
+                }
+            }
+        },
+        "dto.CalendarOccurrenceResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Write comprehensive documentation for the API"
+                },
+                "finish_date": {
+                    "type": "string",
+                    "example": "2024-01-20T18:00:00Z"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "messenger_related_user_id": {
+                    "type": "integer",
+                    "example": 123
+                },
+                "parent_id": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "start_date": {
+                    "type": "string",
+                    "example": "2024-01-15T10:00:00Z"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "pending",
+                        "scheduled",
+                        "done",
+                        "rescheduled",
+                        "postponed",
+                        "deleted"
+                    ],
+                    "example": "pending"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Complete project documentation"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "virtual": {
+                    "type": "boolean",
+                    "example": false
                 }
             }
         },
@@ -2984,6 +3105,55 @@
                 "task_id": {
                     "type": "integer",
                     "example": 1
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "dto.TaskMarkedDoneResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
+                },
+                "cron_expression": {
+                    "type": "string",
+                    "example": "0 9 * * *"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Write comprehensive documentation for the API"
+                },
+                "finish_date": {
+                    "type": "string",
+                    "example": "2024-01-20T18:00:00Z"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "messenger_related_user_id": {
+                    "type": "integer",
+                    "example": 123
+                },
+                "parent_id": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "requires_confirmation": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "start_date": {
+                    "type": "string",
+                    "example": "2024-01-15T10:00:00Z"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Complete project documentation"
                 },
                 "user_id": {
                     "type": "integer",

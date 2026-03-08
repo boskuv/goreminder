@@ -55,6 +55,23 @@ func TaskModelToResponse(task *models.Task) *dto.TaskResponse {
 	}
 }
 
+// TaskModelToMarkedDoneResponse converts models.Task to TaskMarkedDoneResponse DTO (no status field).
+func TaskModelToMarkedDoneResponse(task *models.Task) *dto.TaskMarkedDoneResponse {
+	return &dto.TaskMarkedDoneResponse{
+		ID:                     task.ID,
+		Title:                  task.Title,
+		Description:            task.Description,
+		UserID:                 task.UserID,
+		MessengerRelatedUserID: task.MessengerRelatedUserID,
+		ParentID:               task.ParentID,
+		StartDate:              task.StartDate,
+		FinishDate:             task.FinishDate,
+		CronExpression:         task.CronExpression,
+		RequiresConfirmation:   task.RequiresConfirmation,
+		CreatedAt:              task.CreatedAt,
+	}
+}
+
 // TasksModelToResponse converts slice of models.Task to slice of TaskResponse DTOs
 func TasksModelToResponse(tasks []*models.Task) []*dto.TaskResponse {
 	responses := make([]*dto.TaskResponse, len(tasks))
