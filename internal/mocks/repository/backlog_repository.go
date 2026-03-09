@@ -72,9 +72,9 @@ func (mr *MockBacklogRepositoryMockRecorder) DeleteBacklog(ctx, id any) *gomock.
 }
 
 // GetAllBacklogs mocks base method.
-func (m *MockBacklogRepository) GetAllBacklogs(ctx context.Context, page, pageSize int, orderBy string, userID *int64) ([]*models.Backlog, int, error) {
+func (m *MockBacklogRepository) GetAllBacklogs(ctx context.Context, page, pageSize int, orderBy string, userID *int64, completed *bool) ([]*models.Backlog, int, error) {
         m.ctrl.T.Helper()
-        ret := m.ctrl.Call(m, "GetAllBacklogs", ctx, page, pageSize, orderBy, userID)
+        ret := m.ctrl.Call(m, "GetAllBacklogs", ctx, page, pageSize, orderBy, userID, completed)
         ret0, _ := ret[0].([]*models.Backlog)
         ret1, _ := ret[1].(int)
         ret2, _ := ret[2].(error)
@@ -82,9 +82,9 @@ func (m *MockBacklogRepository) GetAllBacklogs(ctx context.Context, page, pageSi
 }
 
 // GetAllBacklogs indicates an expected call of GetAllBacklogs.
-func (mr *MockBacklogRepositoryMockRecorder) GetAllBacklogs(ctx, page, pageSize, orderBy, userID any) *gomock.Call {
+func (mr *MockBacklogRepositoryMockRecorder) GetAllBacklogs(ctx, page, pageSize, orderBy, userID, completed any) *gomock.Call {
         mr.mock.ctrl.T.Helper()
-        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllBacklogs", reflect.TypeOf((*MockBacklogRepository)(nil).GetAllBacklogs), ctx, page, pageSize, orderBy, userID)
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllBacklogs", reflect.TypeOf((*MockBacklogRepository)(nil).GetAllBacklogs), ctx, page, pageSize, orderBy, userID, completed)
 }
 
 // GetBacklogByID mocks base method.

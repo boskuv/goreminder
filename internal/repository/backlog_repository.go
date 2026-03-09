@@ -22,7 +22,7 @@ import (
 type BacklogRepository interface {
 	CreateBacklog(ctx context.Context, backlog *models.Backlog) (int64, error)
 	GetBacklogByID(ctx context.Context, id int64) (*models.Backlog, error)
-	GetAllBacklogs(ctx context.Context, page, pageSize int, orderBy string, userID *int64) ([]*models.Backlog, int, error)
+	GetAllBacklogs(ctx context.Context, page, pageSize int, orderBy string, userID *int64, completed *bool) ([]*models.Backlog, int, error)
 	UpdateBacklog(ctx context.Context, backlog *models.Backlog) error
 	DeleteBacklog(ctx context.Context, id int64) error
 	GetCompletedBacklogsCount(ctx context.Context, userID int64, startDate, endDate time.Time) (int, error)
@@ -140,7 +140,7 @@ func (r *backlogRepository) GetBacklogByID(ctx context.Context, id int64) (*mode
 }
 
 // GetAllBacklogs retrieves all backlog items with pagination, ordering, and filtering
-func (r *backlogRepository) GetAllBacklogs(ctx context.Context, page, pageSize int, orderBy string, userID *int64) ([]*models.Backlog, int, error) {
+func (r *backlogRepository) GetAllBacklogs(ctx context.Context, page, pageSize int, orderBy string, userID *int64, completed *bool) ([]*models.Backlog, int, error) {
 	ctx, span := r.tracer.Start(ctx, "backlog_repository.GetAllBacklogs",
 		trace.WithAttributes(
 			attribute.Int("page", page),
@@ -178,6 +178,15 @@ func (r *backlogRepository) GetAllBacklogs(ctx context.Context, page, pageSize i
 		span.SetAttributes(attribute.Int64("user.id", *userID))
 	}
 
+	if completed != nil {
+		if *completed {
+			countBuilder = countBuilder.Where(squirrel.NotEq{"completed_at": nil})
+		} else {
+			countBuilder = countBuilder.Where(squirrel.Eq{"completed_at": nil})
+		}
+		span.SetAttributes(attribute.Bool("completed", *completed))
+	}
+
 	countQuery, countArgs, err := countBuilder.ToSql()
 	if err != nil {
 		span.RecordError(err)
@@ -203,6 +212,14 @@ func (r *backlogRepository) GetAllBacklogs(ctx context.Context, page, pageSize i
 
 	if userID != nil {
 		dataBuilder = dataBuilder.Where(squirrel.Eq{"user_id": *userID})
+	}
+
+	if completed != nil {
+		if *completed {
+			dataBuilder = dataBuilder.Where(squirrel.NotEq{"completed_at": nil})
+		} else {
+			dataBuilder = dataBuilder.Where(squirrel.Eq{"completed_at": nil})
+		}
 	}
 
 	query, args, err := dataBuilder.

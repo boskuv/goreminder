@@ -249,15 +249,16 @@ func TestBacklogService_GetAllBacklogs_Success(t *testing.T) {
 	page := 1
 	pageSize := 50
 	orderBy := "created_at DESC"
+	var completed *bool = nil
 	expectedBacklogs := []*models.Backlog{
 		{ID: 1, Title: "Backlog 1", UserID: 1},
 		{ID: 2, Title: "Backlog 2", UserID: 1},
 	}
 	totalCount := 2
 
-	backlogRepo.EXPECT().GetAllBacklogs(gomock.Any(), page, pageSize, orderBy, nil).Return(expectedBacklogs, totalCount, nil)
+	backlogRepo.EXPECT().GetAllBacklogs(gomock.Any(), page, pageSize, orderBy, nil, completed).Return(expectedBacklogs, totalCount, nil)
 
-	backlogs, count, err := service.GetAllBacklogs(ctx, page, pageSize, orderBy, nil)
+	backlogs, count, err := service.GetAllBacklogs(ctx, page, pageSize, orderBy, nil, completed)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedBacklogs, backlogs)
 	assert.Equal(t, totalCount, count)
@@ -270,14 +271,15 @@ func TestBacklogService_GetAllBacklogs_WithUserID(t *testing.T) {
 	pageSize := 50
 	orderBy := "created_at DESC"
 	userID := int64(1)
+	var completed *bool = nil
 	expectedBacklogs := []*models.Backlog{
 		{ID: 1, Title: "Backlog 1", UserID: userID},
 	}
 	totalCount := 1
 
-	backlogRepo.EXPECT().GetAllBacklogs(gomock.Any(), page, pageSize, orderBy, &userID).Return(expectedBacklogs, totalCount, nil)
+	backlogRepo.EXPECT().GetAllBacklogs(gomock.Any(), page, pageSize, orderBy, &userID, completed).Return(expectedBacklogs, totalCount, nil)
 
-	backlogs, count, err := service.GetAllBacklogs(ctx, page, pageSize, orderBy, &userID)
+	backlogs, count, err := service.GetAllBacklogs(ctx, page, pageSize, orderBy, &userID, completed)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedBacklogs, backlogs)
 	assert.Equal(t, totalCount, count)
@@ -289,11 +291,12 @@ func TestBacklogService_GetAllBacklogs_EmptyList(t *testing.T) {
 	page := 1
 	pageSize := 50
 	orderBy := "created_at DESC"
+	var completed *bool = nil
 	totalCount := 0
 
-	backlogRepo.EXPECT().GetAllBacklogs(gomock.Any(), page, pageSize, orderBy, nil).Return([]*models.Backlog{}, totalCount, nil)
+	backlogRepo.EXPECT().GetAllBacklogs(gomock.Any(), page, pageSize, orderBy, nil, completed).Return([]*models.Backlog{}, totalCount, nil)
 
-	backlogs, count, err := service.GetAllBacklogs(ctx, page, pageSize, orderBy, nil)
+	backlogs, count, err := service.GetAllBacklogs(ctx, page, pageSize, orderBy, nil, completed)
 	assert.NoError(t, err)
 	assert.Empty(t, backlogs)
 	assert.Equal(t, totalCount, count)
@@ -303,11 +306,12 @@ func TestBacklogService_GetAllBacklogs_DefaultPagination(t *testing.T) {
 	service, backlogRepo, _, _ := setupBacklogService(t)
 	ctx := context.Background()
 	expectedBacklogs := []*models.Backlog{{ID: 1, Title: "Backlog 1"}}
+	var completed *bool = nil
 	totalCount := 1
 
 	// Test default page (should be 1)
-	backlogRepo.EXPECT().GetAllBacklogs(gomock.Any(), 1, 50, "created_at DESC", nil).Return(expectedBacklogs, totalCount, nil)
-	backlogs, count, err := service.GetAllBacklogs(ctx, 0, 0, "", nil)
+	backlogRepo.EXPECT().GetAllBacklogs(gomock.Any(), 1, 50, "created_at DESC", nil, completed).Return(expectedBacklogs, totalCount, nil)
+	backlogs, count, err := service.GetAllBacklogs(ctx, 0, 0, "", nil, completed)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedBacklogs, backlogs)
 	assert.Equal(t, totalCount, count)
@@ -317,10 +321,11 @@ func TestBacklogService_GetAllBacklogs_RepositoryError(t *testing.T) {
 	service, backlogRepo, _, _ := setupBacklogService(t)
 	ctx := context.Background()
 	expectedErr := errors.New("database error")
+	var completed *bool = nil
 
-	backlogRepo.EXPECT().GetAllBacklogs(gomock.Any(), 1, 50, "created_at DESC", nil).Return(nil, 0, expectedErr)
+	backlogRepo.EXPECT().GetAllBacklogs(gomock.Any(), 1, 50, "created_at DESC", nil, completed).Return(nil, 0, expectedErr)
 
-	backlogs, count, err := service.GetAllBacklogs(ctx, 1, 50, "created_at DESC", nil)
+	backlogs, count, err := service.GetAllBacklogs(ctx, 1, 50, "created_at DESC", nil, completed)
 	assert.Error(t, err)
 	assert.Nil(t, backlogs)
 	assert.Equal(t, 0, count)

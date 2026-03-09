@@ -246,7 +246,7 @@ func (s *BacklogService) GetBacklogByID(ctx context.Context, id int64) (*models.
 }
 
 // GetAllBacklogs implements BL of retrieving all backlog items with pagination, ordering, and filtering
-func (s *BacklogService) GetAllBacklogs(ctx context.Context, page, pageSize int, orderBy string, userID *int64) ([]*models.Backlog, int, error) {
+func (s *BacklogService) GetAllBacklogs(ctx context.Context, page, pageSize int, orderBy string, userID *int64, completed *bool) ([]*models.Backlog, int, error) {
 	ctx, span := s.tracer.Start(ctx, "backlog_service.GetAllBacklogs",
 		trace.WithAttributes(
 			attribute.Int("page", page),
@@ -272,7 +272,7 @@ func (s *BacklogService) GetAllBacklogs(ctx context.Context, page, pageSize int,
 		orderBy = "created_at DESC"
 	}
 
-	backlogs, totalCount, err := s.backlogRepo.GetAllBacklogs(ctx, page, pageSize, orderBy, userID)
+	backlogs, totalCount, err := s.backlogRepo.GetAllBacklogs(ctx, page, pageSize, orderBy, userID, completed)
 	if err != nil {
 		log.Debug().
 			Err(err).

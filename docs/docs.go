@@ -52,6 +52,12 @@ const docTemplate = `{
                         "description": "Filter by user ID",
                         "name": "user_id",
                         "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter by completion status (true - only completed, false - only not completed)",
+                        "name": "completed",
+                        "in": "query"
                     }
                 ],
                 "responses": {

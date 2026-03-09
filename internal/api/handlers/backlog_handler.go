@@ -223,6 +223,7 @@ func (h *BacklogHandler) GetBacklog(c *gin.Context) {
 // @Param page_size query int false "Page size" default(50)
 // @Param order_by query string false "Order by" default(created_at DESC)
 // @Param user_id query int false "Filter by user ID"
+// @Param completed query bool false "Filter by completion status (true - only completed, false - only not completed)"
 // @Success 200 {object} dto.PaginatedBacklogsResponse "Paginated backlogs"
 // @Failure 400 {object} dto.ErrorResponse "Bad request"
 // @Failure 500 {object} dto.ErrorResponse "Internal server error"
@@ -241,6 +242,13 @@ func (h *BacklogHandler) GetAllBacklogs(c *gin.Context) {
 	pageSize, err := validation.ValidateInt64Query(c, "page_size", 50, 1)
 	if err != nil {
 		log.Info().Err(err).Msg("invalid page_size query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	completed, err := validation.ValidateOptionalBoolQuery(c, "completed")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid completed query parameter")
 		validation.HandleValidationError(c, err)
 		return
 	}
@@ -275,7 +283,7 @@ func (h *BacklogHandler) GetAllBacklogs(c *gin.Context) {
 		Str("order_by", orderBy).
 		Msg("getting all backlogs")
 
-	backlogs, totalCount, err := h.backlogService.GetAllBacklogs(ctx, int(page), int(pageSize), orderBy, userID)
+	backlogs, totalCount, err := h.backlogService.GetAllBacklogs(ctx, int(page), int(pageSize), orderBy, userID, completed)
 	if err != nil {
 		log.Error().
 			Stack().

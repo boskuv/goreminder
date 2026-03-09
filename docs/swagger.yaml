@@ -792,6 +792,11 @@ paths:
         in: query
         name: user_id
         type: integer
+      - description: Filter by completion status (true - only completed, false - only
+          not completed)
+        in: query
+        name: completed
+        type: boolean
       produces:
       - application/json
       responses:
