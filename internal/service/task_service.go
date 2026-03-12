@@ -1528,65 +1528,27 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 	}
 
 	var taskEvent queue.TaskEvent
-	if scheduledTask.Action == "schedule" {
-		if task.MessengerRelatedUserID == nil {
-			err := errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return err
-		}
 
-		var messengerRelatedUser *models.MessengerRelatedUser
-
-		// check if messenger related user indeed exists
-		messengerRelatedUser, err = s.messengerRepo.GetMessengerRelatedUserByID(ctx, *task.MessengerRelatedUserID)
-		if err != nil {
-			if errors.Is(err, errs.ErrNotFound) {
-				err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
-			}
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return errors.WithStack(err)
-		}
-
-		messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
+	switch scheduledTask.Action {
+	case models.ScheduledTaskActionSchedule:
+		taskEvent, err = s.buildScheduleTaskEvent(ctx, task)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return errors.WithStack(err)
 		}
-
-		taskEvent = queue.TaskEvent{
-			Type:                 queue.TaskEventSchedule,
-			TaskID:               task.ID,
-			UserID:               task.UserID,
-			MessengerName:        messengerName,
-			ChatID:               messengerRelatedUser.ChatID,
-			Title:                task.Title,
-			Description:          task.Description,
-			StartDate:            &task.StartDate,
-			CronExpression:       task.CronExpression,
-			RequiresConfirmation: task.RequiresConfirmation,
-		}
-
-	} else {
-		if task.MessengerRelatedUserID == nil {
-			err := errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return err
-		}
-		messengerName, err := s.getMessengerName(ctx, *task.MessengerRelatedUserID)
+	case models.ScheduledTaskActionDelete:
+		taskEvent, err = s.buildDeleteTaskEvent(ctx, task)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return errors.WithStack(err)
 		}
-		taskEvent = queue.TaskEvent{
-			Type:          queue.TaskEventDelete,
-			TaskID:        task.ID,
-			MessengerName: messengerName,
-		}
+	default:
+		err := errors.Wrap(errs.ErrValidation, fmt.Sprintf("unsupported scheduled task action: %s", scheduledTask.Action))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	err = s.producer.Publish(ctx, taskEvent.ToTaskMessage())
@@ -1607,6 +1569,57 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 		Msg("task queued successfully")
 	span.SetStatus(codes.Ok, "task queued successfully")
 	return nil
+}
+
+// buildScheduleTaskEvent constructs a TaskEvent for scheduling a task.
+func (s *TaskService) buildScheduleTaskEvent(ctx context.Context, task *models.Task) (queue.TaskEvent, error) {
+	if task.MessengerRelatedUserID == nil {
+		return queue.TaskEvent{}, errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
+	}
+
+	messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *task.MessengerRelatedUserID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
+		}
+		return queue.TaskEvent{}, errors.WithStack(err)
+	}
+
+	messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
+	if err != nil {
+		return queue.TaskEvent{}, errors.WithStack(err)
+	}
+
+	return queue.TaskEvent{
+		Type:                 queue.TaskEventSchedule,
+		TaskID:               task.ID,
+		UserID:               task.UserID,
+		MessengerName:        messengerName,
+		ChatID:               messengerRelatedUser.ChatID,
+		Title:                task.Title,
+		Description:          task.Description,
+		StartDate:            &task.StartDate,
+		CronExpression:       task.CronExpression,
+		RequiresConfirmation: task.RequiresConfirmation,
+	}, nil
+}
+
+// buildDeleteTaskEvent constructs a TaskEvent for deleting a task from the worker queue.
+func (s *TaskService) buildDeleteTaskEvent(ctx context.Context, task *models.Task) (queue.TaskEvent, error) {
+	if task.MessengerRelatedUserID == nil {
+		return queue.TaskEvent{}, errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
+	}
+
+	messengerName, err := s.getMessengerName(ctx, *task.MessengerRelatedUserID)
+	if err != nil {
+		return queue.TaskEvent{}, errors.WithStack(err)
+	}
+
+	return queue.TaskEvent{
+		Type:          queue.TaskEventDelete,
+		TaskID:        task.ID,
+		MessengerName: messengerName,
+	}, nil
 }
 
 // MarkTaskAsDone marks a task as done and queues worker.delete_task in a transactional manner
