@@ -26,7 +26,7 @@ type DigestService struct {
 	taskRepo           repository.TaskRepository
 	userRepo           repository.UserRepository
 	messengerRepo      repository.MessengerRepository
-	producer           *queue.Producer
+	producer           queue.Publisher
 	tracer             trace.Tracer
 	logger             zerolog.Logger
 }
@@ -39,7 +39,7 @@ func NewDigestService(
 	taskRepo repository.TaskRepository,
 	userRepo repository.UserRepository,
 	messengerRepo repository.MessengerRepository,
-	producer *queue.Producer,
+	producer queue.Publisher,
 	logger zerolog.Logger,
 ) *DigestService {
 	return &DigestService{

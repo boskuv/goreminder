@@ -22,13 +22,13 @@ type UserService struct {
 	userRepo      repository.UserRepository
 	taskRepo      repository.TaskRepository
 	messengerRepo repository.MessengerRepository
-	producer      *queue.Producer
+	producer      queue.Publisher
 	tracer        trace.Tracer
 	logger        zerolog.Logger
 }
 
 // NewUserService creates a new instance of UserService
-func NewUserService(userRepo repository.UserRepository, taskRepo repository.TaskRepository, messengerRepo repository.MessengerRepository, producer *queue.Producer, logger zerolog.Logger) *UserService {
+func NewUserService(userRepo repository.UserRepository, taskRepo repository.TaskRepository, messengerRepo repository.MessengerRepository, producer queue.Publisher, logger zerolog.Logger) *UserService {
 	return &UserService{
 		userRepo:      userRepo,
 		taskRepo:      taskRepo,
