@@ -141,6 +141,15 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 		}
 	}
 
+	if err := validateCronExpressionAndRRuleExclusive(task.CronExpression, task.RRule); err != nil {
+		return 0, 0, errors.Wrap(errs.ErrValidation, err.Error())
+	}
+	if recurrenceFieldSet(task.RRule) {
+		if err := validateRRuleString(*task.RRule, task.StartDate); err != nil {
+			return 0, 0, errors.Wrap(errs.ErrValidation, err.Error())
+		}
+	}
+
 	log.Debug().
 		Int64("user.id", task.UserID).
 		Msg("creating task in repository")
@@ -420,9 +429,21 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	if updateRequest.CronExpression != nil {
 		oldTask.CronExpression = updateRequest.CronExpression
 	}
+	if updateRequest.RRule != nil {
+		oldTask.RRule = updateRequest.RRule
+	}
 
 	if updateRequest.RequiresConfirmation != nil {
 		oldTask.RequiresConfirmation = *updateRequest.RequiresConfirmation
+	}
+
+	if err := validateCronExpressionAndRRuleExclusive(oldTask.CronExpression, oldTask.RRule); err != nil {
+		return nil, errors.Wrap(errs.ErrValidation, err.Error())
+	}
+	if recurrenceFieldSet(oldTask.RRule) {
+		if err := validateRRuleString(*oldTask.RRule, oldTask.StartDate); err != nil {
+			return nil, errors.Wrap(errs.ErrValidation, err.Error())
+		}
 	}
 
 	// Check if this is a parent task after update (has cron_expression and requires_confirmation)
@@ -2199,6 +2220,9 @@ func (s *TaskService) taskToMap(task *models.Task) map[string]interface{} {
 	if task.CronExpression != nil {
 		result["cron_expression"] = *task.CronExpression
 	}
+	if task.RRule != nil {
+		result["rrule"] = *task.RRule
+	}
 	if task.MessengerRelatedUserID != nil {
 		result["messenger_related_user_id"] = *task.MessengerRelatedUserID
 	}
@@ -2467,9 +2491,9 @@ func (s *TaskService) RescheduleTasks(ctx context.Context, tasks []*models.Task)
 	return nil
 }
 
-// RescheduleCronTasks updates start_date for tasks with cron expression and requires_confirmation = false
-// that have passed their start_date. It calculates the next execution time from cron expression
-// and updates only the start_date field without publishing to queue.
+// RescheduleCronTasks updates start_date for recurring parent tasks (cron_expression or rrule) with
+// requires_confirmation = false that have passed their start_date. It calculates the next execution
+// time from the recurrence rule and updates only the start_date field without publishing to queue.
 func (s *TaskService) RescheduleCronTasks(ctx context.Context, tasks []*models.Task) error {
 	ctx, span := s.tracer.Start(ctx, "task_service.RescheduleCronTasks",
 		trace.WithAttributes(
@@ -2486,25 +2510,41 @@ func (s *TaskService) RescheduleCronTasks(ctx context.Context, tasks []*models.T
 	var failedCount int
 
 	for _, task := range tasks {
-		if task.CronExpression == nil {
-			log.Warn().
-				Int64("task.id", task.ID).
-				Msg("task has no cron expression, skipping")
-			continue
+		now := time.Now().UTC()
+		var nextTime time.Time
+		var hasRecurrence bool
+
+		if recurrenceFieldSet(task.CronExpression) {
+			hasRecurrence = true
+			nextTime = cronexpr.MustParse(*task.CronExpression).Next(now)
+		} else if recurrenceFieldSet(task.RRule) {
+			hasRecurrence = true
+			var err error
+			nextTime, err = nextStartFromRRule(now, *task.RRule, task.StartDate)
+			if err != nil {
+				failedCount++
+				log.Error().
+					Stack().
+					Err(err).
+					Int64("task.id", task.ID).
+					Str("rrule", *task.RRule).
+					Msg("failed to compute next start_date from rrule")
+				continue
+			}
 		}
 
-		// Calculate next execution time from cron expression
-		// Use current time as base to get the next occurrence
-		// Since we filter by start_date < NOW(), all tasks have passed their start_date
-		now := time.Now().UTC()
-		nextTime := cronexpr.MustParse(*task.CronExpression).Next(now)
+		if !hasRecurrence {
+			log.Warn().
+				Int64("task.id", task.ID).
+				Msg("task has no cron_expression or rrule, skipping")
+			continue
+		}
 
 		log.Info().
 			Int64("task.id", task.ID).
 			Time("old_start_date", task.StartDate).
 			Time("new_start_date", nextTime).
-			Str("cron_expression", *task.CronExpression).
-			Msg("updating start_date for cron task")
+			Msg("updating start_date for recurring task without confirmation")
 
 		// Update only the start_date field
 		task.StartDate = nextTime
@@ -2517,13 +2557,13 @@ func (s *TaskService) RescheduleCronTasks(ctx context.Context, tasks []*models.T
 				Stack().
 				Err(err).
 				Int64("task.id", task.ID).
-				Msg("failed to update cron task start_date")
+				Msg("failed to update recurring task start_date")
 		} else {
 			updatedCount++
 			log.Info().
 				Int64("task.id", task.ID).
 				Time("new_start_date", nextTime).
-				Msg("cron task start_date updated successfully")
+				Msg("recurring task start_date updated successfully")
 		}
 	}
 

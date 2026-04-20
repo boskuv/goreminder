@@ -10,5 +10,6 @@ type TaskUpdateRequest struct {
 	StartDate            *time.Time `json:"start_date,omitempty"`
 	FinishDate           *time.Time `json:"finish_date,omitempty"`
 	CronExpression       *string    `json:"cron_expression,omitempty"`
+	RRule                *string    `json:"rrule,omitempty"`
 	RequiresConfirmation *bool      `json:"requires_confirmation,omitempty"`
 }

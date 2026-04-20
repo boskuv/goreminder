@@ -11,6 +11,7 @@ type CreateTaskRequest struct {
 	StartDate              time.Time  `json:"start_date" binding:"future_date" example:"2024-01-15T10:00:00Z"`
 	FinishDate             *time.Time `json:"finish_date,omitempty" example:"2024-01-20T18:00:00Z"`
 	CronExpression         *string    `json:"cron_expression,omitempty" binding:"omitempty,cron" example:"0 9 * * *"`
+	RRule                  *string    `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 	RequiresConfirmation   bool       `json:"requires_confirmation,omitempty" example:"true"`
 	Status                 string     `json:"status,omitempty" binding:"omitempty,task_status" example:"pending" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
 }
@@ -25,6 +26,7 @@ type UpdateTaskRequest struct {
 	FinishDate           *time.Time `json:"finish_date,omitempty" example:"2024-01-20T18:00:00Z"`
 	RequiresConfirmation *bool      `json:"requires_confirmation,omitempty" example:"true"`
 	CronExpression       *string    `json:"cron_expression,omitempty" binding:"omitempty,cron" example:"0 9 * * *"`
+	RRule                *string    `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 }
 
 // TaskResponse represents the response DTO for a task
@@ -38,6 +40,7 @@ type TaskResponse struct {
 	StartDate              time.Time  `json:"start_date" example:"2024-01-15T10:00:00Z"`
 	FinishDate             *time.Time `json:"finish_date,omitempty" example:"2024-01-20T18:00:00Z"`
 	CronExpression         *string    `json:"cron_expression,omitempty" example:"0 9 * * *"`
+	RRule                  *string    `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 	RequiresConfirmation   bool       `json:"requires_confirmation,omitempty" example:"true"`
 	Status                 string     `json:"status" example:"pending" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
 	CreatedAt              time.Time  `json:"created_at" example:"2024-01-10T08:00:00Z"`
@@ -55,6 +58,7 @@ type TaskMarkedDoneResponse struct {
 	StartDate              time.Time  `json:"start_date" example:"2024-01-15T10:00:00Z"`
 	FinishDate             *time.Time `json:"finish_date,omitempty" example:"2024-01-20T18:00:00Z"`
 	CronExpression         *string    `json:"cron_expression,omitempty" example:"0 9 * * *"`
+	RRule                  *string    `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 	RequiresConfirmation   bool       `json:"requires_confirmation,omitempty" example:"true"`
 	CreatedAt              time.Time  `json:"created_at" example:"2024-01-10T08:00:00Z"`
 }
