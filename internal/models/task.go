@@ -83,3 +83,8 @@ type ScheduledTask struct {
 	QueueName string `json:"queue_name" example:"celery"`
 	TaskID    int64  `json:"task_id"`
 }
+
+const (
+	ScheduledTaskActionSchedule = "schedule"
+	ScheduledTaskActionDelete   = "delete"
+)

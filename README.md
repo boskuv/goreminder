@@ -31,7 +31,7 @@
   - **Metrics**: Prometheus metrics with HTTP request duration and count
   - **Tracing**: OpenTelemetry integration with Jaeger for distributed tracing
   - **Structured Logging**: Zerolog for structured, context-aware logging
-- **Message Queue**: RabbitMQ integration for asynchronous task processing with retry support
+- **Message Queue**: RabbitMQ integration for asynchronous task processing with retry support (can be disabled for DB-only mode)
 - **Containerized Setup**: Complete Docker Compose configuration
 - **Database Migrations**: Goose-based migration system
 - **Comprehensive Testing**: Unit tests, integration tests, and E2E tests
@@ -88,9 +88,31 @@
 └── tests/                 # Test suites (E2E tests)
 ```
 
-## Database Schema
+## Queue Contracts
 
-The application uses PostgreSQL as the database. Below is the Entity-Relationship diagram showing all tables and their relationships:
+The API publishes messages to RabbitMQ using a simple, Celery-style JSON contract:
+
+```json
+{
+  "task": "worker.schedule_task",
+  "args": [
+    "<messenger_name>",
+    "<chat_id>",
+    "<task_id>",
+    "<title>",
+    "<description>",
+    "<start_date>",
+    "<cron_expression|null>",
+    "<requires_confirmation>"
+  ]
+}
+```
+
+This payload is represented in code by the low-level `queue.TaskMessage` struct and is sent via the `queue.Publisher` interface. At the domain level, task messages are modeled as `queue.TaskEvent` with a `TaskEventType` (`schedule_task`, `delete_task`, etc.), which are mapped to the Celery-style JSON. For deployments that should not use RabbitMQ, set `producer.enabled: false` in the config – the application will then use a no-op publisher and work purely at the database level.
+
+`internal/models.ScheduledTask` uses explicit action values (`"schedule"`, `"delete"`) via `ScheduledTaskActionSchedule` and `ScheduledTaskActionDelete` constants, which are dispatched in `TaskService.QueueTask` and converted into `queue.TaskEvent` instances before publishing.
+
+## Database Schema
 
 ```mermaid
 erDiagram
@@ -296,6 +318,7 @@ database:
   maxRetries: 3                 # Maximum retry attempts for database operations
 
 producer:
+  enabled: true                 # Enable RabbitMQ producer (false = DB-only mode)
   host: rabbitmq                # RabbitMQ host
   port: 5672                    # RabbitMQ port
   user: guest                   # RabbitMQ username

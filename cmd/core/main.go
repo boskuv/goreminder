@@ -143,37 +143,45 @@ func main() {
 	targetRepo := repository.NewTargetRepository(db, log)
 	digestSettingsRepo := repository.NewDigestSettingsRepository(db, log)
 
-	// producer init
-	producerConfig := queue.NewProducerConfig(
-		cfg.Producer.Host,
-		cfg.Producer.Port,
-		cfg.Producer.User,
-		cfg.Producer.Password,
-		cfg.Producer.QueueName,
-		cfg.Producer.Exchange,
-		cfg.Producer.ConnectionRetries,
-		time.Duration(cfg.Producer.ConnectionRetryDelay),
-	)
+	// producer init (can be disabled via configuration for DB-only mode)
+	var publisher queue.Publisher
+	if cfg.Producer.Enabled {
+		producerConfig := queue.NewProducerConfig(
+			cfg.Producer.Host,
+			cfg.Producer.Port,
+			cfg.Producer.User,
+			cfg.Producer.Password,
+			cfg.Producer.QueueName,
+			cfg.Producer.Exchange,
+			cfg.Producer.ConnectionRetries,
+			time.Duration(cfg.Producer.ConnectionRetryDelay),
+		)
 
-	producer, err := queue.NewProducer(producerConfig, log)
-	if err != nil {
-		log.Fatal().Stack().Err(err).Msg("error while connecting to producer")
-	}
-	defer func() {
-		if err := producer.Close(); err != nil {
-			log.Error().Stack().Err(err).Msg("failed to close producer")
-		} else {
-			log.Info().Msg("producer is closed gracefully")
+		producer, err := queue.NewProducer(producerConfig, log)
+		if err != nil {
+			log.Fatal().Stack().Err(err).Msg("error while connecting to producer")
 		}
-	}()
+		defer func() {
+			if err := producer.Close(); err != nil {
+				log.Error().Stack().Err(err).Msg("failed to close producer")
+			} else {
+				log.Info().Msg("producer is closed gracefully")
+			}
+		}()
+
+		publisher = producer
+	} else {
+		log.Warn().Msg("queue producer disabled via config, running in DB-only mode")
+		publisher = queue.NoopPublisher{}
+	}
 
 	// setup services
-	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer, log)
-	userService := service.NewUserService(userRepo, taskRepo, messengerRepo, producer, log)
+	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, publisher, log)
+	userService := service.NewUserService(userRepo, taskRepo, messengerRepo, publisher, log)
 	messengerService := service.NewMessengerService(messengerRepo, userRepo, log)
 	backlogService := service.NewBacklogService(backlogRepo, userRepo, messengerRepo, log)
 	targetService := service.NewTargetService(targetRepo, userRepo, messengerRepo, log)
-	digestService := service.NewDigestService(digestSettingsRepo, backlogRepo, targetRepo, taskRepo, userRepo, messengerRepo, producer, log)
+	digestService := service.NewDigestService(digestSettingsRepo, backlogRepo, targetRepo, taskRepo, userRepo, messengerRepo, publisher, log)
 
 	// setup scheduler
 	taskScheduler := service.NewTaskScheduler(taskRepo, taskService, log)

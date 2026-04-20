@@ -27,13 +27,13 @@ type TaskService struct {
 	userRepo        repository.UserRepository
 	messengerRepo   repository.MessengerRepository
 	taskHistoryRepo repository.TaskHistoryRepository
-	producer        *queue.Producer
+	producer        queue.Publisher
 	tracer          trace.Tracer
 	logger          zerolog.Logger
 }
 
 // NewTaskService creates a new TaskService
-func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, taskHistoryRepo repository.TaskHistoryRepository, producer *queue.Producer, logger zerolog.Logger) *TaskService {
+func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, taskHistoryRepo repository.TaskHistoryRepository, producer queue.Publisher, logger zerolog.Logger) *TaskService {
 	return &TaskService{
 		taskRepo:        taskRepo,
 		userRepo:        userRepo,
@@ -536,12 +536,13 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					// Don't fail the operation, just log the error
 					// The database update was successful, queue update failure is non-critical
 				} else {
-					taskQueueMessage := map[string]interface{}{
-						"task": "worker.delete_task",
-						"args": []interface{}{oldTask.ID, messengerName},
+					event := queue.TaskEvent{
+						Type:          queue.TaskEventDelete,
+						TaskID:        oldTask.ID,
+						MessengerName: messengerName,
 					}
 
-					err = s.producer.Publish(ctx, taskQueueMessage)
+					err = s.producer.Publish(ctx, event.ToTaskMessage())
 					if err != nil {
 						log.Error().
 							Stack().
@@ -583,12 +584,20 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 								Msg("failed to get messenger name for task queue update")
 							// Don't fail the operation, just log the error
 						} else {
-							taskQueueMessage := map[string]interface{}{
-								"task": "worker.schedule_task",
-								"args": []interface{}{messengerName, messengerRelatedUser.ChatID, oldTask.ID, oldTask.Title, oldTask.Description, oldTask.StartDate, oldTask.CronExpression, oldTask.RequiresConfirmation},
+							event := queue.TaskEvent{
+								Type:                 queue.TaskEventSchedule,
+								TaskID:               oldTask.ID,
+								UserID:               oldTask.UserID,
+								MessengerName:        messengerName,
+								ChatID:               messengerRelatedUser.ChatID,
+								Title:                oldTask.Title,
+								Description:          oldTask.Description,
+								StartDate:            &oldTask.StartDate,
+								CronExpression:       oldTask.CronExpression,
+								RequiresConfirmation: oldTask.RequiresConfirmation,
 							}
 
-							err = s.producer.Publish(ctx, taskQueueMessage)
+							err = s.producer.Publish(ctx, event.ToTaskMessage())
 							if err != nil {
 								log.Error().
 									Stack().
@@ -681,14 +690,15 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					return nil, errors.WithStack(err)
 				}
 
-				// Queue delete_task message for each child task
-				for _, childTask := range childTasks {
-					childTaskQueueMessage := map[string]interface{}{
-						"task": "worker.delete_task",
-						"args": []interface{}{childTask.ID, messengerName},
-					}
+			// Queue delete_task message for each child task
+			for _, childTask := range childTasks {
+				event := queue.TaskEvent{
+					Type:          queue.TaskEventDelete,
+					TaskID:        childTask.ID,
+					MessengerName: messengerName,
+				}
 
-					err = s.producer.Publish(ctx, childTaskQueueMessage)
+				err = s.producer.Publish(ctx, event.ToTaskMessage())
 					if err != nil {
 						log.Error().
 							Stack().
@@ -734,12 +744,20 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 								Msg("failed to get messenger name for parent task queue update")
 							// Don't fail the operation, just log the error
 						} else {
-							parentTaskQueueMessage := map[string]interface{}{
-								"task": "worker.schedule_task",
-								"args": []interface{}{messengerName, messengerRelatedUser.ChatID, oldTask.ID, oldTask.Title, oldTask.Description, oldTask.StartDate, oldTask.CronExpression, oldTask.RequiresConfirmation},
+							event := queue.TaskEvent{
+								Type:                 queue.TaskEventSchedule,
+								TaskID:               oldTask.ID,
+								UserID:               oldTask.UserID,
+								MessengerName:        messengerName,
+								ChatID:               messengerRelatedUser.ChatID,
+								Title:                oldTask.Title,
+								Description:          oldTask.Description,
+								StartDate:            &oldTask.StartDate,
+								CronExpression:       oldTask.CronExpression,
+								RequiresConfirmation: oldTask.RequiresConfirmation,
 							}
 
-							err = s.producer.Publish(ctx, parentTaskQueueMessage)
+							err = s.producer.Publish(ctx, event.ToTaskMessage())
 							if err != nil {
 								log.Error().
 									Stack().
@@ -890,12 +908,20 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 											Msg("failed to get messenger name for child task queue update")
 										// Don't fail the operation, just log the error
 									} else {
-										childTaskQueueMessage := map[string]interface{}{
-											"task": "worker.schedule_task",
-											"args": []interface{}{messengerName, messengerRelatedUser.ChatID, childTask.ID, childTask.Title, childTask.Description, childTask.StartDate, childTask.CronExpression, childTask.RequiresConfirmation},
+										event := queue.TaskEvent{
+											Type:                 queue.TaskEventSchedule,
+											TaskID:               childTask.ID,
+											UserID:               childTask.UserID,
+											MessengerName:        messengerName,
+											ChatID:               messengerRelatedUser.ChatID,
+											Title:                childTask.Title,
+											Description:          childTask.Description,
+											StartDate:            &childTask.StartDate,
+											CronExpression:       childTask.CronExpression,
+											RequiresConfirmation: childTask.RequiresConfirmation,
 										}
 
-										err = s.producer.Publish(ctx, childTaskQueueMessage)
+										err = s.producer.Publish(ctx, event.ToTaskMessage())
 										if err != nil {
 											log.Error().
 												Stack().
@@ -970,12 +996,13 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					Msg("failed to get messenger name for delete_task queue publish (parent task)")
 				// Don't fail the operation, just log the error
 			} else {
-				taskQueueMessage := map[string]interface{}{
-					"task": "worker.delete_task",
-					"args": []interface{}{oldTask.ID, messengerName},
+				event := queue.TaskEvent{
+					Type:          queue.TaskEventDelete,
+					TaskID:        oldTask.ID,
+					MessengerName: messengerName,
 				}
 
-				err = s.producer.Publish(ctx, taskQueueMessage)
+				err = s.producer.Publish(ctx, event.ToTaskMessage())
 				if err != nil {
 					log.Error().
 						Stack().
@@ -1071,12 +1098,20 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 								Msg("failed to get messenger name for child task queue update")
 							// Don't fail the operation, just log the error
 						} else {
-							childTaskQueueMessage := map[string]interface{}{
-								"task": "worker.schedule_task",
-								"args": []interface{}{messengerName, messengerRelatedUser.ChatID, childTaskID, childTask.Title, childTask.Description, childTask.StartDate, childTask.CronExpression, childTask.RequiresConfirmation},
+							event := queue.TaskEvent{
+								Type:                 queue.TaskEventSchedule,
+								TaskID:               childTaskID,
+								UserID:               childTask.UserID,
+								MessengerName:        messengerName,
+								ChatID:               messengerRelatedUser.ChatID,
+								Title:                childTask.Title,
+								Description:          childTask.Description,
+								StartDate:            &childTask.StartDate,
+								CronExpression:       childTask.CronExpression,
+								RequiresConfirmation: childTask.RequiresConfirmation,
 							}
 
-							err = s.producer.Publish(ctx, childTaskQueueMessage)
+							err = s.producer.Publish(ctx, event.ToTaskMessage())
 							if err != nil {
 								log.Error().
 									Stack().
@@ -1342,12 +1377,13 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 			// Queue delete_task message for each child task
 			// If this fails, we'll rollback the transaction
 			for _, childTask := range childTasks {
-				childTaskQueueMessage := map[string]interface{}{
-					"task": "worker.delete_task",
-					"args": []interface{}{childTask.ID, messengerName},
+				event := queue.TaskEvent{
+					Type:          queue.TaskEventDelete,
+					TaskID:        childTask.ID,
+					MessengerName: messengerName,
 				}
 
-				err = s.producer.Publish(ctx, childTaskQueueMessage)
+				err = s.producer.Publish(ctx, event.ToTaskMessage())
 				if err != nil {
 					log.Error().
 						Stack().
@@ -1397,12 +1433,13 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
 	}
-	taskQueueMessage := map[string]interface{}{
-		"task": "worker.delete_task",
-		"args": []interface{}{task.ID, messengerName},
+	event := queue.TaskEvent{
+		Type:          queue.TaskEventDelete,
+		TaskID:        task.ID,
+		MessengerName: messengerName,
 	}
 
-	err = s.producer.Publish(ctx, taskQueueMessage)
+	err = s.producer.Publish(ctx, event.ToTaskMessage())
 	if err != nil {
 		log.Error().
 			Stack().
@@ -1490,70 +1527,37 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 		return errors.WithStack(err)
 	}
 
-	var taskQueueMessage map[string]interface{}
-	if scheduledTask.Action == "schedule" {
-		if task.MessengerRelatedUserID == nil {
-			err := errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return err
-		}
+	var taskEvent queue.TaskEvent
 
-		var messengerRelatedUser *models.MessengerRelatedUser
-
-		// check if messenger related user indeed exists
-		messengerRelatedUser, err = s.messengerRepo.GetMessengerRelatedUserByID(ctx, *task.MessengerRelatedUserID)
-		if err != nil {
-			if errors.Is(err, errs.ErrNotFound) {
-				err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
-			}
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return errors.WithStack(err)
-		}
-
-		messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
+	switch scheduledTask.Action {
+	case models.ScheduledTaskActionSchedule:
+		taskEvent, err = s.buildScheduleTaskEvent(ctx, task)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return errors.WithStack(err)
 		}
-
-		taskQueueMessage = map[string]interface{}{
-			"task": "worker.schedule_task",
-			"args": []interface{}{messengerName, messengerRelatedUser.ChatID, task.ID, task.Title, task.Description, task.StartDate, task.CronExpression, task.RequiresConfirmation},
-		}
-
-	} else {
-		if task.MessengerRelatedUserID == nil {
-			err := errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return err
-		}
-		messengerName, err := s.getMessengerName(ctx, *task.MessengerRelatedUserID)
+	case models.ScheduledTaskActionDelete:
+		taskEvent, err = s.buildDeleteTaskEvent(ctx, task)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return errors.WithStack(err)
 		}
-		taskQueueMessage = map[string]interface{}{
-			"task": "worker.delete_task",
-			"args": []interface{}{task.ID, messengerName},
-		}
+	default:
+		err := errors.Wrap(errs.ErrValidation, fmt.Sprintf("unsupported scheduled task action: %s", scheduledTask.Action))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
-	err = s.producer.Publish(ctx, taskQueueMessage)
+	err = s.producer.Publish(ctx, taskEvent.ToTaskMessage())
 	if err != nil {
 		log.Debug().
 			Err(err).
 			Int64("task.id", scheduledTask.TaskID).
 			Str("action", scheduledTask.Action).
 			Msg("failed to queue task")
-		err = errors.Errorf("can't publish message %v to rabbitmq: %s",
-			taskQueueMessage,
-			err,
-		)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
@@ -1565,6 +1569,57 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 		Msg("task queued successfully")
 	span.SetStatus(codes.Ok, "task queued successfully")
 	return nil
+}
+
+// buildScheduleTaskEvent constructs a TaskEvent for scheduling a task.
+func (s *TaskService) buildScheduleTaskEvent(ctx context.Context, task *models.Task) (queue.TaskEvent, error) {
+	if task.MessengerRelatedUserID == nil {
+		return queue.TaskEvent{}, errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
+	}
+
+	messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *task.MessengerRelatedUserID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
+		}
+		return queue.TaskEvent{}, errors.WithStack(err)
+	}
+
+	messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
+	if err != nil {
+		return queue.TaskEvent{}, errors.WithStack(err)
+	}
+
+	return queue.TaskEvent{
+		Type:                 queue.TaskEventSchedule,
+		TaskID:               task.ID,
+		UserID:               task.UserID,
+		MessengerName:        messengerName,
+		ChatID:               messengerRelatedUser.ChatID,
+		Title:                task.Title,
+		Description:          task.Description,
+		StartDate:            &task.StartDate,
+		CronExpression:       task.CronExpression,
+		RequiresConfirmation: task.RequiresConfirmation,
+	}, nil
+}
+
+// buildDeleteTaskEvent constructs a TaskEvent for deleting a task from the worker queue.
+func (s *TaskService) buildDeleteTaskEvent(ctx context.Context, task *models.Task) (queue.TaskEvent, error) {
+	if task.MessengerRelatedUserID == nil {
+		return queue.TaskEvent{}, errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
+	}
+
+	messengerName, err := s.getMessengerName(ctx, *task.MessengerRelatedUserID)
+	if err != nil {
+		return queue.TaskEvent{}, errors.WithStack(err)
+	}
+
+	return queue.TaskEvent{
+		Type:          queue.TaskEventDelete,
+		TaskID:        task.ID,
+		MessengerName: messengerName,
+	}, nil
 }
 
 // MarkTaskAsDone marks a task as done and queues worker.delete_task in a transactional manner
@@ -1676,12 +1731,13 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
-	taskQueueMessage := map[string]interface{}{
-		"task": "worker.delete_task",
-		"args": []interface{}{task.ID, messengerName},
+	event := queue.TaskEvent{
+		Type:          queue.TaskEventDelete,
+		TaskID:        task.ID,
+		MessengerName: messengerName,
 	}
 
-	err = s.producer.Publish(ctx, taskQueueMessage)
+	err = s.producer.Publish(ctx, event.ToTaskMessage())
 	if err != nil {
 		log.Error().
 			Stack().
@@ -1787,20 +1843,19 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 							Msg("failed to get messenger name for child task queue publish")
 						// Don't fail, just log
 					} else {
-						childTaskQueueMessage := map[string]interface{}{
-							"task": "worker.schedule_task",
-							"args": []interface{}{
-								messengerName,
-								messengerRelatedUser.ChatID,
-								childTaskID,
-								childTask.Title,
-								childTask.Description,
-								childTask.StartDate,
-								childTask.CronExpression,
-								childTask.RequiresConfirmation,
-							},
+						event := queue.TaskEvent{
+							Type:                 queue.TaskEventSchedule,
+							TaskID:               childTaskID,
+							UserID:               childTask.UserID,
+							MessengerName:        messengerName,
+							ChatID:               messengerRelatedUser.ChatID,
+							Title:                childTask.Title,
+							Description:          childTask.Description,
+							StartDate:            &childTask.StartDate,
+							CronExpression:       childTask.CronExpression,
+							RequiresConfirmation: childTask.RequiresConfirmation,
 						}
-						err = s.producer.Publish(ctx, childTaskQueueMessage)
+						err = s.producer.Publish(ctx, event.ToTaskMessage())
 						if err != nil {
 							log.Error().
 								Stack().
@@ -1933,12 +1988,13 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 						}
 
 						// Queue delete_task message for child task
-						childTaskQueueMessage := map[string]interface{}{
-							"task": "worker.delete_task",
-							"args": []interface{}{childTask.ID, messengerName},
+						event := queue.TaskEvent{
+							Type:          queue.TaskEventDelete,
+							TaskID:        childTask.ID,
+							MessengerName: messengerName,
 						}
 
-						err = s.producer.Publish(ctx, childTaskQueueMessage)
+						err = s.producer.Publish(ctx, event.ToTaskMessage())
 						if err != nil {
 							log.Error().
 								Stack().
@@ -2268,9 +2324,17 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
 	}
-	taskQueueMessage := map[string]interface{}{
-		"task": "worker.schedule_task",
-		"args": []interface{}{messengerName, messengerRelatedUser.ChatID, task.ID, task.Title, task.Description, newStartDate, nil, task.RequiresConfirmation},
+	event := queue.TaskEvent{
+		Type:                 queue.TaskEventSchedule,
+		TaskID:               task.ID,
+		UserID:               task.UserID,
+		MessengerName:        messengerName,
+		ChatID:               messengerRelatedUser.ChatID,
+		Title:                task.Title,
+		Description:          task.Description,
+		StartDate:            &newStartDate,
+		CronExpression:       nil,
+		RequiresConfirmation: task.RequiresConfirmation,
 	}
 
 	// Publish to queue - if this fails, we don't reschedule
@@ -2279,7 +2343,7 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 		Time("new_start_date", newStartDate).
 		Msg("publishing rescheduled task to queue")
 
-	err = s.producer.Publish(ctx, taskQueueMessage)
+	err = s.producer.Publish(ctx, event.ToTaskMessage())
 	if err != nil {
 		log.Error().
 			Stack().

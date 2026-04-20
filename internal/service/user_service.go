@@ -22,13 +22,13 @@ type UserService struct {
 	userRepo      repository.UserRepository
 	taskRepo      repository.TaskRepository
 	messengerRepo repository.MessengerRepository
-	producer      *queue.Producer
+	producer      queue.Publisher
 	tracer        trace.Tracer
 	logger        zerolog.Logger
 }
 
 // NewUserService creates a new instance of UserService
-func NewUserService(userRepo repository.UserRepository, taskRepo repository.TaskRepository, messengerRepo repository.MessengerRepository, producer *queue.Producer, logger zerolog.Logger) *UserService {
+func NewUserService(userRepo repository.UserRepository, taskRepo repository.TaskRepository, messengerRepo repository.MessengerRepository, producer queue.Publisher, logger zerolog.Logger) *UserService {
 	return &UserService{
 		userRepo:      userRepo,
 		taskRepo:      taskRepo,
@@ -278,17 +278,14 @@ func (s *UserService) DeleteUser(ctx context.Context, userID int64) error {
 			continue
 		}
 
-		taskQueueMessage := map[string]interface{}{
-			"task": "worker.delete_task",
-			"args": []interface{}{task.ID, messengerName},
+		event := queue.TaskEvent{
+			Type:          queue.TaskEventDelete,
+			TaskID:        task.ID,
+			MessengerName: messengerName,
 		}
 
-		err = s.producer.Publish(ctx, taskQueueMessage)
+		err = s.producer.Publish(ctx, event.ToTaskMessage())
 		if err != nil {
-			err = errors.Errorf("can't publish message %v to rabbitmq: %s",
-				taskQueueMessage,
-				err,
-			)
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return errors.WithStack(err)

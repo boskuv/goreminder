@@ -52,6 +52,7 @@ type DatabaseConfiguration struct {
 }
 
 type ProducerConfiguration struct {
+	Enabled              bool   `mapstructure:"enabled" default:"true"`
 	Host                 string `mapstructure:"host"`
 	Port                 string `mapstructure:"port"`
 	User                 string `mapstructure:"user"`
