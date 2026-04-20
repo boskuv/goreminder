@@ -70,6 +70,7 @@ type Task struct {
 	StartDate              time.Time  `db:"start_date" json:"start_date,omitempty"`
 	FinishDate             *time.Time `db:"finish_date" json:"finish_date,omitempty"`
 	CronExpression         *string    `db:"cron_expression" json:"cron_expression,omitempty"`
+	RRule                  *string    `db:"rrule" json:"rrule,omitempty"`
 	RequiresConfirmation   bool       `db:"requires_confirmation" json:"requires_confirmation,omitempty"`
 	Status                 string     `db:"status" json:"status"`
 	CreatedAt              time.Time  `db:"created_at" json:"created_at"`
