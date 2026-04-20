@@ -207,6 +207,37 @@ func TestTaskService_CreateTask_InvalidRRule(t *testing.T) {
 	assert.True(t, errors.Is(err, errs.ErrValidation))
 }
 
+func TestTaskService_CreateTask_RRuleWithConfirmationCreatesChild(t *testing.T) {
+	service, taskRepo, userRepo, _, taskHistoryRepo, _ := setup(t)
+	ctx := context.Background()
+	start := time.Date(2026, 4, 20, 9, 0, 0, 0, time.UTC)
+	rrule := "FREQ=DAILY;INTERVAL=1"
+	parent := &models.Task{
+		UserID:               1,
+		Title:                "Daily RRULE parent",
+		RequiresConfirmation: true,
+		StartDate:            start,
+		RRule:                &rrule,
+	}
+
+	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
+	taskRepo.EXPECT().CreateTask(gomock.Any(), parent).Return(int64(100), nil)
+	taskRepo.EXPECT().CreateTask(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, child *models.Task) (int64, error) {
+		assert.NotNil(t, child.ParentID)
+		assert.Equal(t, int64(100), *child.ParentID)
+		assert.Nil(t, child.CronExpression)
+		assert.Nil(t, child.RRule)
+		assert.Equal(t, start, child.StartDate)
+		return int64(101), nil
+	})
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	id, childID, err := service.CreateTask(ctx, parent)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(100), id)
+	assert.Equal(t, int64(101), childID)
+}
+
 func TestTaskService_RescheduleCronTasks_RRuleAdvancesStartDate(t *testing.T) {
 	service, taskRepo, _, _, _, _ := setup(t)
 	ctx := context.Background()
