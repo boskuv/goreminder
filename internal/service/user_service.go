@@ -102,8 +102,7 @@ func (s *UserService) CreateUser(ctx context.Context, user *models.User) (int64,
 	}
 
 	span.SetAttributes(attribute.Int64("user.id", userID))
-	log.Debug().
-		Int64("user.id", userID).
+	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "created", "user", userID, mapKeysForAudit(userToAuditMap(user)))).
 		Str("user.name", user.Name).
 		Msg("user created successfully")
 	span.SetStatus(codes.Ok, "user created successfully")
@@ -166,6 +165,8 @@ func (s *UserService) UpdateUser(ctx context.Context, userID int64, updateReques
 		return nil, errors.WithStack(err)
 	}
 
+	beforeMap := userToAuditMap(user)
+
 	// update the user fields (partial update)
 	if updateRequest.Name != nil {
 		user.Name = *updateRequest.Name
@@ -210,8 +211,8 @@ func (s *UserService) UpdateUser(ctx context.Context, userID int64, updateReques
 		return nil, errors.WithStack(err)
 	}
 
-	log.Debug().
-		Int64("user.id", userID).
+	afterMap := userToAuditMap(user)
+	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "updated", "user", userID, changedFieldsFromMaps(beforeMap, afterMap))).
 		Msg("user updated successfully")
 	span.SetStatus(codes.Ok, "user updated successfully")
 	return user, nil
@@ -230,7 +231,7 @@ func (s *UserService) DeleteUser(ctx context.Context, userID int64) error {
 		Int64("user.id", userID).
 		Msg("deleting user")
 
-	_, err := s.userRepo.GetUserByID(ctx, userID)
+	user, err := s.userRepo.GetUserByID(ctx, userID)
 	if err != nil {
 		log.Debug().
 			Err(err).
@@ -310,8 +311,7 @@ func (s *UserService) DeleteUser(ctx context.Context, userID int64) error {
 		return errors.WithStack(err)
 	}
 
-	log.Debug().
-		Int64("user.id", userID).
+	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "deleted", "user", userID, mapKeysForAudit(userToAuditMap(user)))).
 		Msg("user deleted successfully")
 	span.SetStatus(codes.Ok, "user deleted successfully")
 	return nil
@@ -354,4 +354,25 @@ func (s *UserService) GetAllUsers(ctx context.Context, page, pageSize int, order
 	)
 	span.SetStatus(codes.Ok, "users retrieved successfully")
 	return users, totalCount, nil
+}
+
+func userToAuditMap(user *models.User) map[string]interface{} {
+	result := map[string]interface{}{
+		"id":                user.ID,
+		"name":              user.Name,
+		"email":             user.Email,
+		"password_hash_set": user.PasswordHash != "",
+	}
+
+	if user.Timezone != nil {
+		result["timezone"] = *user.Timezone
+	}
+	if user.LanguageCode != nil {
+		result["language_code"] = *user.LanguageCode
+	}
+	if user.Role != nil {
+		result["role"] = *user.Role
+	}
+
+	return result
 }
