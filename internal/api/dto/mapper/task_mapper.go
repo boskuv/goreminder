@@ -15,6 +15,7 @@ func CreateTaskRequestToModel(req *dto.CreateTaskRequest) *models.Task {
 		StartDate:              req.StartDate,
 		FinishDate:             req.FinishDate,
 		CronExpression:         req.CronExpression,
+		RRule:                  req.RRule,
 		RequiresConfirmation:   req.RequiresConfirmation,
 		Status:                 req.Status,
 	}
@@ -33,6 +34,7 @@ func UpdateTaskRequestToModel(req *dto.UpdateTaskRequest) *models.TaskUpdateRequ
 		StartDate:            req.StartDate,
 		FinishDate:           req.FinishDate,
 		CronExpression:       req.CronExpression,
+		RRule:                req.RRule,
 		RequiresConfirmation: req.RequiresConfirmation,
 	}
 }
@@ -49,6 +51,7 @@ func TaskModelToResponse(task *models.Task) *dto.TaskResponse {
 		StartDate:              task.StartDate,
 		FinishDate:             task.FinishDate,
 		CronExpression:         task.CronExpression,
+		RRule:                  task.RRule,
 		RequiresConfirmation:   task.RequiresConfirmation,
 		Status:                 task.Status,
 		CreatedAt:              task.CreatedAt,
@@ -67,6 +70,7 @@ func TaskModelToMarkedDoneResponse(task *models.Task) *dto.TaskMarkedDoneRespons
 		StartDate:              task.StartDate,
 		FinishDate:             task.FinishDate,
 		CronExpression:         task.CronExpression,
+		RRule:                  task.RRule,
 		RequiresConfirmation:   task.RequiresConfirmation,
 		CreatedAt:              task.CreatedAt,
 	}

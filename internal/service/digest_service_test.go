@@ -14,12 +14,12 @@ import (
 	"github.com/boskuv/goreminder/pkg/queue"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
-func setupDigestService(t *testing.T) (*DigestService, *mock_repository.MockDigestSettingsRepository, *mock_repository.MockBacklogRepository, *mock_repository.MockTargetRepository, *mock_repository.MockTaskRepository, *mock_repository.MockUserRepository, *mock_repository.MockMessengerRepository, *queue.Producer) {
+func setupDigestService(t *testing.T) (*DigestService, *mock_repository.MockDigestSettingsRepository, *mock_repository.MockBacklogRepository, *mock_repository.MockTargetRepository, *mock_repository.MockTaskRepository, *mock_repository.MockUserRepository, *mock_repository.MockMessengerRepository, queue.Publisher) {
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 	digestSettingsRepo := mock_repository.NewMockDigestSettingsRepository(ctrl)
 	backlogRepo := mock_repository.NewMockBacklogRepository(ctrl)
 	targetRepo := mock_repository.NewMockTargetRepository(ctrl)
@@ -28,12 +28,7 @@ func setupDigestService(t *testing.T) (*DigestService, *mock_repository.MockDige
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
 
-	// Create a minimal producer
-	// Note: Producer.Publish will panic if called because publisher is nil
-	// However, in digest_service, errors from Publish are non-critical and logged only
-	// For tests that call Publish, we accept that it may panic - this is a known limitation
-	// In real usage, producer would be properly initialized via NewProducer
-	producer := &queue.Producer{}
+	var producer queue.Publisher = queue.NoopPublisher{}
 
 	service := NewDigestService(digestSettingsRepo, backlogRepo, targetRepo, taskRepo, userRepo, messengerRepo, producer, testLogger)
 	return service, digestSettingsRepo, backlogRepo, targetRepo, taskRepo, userRepo, messengerRepo, producer
@@ -57,23 +52,7 @@ func TestDigestService_CreateDigestSettings_Success(t *testing.T) {
 	digestSettingsRepo.EXPECT().GetDigestSettingsByUserID(gomock.Any(), int64(1), nil).Return(nil, errs.ErrNotFound)
 	digestSettingsRepo.EXPECT().CreateDigestSettings(gomock.Any(), settings).Return(int64(42), nil)
 
-	// Producer.Publish may panic due to uninitialized producer, but errors are non-critical
-	// We use recover to handle the panic and still verify the main logic worked
-	var id int64
-	var err error
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				// Panic is expected due to uninitialized producer
-				// The main operation (CreateDigestSettings) should still succeed
-				// We'll verify the repository was called correctly
-			}
-		}()
-		id, err = service.CreateDigestSettings(ctx, settings)
-	}()
-
-	// Even if Publish panicked, the main operation should succeed
-	// because errors from Publish are non-critical in digest_service
+	id, err := service.CreateDigestSettings(ctx, settings)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(42), id)
 }
@@ -95,18 +74,7 @@ func TestDigestService_CreateDigestSettings_WithMessengerRelatedUser_Success(t *
 	digestSettingsRepo.EXPECT().GetDigestSettingsByUserID(gomock.Any(), int64(1), &messengerUserID).Return(nil, errs.ErrNotFound)
 	digestSettingsRepo.EXPECT().CreateDigestSettings(gomock.Any(), settings).Return(int64(42), nil)
 
-	// Producer.Publish may panic, but errors are non-critical
-	var id int64
-	var err error
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				// Panic expected from uninitialized producer
-			}
-		}()
-		id, err = service.CreateDigestSettings(ctx, settings)
-	}()
-
+	id, err := service.CreateDigestSettings(ctx, settings)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(42), id)
 }
@@ -170,7 +138,7 @@ func TestDigestService_CreateDigestSettings_RepositoryError(t *testing.T) {
 
 // GetDigestSettings Tests
 func TestDigestService_GetDigestSettings_Success(t *testing.T) {
-	service, digestSettingsRepo, _, _, _, userRepo, _, _ := setupDigestService(t)
+	service, digestSettingsRepo, _, _, _, _, _, _ := setupDigestService(t)
 	ctx := context.Background()
 	userID := int64(1)
 	expectedSettings := &models.DigestSettings{
@@ -181,7 +149,6 @@ func TestDigestService_GetDigestSettings_Success(t *testing.T) {
 		WeekendTime: "10:00",
 	}
 
-	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
 	digestSettingsRepo.EXPECT().GetDigestSettingsByUserID(gomock.Any(), userID, nil).Return(expectedSettings, nil)
 
 	settings, err := service.GetDigestSettings(ctx, userID, nil)
@@ -190,7 +157,7 @@ func TestDigestService_GetDigestSettings_Success(t *testing.T) {
 }
 
 func TestDigestService_GetDigestSettings_WithMessengerRelatedUser(t *testing.T) {
-	service, digestSettingsRepo, _, _, _, userRepo, _, _ := setupDigestService(t)
+	service, digestSettingsRepo, _, _, _, _, _, _ := setupDigestService(t)
 	ctx := context.Background()
 	userID := int64(1)
 	messengerUserID := 123
@@ -203,7 +170,6 @@ func TestDigestService_GetDigestSettings_WithMessengerRelatedUser(t *testing.T) 
 		WeekendTime:            "10:00",
 	}
 
-	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
 	digestSettingsRepo.EXPECT().GetDigestSettingsByUserID(gomock.Any(), userID, &messengerUserID).Return(expectedSettings, nil)
 
 	settings, err := service.GetDigestSettings(ctx, userID, &messengerUserID)
@@ -226,11 +192,10 @@ func TestDigestService_GetDigestSettings_UserNotFound(t *testing.T) {
 }
 
 func TestDigestService_GetDigestSettings_NotFound(t *testing.T) {
-	service, digestSettingsRepo, _, _, _, userRepo, _, _ := setupDigestService(t)
+	service, digestSettingsRepo, _, _, _, _, _, _ := setupDigestService(t)
 	ctx := context.Background()
 	userID := int64(1)
 
-	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
 	digestSettingsRepo.EXPECT().GetDigestSettingsByUserID(gomock.Any(), userID, nil).Return(nil, errs.ErrNotFound)
 
 	settings, err := service.GetDigestSettings(ctx, userID, nil)
@@ -262,35 +227,12 @@ func TestDigestService_UpdateDigestSettings_Success_AllFields(t *testing.T) {
 	digestSettingsRepo.EXPECT().GetDigestSettingsByUserID(gomock.Any(), userID, &messengerUserID).Return(originalSettings, nil)
 	digestSettingsRepo.EXPECT().UpdateDigestSettings(gomock.Any(), gomock.Any()).Return(nil)
 
-	// Producer.Publish may panic due to uninitialized producer, but errors are non-critical
-	// The main operation (UpdateDigestSettings) should still succeed
-	// We use recover to handle the panic and still verify the main logic worked
-	var updatedSettings *models.DigestSettings
-	var err error
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				// Panic is expected due to uninitialized producer
-				// The main operation (UpdateDigestSettings) should still succeed
-				// We'll verify the repository was called correctly
-			}
-		}()
-		updatedSettings, err = service.UpdateDigestSettings(ctx, userID, &messengerUserID, updateReq)
-	}()
-
-	// Even if Publish panicked, the main operation should succeed
-	// because errors from Publish are non-critical in digest_service
-	// However, if panic occurred, updatedSettings will be nil, so we check err first
-	if err == nil && updatedSettings != nil {
-		assert.Equal(t, false, updatedSettings.Enabled)
-		assert.Equal(t, "08:00", updatedSettings.WeekdayTime)
-		assert.Equal(t, "11:00", updatedSettings.WeekendTime)
-	} else if err != nil {
-		// If there was an error (not panic), fail the test
-		assert.NoError(t, err)
-	}
-	// If updatedSettings is nil but err is nil, it means panic occurred
-	// This is acceptable as the repository update succeeded
+	updatedSettings, err := service.UpdateDigestSettings(ctx, userID, &messengerUserID, updateReq)
+	require.NoError(t, err)
+	require.NotNil(t, updatedSettings)
+	assert.Equal(t, false, updatedSettings.Enabled)
+	assert.Equal(t, "08:00", updatedSettings.WeekdayTime)
+	assert.Equal(t, "11:00", updatedSettings.WeekendTime)
 }
 
 func TestDigestService_UpdateDigestSettings_Success_PartialUpdate(t *testing.T) {
@@ -313,32 +255,12 @@ func TestDigestService_UpdateDigestSettings_Success_PartialUpdate(t *testing.T) 
 	digestSettingsRepo.EXPECT().GetDigestSettingsByUserID(gomock.Any(), userID, &messengerUserID).Return(originalSettings, nil)
 	digestSettingsRepo.EXPECT().UpdateDigestSettings(gomock.Any(), gomock.Any()).Return(nil)
 
-	// Producer.Publish may panic due to uninitialized producer, but errors are non-critical
-	// The main operation (UpdateDigestSettings) should still succeed
-	var updatedSettings *models.DigestSettings
-	var err error
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				// Panic is expected due to uninitialized producer
-				// The main operation (UpdateDigestSettings) should still succeed
-			}
-		}()
-		updatedSettings, err = service.UpdateDigestSettings(ctx, userID, &messengerUserID, updateReq)
-	}()
-
-	// Even if Publish panicked, the main operation should succeed
-	// because errors from Publish are non-critical in digest_service
-	if err == nil && updatedSettings != nil {
-		assert.Equal(t, false, updatedSettings.Enabled)
-		assert.Equal(t, "07:00", updatedSettings.WeekdayTime) // Unchanged
-		assert.Equal(t, "10:00", updatedSettings.WeekendTime) // Unchanged
-	} else if err != nil {
-		// If there was an error (not panic), fail the test
-		assert.NoError(t, err)
-	}
-	// If updatedSettings is nil but err is nil, it means panic occurred
-	// This is acceptable as the repository update succeeded
+	updatedSettings, err := service.UpdateDigestSettings(ctx, userID, &messengerUserID, updateReq)
+	require.NoError(t, err)
+	require.NotNil(t, updatedSettings)
+	assert.Equal(t, false, updatedSettings.Enabled)
+	assert.Equal(t, "07:00", updatedSettings.WeekdayTime) // Unchanged
+	assert.Equal(t, "10:00", updatedSettings.WeekendTime) // Unchanged
 }
 
 func TestDigestService_UpdateDigestSettings_InvalidTimeFormat(t *testing.T) {
@@ -382,12 +304,11 @@ func TestDigestService_UpdateDigestSettings_UserNotFound(t *testing.T) {
 }
 
 func TestDigestService_UpdateDigestSettings_SettingsNotFound(t *testing.T) {
-	service, digestSettingsRepo, _, _, _, userRepo, _, _ := setupDigestService(t)
+	service, digestSettingsRepo, _, _, _, _, _, _ := setupDigestService(t)
 	ctx := context.Background()
 	userID := int64(1)
 	updateReq := &models.DigestSettingsUpdateRequest{Enabled: ptrBool(false)}
 
-	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
 	digestSettingsRepo.EXPECT().GetDigestSettingsByUserID(gomock.Any(), userID, nil).Return(nil, errs.ErrNotFound)
 
 	settings, err := service.UpdateDigestSettings(ctx, userID, nil, updateReq)
@@ -398,7 +319,7 @@ func TestDigestService_UpdateDigestSettings_SettingsNotFound(t *testing.T) {
 
 // GetDigest Tests
 func TestDigestService_GetDigest_Success(t *testing.T) {
-	service, _, backlogRepo, _, taskRepo, userRepo, _, _ := setupDigestService(t)
+	service, _, backlogRepo, targetRepo, taskRepo, userRepo, _, _ := setupDigestService(t)
 	ctx := context.Background()
 	userID := int64(1)
 	startDateFrom := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -408,11 +329,13 @@ func TestDigestService_GetDigest_Success(t *testing.T) {
 		{ID: 1, UserID: userID, Title: "Task 1"},
 		{ID: 2, UserID: userID, Title: "Task 2"},
 	}
+	expectedTargets := []*models.Target{}
 	completedCount := 5
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(user, nil)
 	backlogRepo.EXPECT().GetCompletedBacklogsCount(gomock.Any(), userID, startDateFrom, startDateTo).Return(completedCount, nil)
 	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, 1, 1000, "start_date ASC", &startDateFrom, &startDateTo, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, 2, nil)
+	targetRepo.EXPECT().GetAllTargets(gomock.Any(), 1, 1000, "created_at DESC", &userID).Return(expectedTargets, 0, nil)
 
 	digest, err := service.GetDigest(ctx, userID, nil, &startDateFrom, &startDateTo)
 	assert.NoError(t, err)
@@ -422,17 +345,20 @@ func TestDigestService_GetDigest_Success(t *testing.T) {
 	assert.Equal(t, expectedTasks, digest.Tasks)
 	assert.Equal(t, startDateFrom, digest.StartDateFrom)
 	assert.Equal(t, startDateTo, digest.StartDateTo)
+	assert.Equal(t, expectedTargets, digest.Targets)
 }
 
 func TestDigestService_GetDigest_WithDefaultDates(t *testing.T) {
-	service, _, _, _, taskRepo, userRepo, _, _ := setupDigestService(t)
+	service, _, _, targetRepo, taskRepo, userRepo, _, _ := setupDigestService(t)
 	ctx := context.Background()
 	userID := int64(1)
 	user := &models.User{ID: userID, Timezone: ptrString("UTC")}
 	expectedTasks := []*models.Task{}
+	expectedTargets := []*models.Target{}
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(user, nil)
 	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, 1, 1000, "start_date ASC", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, 0, nil)
+	targetRepo.EXPECT().GetAllTargets(gomock.Any(), 1, 1000, "created_at DESC", &userID).Return(expectedTargets, 0, nil)
 
 	digest, err := service.GetDigest(ctx, userID, nil, nil, nil)
 	assert.NoError(t, err)
@@ -441,7 +367,7 @@ func TestDigestService_GetDigest_WithDefaultDates(t *testing.T) {
 }
 
 func TestDigestService_GetDigest_WithMessengerRelatedUser(t *testing.T) {
-	service, _, backlogRepo, _, taskRepo, userRepo, messengerRepo, _ := setupDigestService(t)
+	service, _, backlogRepo, targetRepo, taskRepo, userRepo, messengerRepo, _ := setupDigestService(t)
 	ctx := context.Background()
 	userID := int64(1)
 	messengerUserID := 123
@@ -450,10 +376,12 @@ func TestDigestService_GetDigest_WithMessengerRelatedUser(t *testing.T) {
 	user := &models.User{ID: userID, Timezone: ptrString("UTC")}
 	messengerUser := &models.MessengerRelatedUser{ID: int64(messengerUserID), ChatID: "chat123"}
 	expectedTasks := []*models.Task{}
+	expectedTargets := []*models.Target{}
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(user, nil)
 	backlogRepo.EXPECT().GetCompletedBacklogsCount(gomock.Any(), userID, startDateFrom, startDateTo).Return(0, nil)
 	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, 1, 1000, "start_date ASC", &startDateFrom, &startDateTo, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, 0, nil)
+	targetRepo.EXPECT().GetAllTargets(gomock.Any(), 1, 1000, "created_at DESC", &userID).Return(expectedTargets, 0, nil)
 	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), messengerUserID).Return(messengerUser, nil)
 
 	digest, err := service.GetDigest(ctx, userID, &messengerUserID, &startDateFrom, &startDateTo)
@@ -549,7 +477,7 @@ func TestDigestService_GetAllDigestSettings_RepositoryError(t *testing.T) {
 
 // DeleteDigestSettings Tests
 func TestDigestService_DeleteDigestSettings_Success(t *testing.T) {
-	service, digestSettingsRepo, _, _, _, userRepo, _, _ := setupDigestService(t)
+	service, digestSettingsRepo, _, _, _, _, _, _ := setupDigestService(t)
 	ctx := context.Background()
 	userID := int64(1)
 	messengerUserID := 123
@@ -559,42 +487,30 @@ func TestDigestService_DeleteDigestSettings_Success(t *testing.T) {
 		MessengerRelatedUserID: &messengerUserID,
 	}
 
-	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
 	digestSettingsRepo.EXPECT().GetDigestSettingsByUserID(gomock.Any(), userID, &messengerUserID).Return(settings, nil)
 	digestSettingsRepo.EXPECT().DeleteDigestSettings(gomock.Any(), userID, &messengerUserID).Return(nil)
 
-	// Producer.Publish may panic, but errors are non-critical
-	var err error
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				// Panic expected from uninitialized producer
-			}
-		}()
-		err = service.DeleteDigestSettings(ctx, userID, &messengerUserID)
-	}()
-
+	err := service.DeleteDigestSettings(ctx, userID, &messengerUserID)
 	assert.NoError(t, err)
 }
 
 func TestDigestService_DeleteDigestSettings_UserNotFound(t *testing.T) {
-	service, _, _, _, _, userRepo, _, _ := setupDigestService(t)
+	service, digestSettingsRepo, _, _, _, _, _, _ := setupDigestService(t)
 	ctx := context.Background()
 	userID := int64(1)
 
-	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(nil, errs.ErrNotFound)
+	digestSettingsRepo.EXPECT().GetDigestSettingsByUserID(gomock.Any(), userID, nil).Return(nil, errs.ErrNotFound)
 
 	err := service.DeleteDigestSettings(ctx, userID, nil)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unprocessable entity")
+	assert.Contains(t, err.Error(), "no data found matching criteria")
 }
 
 func TestDigestService_DeleteDigestSettings_SettingsNotFound(t *testing.T) {
-	service, digestSettingsRepo, _, _, _, userRepo, _, _ := setupDigestService(t)
+	service, digestSettingsRepo, _, _, _, _, _, _ := setupDigestService(t)
 	ctx := context.Background()
 	userID := int64(1)
 
-	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
 	digestSettingsRepo.EXPECT().GetDigestSettingsByUserID(gomock.Any(), userID, nil).Return(nil, errs.ErrNotFound)
 
 	err := service.DeleteDigestSettings(ctx, userID, nil)
@@ -603,7 +519,7 @@ func TestDigestService_DeleteDigestSettings_SettingsNotFound(t *testing.T) {
 }
 
 func TestDigestService_DeleteDigestSettings_DeleteError(t *testing.T) {
-	service, digestSettingsRepo, _, _, _, userRepo, _, _ := setupDigestService(t)
+	service, digestSettingsRepo, _, _, _, _, _, _ := setupDigestService(t)
 	ctx := context.Background()
 	userID := int64(1)
 	messengerUserID := 123
@@ -614,7 +530,6 @@ func TestDigestService_DeleteDigestSettings_DeleteError(t *testing.T) {
 	}
 	expectedErr := errors.New("delete failed")
 
-	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
 	digestSettingsRepo.EXPECT().GetDigestSettingsByUserID(gomock.Any(), userID, &messengerUserID).Return(settings, nil)
 	digestSettingsRepo.EXPECT().DeleteDigestSettings(gomock.Any(), userID, &messengerUserID).Return(expectedErr)
 

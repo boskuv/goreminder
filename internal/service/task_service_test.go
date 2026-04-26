@@ -170,6 +170,97 @@ func TestTaskService_CreateTask_TaskRepositoryError(t *testing.T) {
 	assert.Contains(t, err.Error(), "task creation failed")
 }
 
+func TestTaskService_CreateTask_CronAndRRuleMutuallyExclusive(t *testing.T) {
+	service, _, userRepo, _, _, _ := setup(t)
+	ctx := context.Background()
+	task := &models.Task{
+		UserID:               1,
+		Title:                "Recurring",
+		RequiresConfirmation: false,
+		StartDate:            time.Date(2024, 1, 1, 9, 0, 0, 0, time.UTC),
+		CronExpression:       ptrString("0 9 * * *"),
+		RRule:                ptrString("FREQ=DAILY;INTERVAL=1"),
+	}
+
+	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
+
+	_, _, err := service.CreateTask(ctx, task)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, errs.ErrValidation))
+}
+
+func TestTaskService_CreateTask_InvalidRRule(t *testing.T) {
+	service, _, userRepo, _, _, _ := setup(t)
+	ctx := context.Background()
+	task := &models.Task{
+		UserID:               1,
+		Title:                "Bad RRULE",
+		RequiresConfirmation: false,
+		StartDate:            time.Date(2024, 1, 1, 9, 0, 0, 0, time.UTC),
+		RRule:                ptrString("NOT_A_VALID_RULE"),
+	}
+
+	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
+
+	_, _, err := service.CreateTask(ctx, task)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, errs.ErrValidation))
+}
+
+func TestTaskService_CreateTask_RRuleWithConfirmationCreatesChild(t *testing.T) {
+	service, taskRepo, userRepo, _, taskHistoryRepo, _ := setup(t)
+	ctx := context.Background()
+	start := time.Date(2026, 4, 20, 9, 0, 0, 0, time.UTC)
+	rrule := "FREQ=DAILY;INTERVAL=1"
+	parent := &models.Task{
+		UserID:               1,
+		Title:                "Daily RRULE parent",
+		RequiresConfirmation: true,
+		StartDate:            start,
+		RRule:                &rrule,
+	}
+
+	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
+	taskRepo.EXPECT().CreateTask(gomock.Any(), parent).Return(int64(100), nil)
+	taskRepo.EXPECT().CreateTask(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, child *models.Task) (int64, error) {
+		assert.NotNil(t, child.ParentID)
+		assert.Equal(t, int64(100), *child.ParentID)
+		assert.Nil(t, child.CronExpression)
+		assert.Nil(t, child.RRule)
+		assert.Equal(t, start, child.StartDate)
+		return int64(101), nil
+	})
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	id, childID, err := service.CreateTask(ctx, parent)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(100), id)
+	assert.Equal(t, int64(101), childID)
+}
+
+func TestTaskService_RescheduleCronTasks_RRuleAdvancesStartDate(t *testing.T) {
+	service, taskRepo, _, _, _, _ := setup(t)
+	ctx := context.Background()
+	start := time.Date(2020, 1, 1, 12, 0, 0, 0, time.UTC)
+	rrule := "FREQ=DAILY;INTERVAL=1"
+	task := &models.Task{
+		ID:                   1,
+		StartDate:            start,
+		RRule:                &rrule,
+		CronExpression:       nil,
+		RequiresConfirmation: false,
+		Status:               string(models.TaskStatusScheduled),
+	}
+
+	taskRepo.EXPECT().UpdateTask(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, updated *models.Task) error {
+		assert.True(t, updated.StartDate.After(start), "start_date should move forward")
+		return nil
+	})
+
+	err := service.RescheduleCronTasks(ctx, []*models.Task{task})
+	assert.NoError(t, err)
+}
+
 // GetTask Tests
 func TestTaskService_GetTask_Success(t *testing.T) {
 	service, taskRepo, _, _, _, _ := setup(t)
@@ -415,6 +506,30 @@ func TestTaskService_UpdateTask_UpdateError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, task)
 	assert.Contains(t, err.Error(), "update failed")
+}
+
+func TestTaskService_UpdateTask_CronAndRRuleMutuallyExclusive(t *testing.T) {
+	service, taskRepo, _, _, _, _ := setup(t)
+	ctx := context.Background()
+	taskID := int64(1)
+	originalTask := &models.Task{
+		ID:                   taskID,
+		Title:                "Recurring",
+		Status:               "pending",
+		StartDate:            time.Date(2024, 1, 1, 9, 0, 0, 0, time.UTC),
+		RRule:                ptrString("FREQ=DAILY;INTERVAL=1"),
+		RequiresConfirmation: false,
+	}
+	updateReq := &models.TaskUpdateRequest{
+		CronExpression: ptrString("0 9 * * *"),
+	}
+
+	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(originalTask, nil)
+
+	task, err := service.UpdateTask(ctx, taskID, updateReq)
+	assert.Error(t, err)
+	assert.Nil(t, task)
+	assert.True(t, errors.Is(err, errs.ErrValidation))
 }
 
 // DeleteTask Tests

@@ -141,6 +141,15 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 		}
 	}
 
+	if err := validateCronExpressionAndRRuleExclusive(task.CronExpression, task.RRule); err != nil {
+		return 0, 0, errors.Wrap(errs.ErrValidation, err.Error())
+	}
+	if recurrenceFieldSet(task.RRule) {
+		if err := validateRRuleString(*task.RRule, task.StartDate); err != nil {
+			return 0, 0, errors.Wrap(errs.ErrValidation, err.Error())
+		}
+	}
+
 	log.Debug().
 		Int64("user.id", task.UserID).
 		Msg("creating task in repository")
@@ -189,13 +198,12 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 	}
 	historySpan.End()
 
-	// If task has cron_expression and requires_confirmation, create a child task
+	// If task has cron_expression or rrule and requires_confirmation, create a child task
 	var childTaskID int64
-	if task.CronExpression != nil && task.RequiresConfirmation {
+	if isRecurrenceParentWithConfirmation(task) {
 		log.Debug().
 			Int64("task.id", taskID).
-			Str("cron_expression", *task.CronExpression).
-			Msg("creating child task for cron task with confirmation")
+			Msg("creating child task for recurring parent with confirmation")
 
 		// Create child task
 		childTask := &models.Task{
@@ -206,7 +214,8 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 			ParentID:               &taskID,
 			StartDate:              task.StartDate,
 			FinishDate:             task.FinishDate,
-			CronExpression:         nil, // Child tasks don't have cron expression
+			CronExpression:         nil, // Child tasks don't carry parent's recurrence
+			RRule:                  nil,
 			RequiresConfirmation:   task.RequiresConfirmation,
 			Status:                 string(models.TaskStatusPending),
 		}
@@ -382,11 +391,12 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	oldDescription := oldTask.Description
 	oldStartDate := oldTask.StartDate
 	oldCronExpression := oldTask.CronExpression
+	oldRRule := oldTask.RRule
 	oldRequiresConfirmation := oldTask.RequiresConfirmation
 	oldFinishDate := oldTask.FinishDate
 
-	// Check if this was a parent task before update (has cron_expression and requires_confirmation)
-	wasParentTask := oldTask.CronExpression != nil && oldTask.RequiresConfirmation
+	// Check if this was a parent task before update (recurrence + requires_confirmation)
+	wasParentTask := isRecurrenceParentWithConfirmation(oldTask)
 
 	// update the task fields (partial update)
 	if updateRequest.Title != nil {
@@ -420,13 +430,25 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	if updateRequest.CronExpression != nil {
 		oldTask.CronExpression = updateRequest.CronExpression
 	}
+	if updateRequest.RRule != nil {
+		oldTask.RRule = updateRequest.RRule
+	}
 
 	if updateRequest.RequiresConfirmation != nil {
 		oldTask.RequiresConfirmation = *updateRequest.RequiresConfirmation
 	}
 
-	// Check if this is a parent task after update (has cron_expression and requires_confirmation)
-	isParentTask := oldTask.CronExpression != nil && oldTask.RequiresConfirmation
+	if err := validateCronExpressionAndRRuleExclusive(oldTask.CronExpression, oldTask.RRule); err != nil {
+		return nil, errors.Wrap(errs.ErrValidation, err.Error())
+	}
+	if recurrenceFieldSet(oldTask.RRule) {
+		if err := validateRRuleString(*oldTask.RRule, oldTask.StartDate); err != nil {
+			return nil, errors.Wrap(errs.ErrValidation, err.Error())
+		}
+	}
+
+	// Check if this is a parent task after update (recurrence + requires_confirmation)
+	isParentTask := isRecurrenceParentWithConfirmation(oldTask)
 
 	// Get database connection for transaction if we need to update child tasks
 	// Transaction is needed if task was or is a parent task (to handle child tasks synchronization)
@@ -513,13 +535,17 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	// For single tasks, we publish schedule_task or delete_task based on changes
 	// Note: isParentTask is checked after update, so it reflects the current state
 	if !isParentTask {
-		// For single tasks (without cron), publish to queue based on changes
+		// For single tasks (not recurrence parents), publish to queue based on changes
 		titleChanged := updateRequest.Title != nil && *updateRequest.Title != oldTitle
 		descriptionChanged := updateRequest.Description != nil && *updateRequest.Description != oldDescription
 		startDateChanged := updateRequest.StartDate != nil && !updateRequest.StartDate.Equal(oldStartDate)
 		cronExpressionChanged := (updateRequest.CronExpression != nil && oldCronExpression == nil) ||
 			(updateRequest.CronExpression == nil && oldCronExpression != nil) ||
 			(updateRequest.CronExpression != nil && oldCronExpression != nil && *updateRequest.CronExpression != *oldCronExpression)
+		rruleChanged := (updateRequest.RRule != nil && oldRRule == nil) ||
+			(updateRequest.RRule == nil && oldRRule != nil) ||
+			(updateRequest.RRule != nil && oldRRule != nil && *updateRequest.RRule != *oldRRule)
+		recurrenceScheduleChanged := cronExpressionChanged || rruleChanged
 		statusChangedToDeleted := statusChanged && oldTask.Status == string(models.TaskStatusDeleted)
 		statusChangedToScheduled := statusChanged && oldTask.Status == string(models.TaskStatusScheduled)
 
@@ -558,7 +584,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					}
 				}
 			}
-		} else if statusChangedToScheduled || titleChanged || descriptionChanged || startDateChanged || cronExpressionChanged {
+		} else if statusChangedToScheduled || titleChanged || descriptionChanged || startDateChanged || recurrenceScheduleChanged {
 			// Publish schedule_task if status changed to scheduled or relevant fields changed
 			// But only if startDate is not in the past (if startDate is in the past, only update DB, don't publish to queue)
 			now := time.Now().UTC()
@@ -790,6 +816,10 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			cronExpressionChanged := (updateRequest.CronExpression != nil && oldCronExpression == nil) ||
 				(updateRequest.CronExpression == nil && oldCronExpression != nil) ||
 				(updateRequest.CronExpression != nil && oldCronExpression != nil && *updateRequest.CronExpression != *oldCronExpression)
+			rruleChanged := (updateRequest.RRule != nil && oldRRule == nil) ||
+				(updateRequest.RRule == nil && oldRRule != nil) ||
+				(updateRequest.RRule != nil && oldRRule != nil && *updateRequest.RRule != *oldRRule)
+			recurrenceScheduleChanged := cronExpressionChanged || rruleChanged
 			finishDateChanged := (updateRequest.FinishDate != nil && oldFinishDate == nil) ||
 				(updateRequest.FinishDate == nil && oldFinishDate != nil) ||
 				(updateRequest.FinishDate != nil && oldFinishDate != nil && !updateRequest.FinishDate.Equal(*oldFinishDate))
@@ -822,9 +852,9 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					childUpdated = true
 				}
 
-				// Recalculate start_date if cron_expression or start_date changed
-				if cronExpressionChanged || startDateChanged {
-					if oldTask.CronExpression != nil {
+				// Recalculate start_date if recurrence rule or start_date changed
+				if recurrenceScheduleChanged || startDateChanged {
+					if recurrenceFieldSet(oldTask.CronExpression) {
 						// Calculate next execution time from new cron expression
 						// For child tasks, always use current time (now) as baseTime
 						// Child tasks are created dynamically and should be calculated from current moment
@@ -850,8 +880,29 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 							Time("base_time", baseTime).
 							Time("parent_start_date", oldTask.StartDate).
 							Msg("recalculated child task start_date from cron expression (using now as base)")
+					} else if recurrenceFieldSet(oldTask.RRule) {
+						now := time.Now().UTC()
+						nextTime, err := nextStartFromRRule(now, *oldTask.RRule, oldTask.StartDate)
+						if err != nil {
+							log.Error().
+								Stack().
+								Err(err).
+								Int64("task.id", taskID).
+								Int64("child_task.id", childTask.ID).
+								Msg("failed to recalculate child task start_date from rrule")
+						} else {
+							childTask.StartDate = nextTime
+							childUpdated = true
+							startDateUpdated = true
+
+							log.Debug().
+								Int64("task.id", taskID).
+								Int64("child_task.id", childTask.ID).
+								Time("new_start_date", nextTime).
+								Msg("recalculated child task start_date from rrule (using now as base)")
+						}
 					} else if startDateChanged {
-						// If cron expression was removed but start_date changed, update start_date
+						// Recurrence was removed but start_date changed, follow parent start_date
 						childTask.StartDate = oldTask.StartDate
 						childUpdated = true
 						startDateUpdated = true
@@ -860,7 +911,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 							Int64("task.id", taskID).
 							Int64("child_task.id", childTask.ID).
 							Time("new_start_date", oldTask.StartDate).
-							Msg("updated child task start_date (cron expression removed)")
+							Msg("updated child task start_date (recurrence removed)")
 					}
 				}
 
@@ -978,11 +1029,10 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		}
 	}
 
-	// If requires_confirmation was added (false -> true) and task has cron_expression, create child tasks
-	if updateRequest.RequiresConfirmation != nil && !oldRequiresConfirmation && oldTask.RequiresConfirmation && oldTask.CronExpression != nil {
+	// If requires_confirmation was added (false -> true) and task has a recurrence rule, create child tasks
+	if updateRequest.RequiresConfirmation != nil && !oldRequiresConfirmation && oldTask.RequiresConfirmation && hasRecurrenceRule(oldTask) {
 		log.Debug().
 			Int64("task.id", taskID).
-			Str("cron_expression", *oldTask.CronExpression).
 			Msg("requires_confirmation added, deleting parent task from queue and creating child task")
 
 		// Delete parent task from queue (it should no longer execute directly)
@@ -1019,123 +1069,119 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			}
 		}
 
-		// Calculate next execution time from cron expression
-		// For child tasks, always use current time (now) as baseTime
-		// Child tasks are created dynamically and should be calculated from current moment
+		// Calculate next execution time from parent's recurrence (cron or rrule)
 		now := time.Now().UTC()
-		baseTime := now
-
-		nextTime := cronexpr.MustParse(*oldTask.CronExpression).Next(baseTime)
-
-		// Ensure calculated time is not in the past
-		if nextTime.Before(now) {
-			// If calculated time is in the past, calculate next occurrence
-			nextTime = cronexpr.MustParse(*oldTask.CronExpression).Next(nextTime)
-		}
-
-		log.Debug().
-			Int64("task.id", taskID).
-			Time("base_time", baseTime).
-			Time("next_time", nextTime).
-			Time("parent_start_date", oldTask.StartDate).
-			Msg("calculated next execution time from cron expression for child task (using now as base)")
-
-		// Create child task
-		childTask := &models.Task{
-			Title:                  oldTask.Title,
-			Description:            oldTask.Description,
-			UserID:                 oldTask.UserID,
-			MessengerRelatedUserID: oldTask.MessengerRelatedUserID,
-			ParentID:               &taskID,
-			StartDate:              nextTime,
-			FinishDate:             oldTask.FinishDate,
-			CronExpression:         nil, // Child tasks don't have cron expression
-			RequiresConfirmation:   oldTask.RequiresConfirmation,
-			Status:                 string(models.TaskStatusScheduled),
-		}
-
-		childTaskID, err := s.taskRepo.CreateTask(ctx, childTask)
-		if err != nil {
+		nextTime, recurErr := nextRecurrenceAfter(oldTask, now)
+		if recurErr != nil {
 			log.Error().
 				Stack().
-				Err(err).
+				Err(recurErr).
 				Int64("task.id", taskID).
-				Msg("failed to create child task after adding requires_confirmation")
-			// Don't fail the operation, just log the error
-			// The database update was successful, child task creation failure is non-critical
+				Msg("failed to calculate next execution time for child task after adding requires_confirmation")
 		} else {
 			log.Debug().
 				Int64("task.id", taskID).
-				Int64("child_task.id", childTaskID).
-				Time("child_start_date", nextTime).
-				Msg("child task created successfully after adding requires_confirmation")
-			span.SetAttributes(attribute.Int64("child_task.id", childTaskID))
+				Time("next_time", nextTime).
+				Time("parent_start_date", oldTask.StartDate).
+				Msg("calculated next execution time for child task (using now as base)")
 
-			// Publish child task to queue
-			// But only if startDate is not in the past (if startDate is in the past, only update DB, don't publish to queue)
-			now := time.Now().UTC()
-			shouldPublishToQueue := childTask.StartDate.After(now) || childTask.StartDate.Equal(now)
+			// Create child task
+			childTask := &models.Task{
+				Title:                  oldTask.Title,
+				Description:            oldTask.Description,
+				UserID:                 oldTask.UserID,
+				MessengerRelatedUserID: oldTask.MessengerRelatedUserID,
+				ParentID:               &taskID,
+				StartDate:              nextTime,
+				FinishDate:             oldTask.FinishDate,
+				CronExpression:         nil,
+				RRule:                  nil,
+				RequiresConfirmation:   oldTask.RequiresConfirmation,
+				Status:                 string(models.TaskStatusScheduled),
+			}
 
-			if shouldPublishToQueue {
-				if childTask.MessengerRelatedUserID != nil {
-					messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *childTask.MessengerRelatedUserID)
-					if err != nil {
-						log.Error().
-							Stack().
-							Err(err).
-							Int64("task.id", taskID).
-							Int64("child_task.id", childTaskID).
-							Msg("failed to get messenger related user for child task queue update")
-						// Don't fail the operation, just log the error
-					} else {
-						messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
+			childTaskID, createErr := s.taskRepo.CreateTask(ctx, childTask)
+			if createErr != nil {
+				log.Error().
+					Stack().
+					Err(createErr).
+					Int64("task.id", taskID).
+					Msg("failed to create child task after adding requires_confirmation")
+				// Don't fail the operation, just log the error
+				// The database update was successful, child task creation failure is non-critical
+			} else {
+				log.Debug().
+					Int64("task.id", taskID).
+					Int64("child_task.id", childTaskID).
+					Time("child_start_date", nextTime).
+					Msg("child task created successfully after adding requires_confirmation")
+				span.SetAttributes(attribute.Int64("child_task.id", childTaskID))
+
+				// Publish child task to queue
+				// But only if startDate is not in the past (if startDate is in the past, only update DB, don't publish to queue)
+				shouldPublishToQueue := childTask.StartDate.After(now) || childTask.StartDate.Equal(now)
+
+				if shouldPublishToQueue {
+					if childTask.MessengerRelatedUserID != nil {
+						messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *childTask.MessengerRelatedUserID)
 						if err != nil {
 							log.Error().
 								Stack().
 								Err(err).
 								Int64("task.id", taskID).
 								Int64("child_task.id", childTaskID).
-								Msg("failed to get messenger name for child task queue update")
+								Msg("failed to get messenger related user for child task queue update")
 							// Don't fail the operation, just log the error
 						} else {
-							event := queue.TaskEvent{
-								Type:                 queue.TaskEventSchedule,
-								TaskID:               childTaskID,
-								UserID:               childTask.UserID,
-								MessengerName:        messengerName,
-								ChatID:               messengerRelatedUser.ChatID,
-								Title:                childTask.Title,
-								Description:          childTask.Description,
-								StartDate:            &childTask.StartDate,
-								CronExpression:       childTask.CronExpression,
-								RequiresConfirmation: childTask.RequiresConfirmation,
-							}
-
-							err = s.producer.Publish(ctx, event.ToTaskMessage())
+							messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
 							if err != nil {
 								log.Error().
 									Stack().
 									Err(err).
 									Int64("task.id", taskID).
 									Int64("child_task.id", childTaskID).
-									Msg("failed to queue schedule_task message for child task")
+									Msg("failed to get messenger name for child task queue update")
 								// Don't fail the operation, just log the error
-								// The database update was successful, queue update failure is non-critical
 							} else {
-								log.Debug().
-									Int64("task.id", taskID).
-									Int64("child_task.id", childTaskID).
-									Msg("schedule_task message queued successfully for child task")
+								event := queue.TaskEvent{
+									Type:                 queue.TaskEventSchedule,
+									TaskID:               childTaskID,
+									UserID:               childTask.UserID,
+									MessengerName:        messengerName,
+									ChatID:               messengerRelatedUser.ChatID,
+									Title:                childTask.Title,
+									Description:          childTask.Description,
+									StartDate:            &childTask.StartDate,
+									CronExpression:       childTask.CronExpression,
+									RequiresConfirmation: childTask.RequiresConfirmation,
+								}
+
+								err = s.producer.Publish(ctx, event.ToTaskMessage())
+								if err != nil {
+									log.Error().
+										Stack().
+										Err(err).
+										Int64("task.id", taskID).
+										Int64("child_task.id", childTaskID).
+										Msg("failed to queue schedule_task message for child task")
+									// Don't fail the operation, just log the error
+									// The database update was successful, queue update failure is non-critical
+								} else {
+									log.Debug().
+										Int64("task.id", taskID).
+										Int64("child_task.id", childTaskID).
+										Msg("schedule_task message queued successfully for child task")
+								}
 							}
 						}
 					}
+				} else {
+					log.Debug().
+						Int64("task.id", taskID).
+						Int64("child_task.id", childTaskID).
+						Time("start_date", childTask.StartDate).
+						Msg("child task startDate is in the past, skipping queue publication (only DB update)")
 				}
-			} else {
-				log.Debug().
-					Int64("task.id", taskID).
-					Int64("child_task.id", childTaskID).
-					Time("start_date", childTask.StartDate).
-					Msg("child task startDate is in the past, skipping queue publication (only DB update)")
 			}
 		}
 	}
@@ -1179,7 +1225,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	// Record general update history (if other fields changed, not just status)
 	hasOtherChanges := updateRequest.Title != nil || updateRequest.Description != nil ||
 		updateRequest.StartDate != nil || updateRequest.FinishDate != nil ||
-		updateRequest.CronExpression != nil || updateRequest.RequiresConfirmation != nil
+		updateRequest.CronExpression != nil || updateRequest.RRule != nil || updateRequest.RequiresConfirmation != nil
 
 	if hasOtherChanges || (updateRequest.Status != nil && !statusChanged) {
 		_, updateHistorySpan := s.tracer.Start(ctx, "task_service.record_task_updated_history",
@@ -1255,7 +1301,7 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 			Int64("task.id", taskID).
 			Msg("database connection not available for transaction; falling back to non-transactional delete")
 
-		if task.CronExpression != nil {
+		if hasRecurrenceRule(task) {
 			err := errors.New("database connection not available for transactional delete of parent task")
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
@@ -1328,8 +1374,8 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		}
 	}()
 
-	// If task has cron_expression, it's a parent task - delete all child tasks first
-	if task.CronExpression != nil {
+	// If task has a recurrence rule, it may be a parent task — delete all child tasks first
+	if hasRecurrenceRule(task) {
 		log.Debug().
 			Int64("task.id", taskID).
 			Msg("deleting child tasks for parent task")
@@ -1778,107 +1824,108 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 				Int64("parent.id", *task.ParentID).
 				Msg("failed to get parent task for child task logic")
 			// Don't fail the operation, just log the error
-		} else if parentTask.Status != string(models.TaskStatusDone) && parentTask.CronExpression != nil {
-			// Parent is not done and has cron expression - create next child task
+		} else if parentTask.Status != string(models.TaskStatusDone) && isRecurrenceParentWithConfirmation(parentTask) {
+			// Parent is not done and still uses the parent/child recurrence model — create next child task
 			log.Debug().
 				Int64("task.id", taskID).
 				Int64("parent.id", *task.ParentID).
-				Str("cron_expression", *parentTask.CronExpression).
-				Msg("creating next child task for parent with cron expression")
+				Msg("creating next child task for recurring parent with confirmation")
 
-			// Calculate next execution time from cron expression
-			nextTime := cronexpr.MustParse(*parentTask.CronExpression).Next(time.Now().UTC())
-
-			// Create child task
-			childTask := &models.Task{
-				Title:                  parentTask.Title,
-				Description:            parentTask.Description,
-				UserID:                 parentTask.UserID,
-				MessengerRelatedUserID: parentTask.MessengerRelatedUserID,
-				ParentID:               task.ParentID,
-				StartDate:              nextTime,
-				FinishDate:             parentTask.FinishDate,
-				CronExpression:         nil, // Child tasks don't have cron expression
-				RequiresConfirmation:   parentTask.RequiresConfirmation,
-				Status:                 string(models.TaskStatusScheduled),
-			}
-
-			childTaskID, err := s.taskRepo.CreateTask(ctx, childTask)
-			if err != nil {
+			nextTime, nextErr := nextRecurrenceAfter(parentTask, time.Now().UTC())
+			if nextErr != nil {
 				log.Error().
 					Stack().
-					Err(err).
+					Err(nextErr).
 					Int64("task.id", taskID).
 					Int64("parent.id", *task.ParentID).
-					Msg("failed to create next child task")
-				// Don't fail the operation, just log the error
+					Msg("failed to compute next child start from parent recurrence")
 			} else {
-				log.Debug().
-					Int64("task.id", taskID).
-					Int64("parent.id", *task.ParentID).
-					Int64("child_task.id", childTaskID).
-					Time("child_start_date", nextTime).
-					Msg("next child task created successfully")
-				span.SetAttributes(attribute.Int64("child_task.id", childTaskID))
-			}
+				childTask := &models.Task{
+					Title:                  parentTask.Title,
+					Description:            parentTask.Description,
+					UserID:                 parentTask.UserID,
+					MessengerRelatedUserID: parentTask.MessengerRelatedUserID,
+					ParentID:               task.ParentID,
+					StartDate:              nextTime,
+					FinishDate:             parentTask.FinishDate,
+					CronExpression:         nil,
+					RRule:                  nil,
+					RequiresConfirmation:   parentTask.RequiresConfirmation,
+					Status:                 string(models.TaskStatusScheduled),
+				}
 
-			if childTask.MessengerRelatedUserID != nil {
-				messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *childTask.MessengerRelatedUserID)
-				if err != nil {
+				childTaskID, createErr := s.taskRepo.CreateTask(ctx, childTask)
+				if createErr != nil {
 					log.Error().
 						Stack().
-						Err(err).
+						Err(createErr).
 						Int64("task.id", taskID).
-						Int64("child_task.id", childTaskID).
-						Msg("failed to get messenger related user for child task queue publish")
-					// Don't fail, just log
+						Int64("parent.id", *task.ParentID).
+						Msg("failed to create next child task")
 				} else {
-					messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
-					if err != nil {
-						log.Error().
-							Stack().
-							Err(err).
-							Int64("task.id", taskID).
-							Int64("child_task.id", childTaskID).
-							Msg("failed to get messenger name for child task queue publish")
-						// Don't fail, just log
-					} else {
-						event := queue.TaskEvent{
-							Type:                 queue.TaskEventSchedule,
-							TaskID:               childTaskID,
-							UserID:               childTask.UserID,
-							MessengerName:        messengerName,
-							ChatID:               messengerRelatedUser.ChatID,
-							Title:                childTask.Title,
-							Description:          childTask.Description,
-							StartDate:            &childTask.StartDate,
-							CronExpression:       childTask.CronExpression,
-							RequiresConfirmation: childTask.RequiresConfirmation,
-						}
-						err = s.producer.Publish(ctx, event.ToTaskMessage())
-						if err != nil {
+					log.Debug().
+						Int64("task.id", taskID).
+						Int64("parent.id", *task.ParentID).
+						Int64("child_task.id", childTaskID).
+						Time("child_start_date", nextTime).
+						Msg("next child task created successfully")
+					span.SetAttributes(attribute.Int64("child_task.id", childTaskID))
+
+					if childTask.MessengerRelatedUserID != nil {
+						messengerRelatedUser, pubErr := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *childTask.MessengerRelatedUserID)
+						if pubErr != nil {
 							log.Error().
 								Stack().
-								Err(err).
+								Err(pubErr).
 								Int64("task.id", taskID).
 								Int64("child_task.id", childTaskID).
-								Msg("failed to queue schedule_task for new child task")
-							// Don't fail the operation, just log the error
+								Msg("failed to get messenger related user for child task queue publish")
 						} else {
-							log.Debug().
-								Int64("task.id", taskID).
-								Int64("child_task.id", childTaskID).
-								Msg("schedule_task queued successfully for new child task")
+							messengerName, pubErr := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
+							if pubErr != nil {
+								log.Error().
+									Stack().
+									Err(pubErr).
+									Int64("task.id", taskID).
+									Int64("child_task.id", childTaskID).
+									Msg("failed to get messenger name for child task queue publish")
+							} else {
+								event := queue.TaskEvent{
+									Type:                 queue.TaskEventSchedule,
+									TaskID:               childTaskID,
+									UserID:               childTask.UserID,
+									MessengerName:        messengerName,
+									ChatID:               messengerRelatedUser.ChatID,
+									Title:                childTask.Title,
+									Description:          childTask.Description,
+									StartDate:            &childTask.StartDate,
+									CronExpression:       childTask.CronExpression,
+									RequiresConfirmation: childTask.RequiresConfirmation,
+								}
+								pubErr = s.producer.Publish(ctx, event.ToTaskMessage())
+								if pubErr != nil {
+									log.Error().
+										Stack().
+										Err(pubErr).
+										Int64("task.id", taskID).
+										Int64("child_task.id", childTaskID).
+										Msg("failed to queue schedule_task for new child task")
+								} else {
+									log.Debug().
+										Int64("task.id", taskID).
+										Int64("child_task.id", childTaskID).
+										Msg("schedule_task queued successfully for new child task")
+								}
+							}
 						}
 					}
 				}
 			}
-
 		}
 	}
 
-	// If this is a parent task (has cron_expression), mark all child tasks (not done/deleted) as done and delete from queue
-	if task.CronExpression != nil {
+	// If this is a parent task with a recurrence rule, mark all child tasks (not done/deleted) as done and delete from queue
+	if hasRecurrenceRule(task) {
 		log.Debug().
 			Int64("task.id", taskID).
 			Msg("parent task marked as done, marking all child tasks (not done/deleted) as done and deleting from queue")
@@ -2199,6 +2246,9 @@ func (s *TaskService) taskToMap(task *models.Task) map[string]interface{} {
 	if task.CronExpression != nil {
 		result["cron_expression"] = *task.CronExpression
 	}
+	if task.RRule != nil {
+		result["rrule"] = *task.RRule
+	}
 	if task.MessengerRelatedUserID != nil {
 		result["messenger_related_user_id"] = *task.MessengerRelatedUserID
 	}
@@ -2257,29 +2307,35 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 			return errors.WithStack(err)
 		}
 
-		if parentTask.CronExpression != nil {
-			// Calculate parent's next execution time from nowUTC
-			parentNextTime := cronexpr.MustParse(*parentTask.CronExpression).Next(nowUTC)
-
-			// Check if newStartDate falls on the same day as parent's next execution
-			// If they are on the same day, use parent's cron time instead
-			newStartDateDay := time.Date(newStartDate.Year(), newStartDate.Month(), newStartDate.Day(), 0, 0, 0, 0, newStartDate.Location())
-			parentNextTimeDay := time.Date(parentNextTime.Year(), parentNextTime.Month(), parentNextTime.Day(), 0, 0, 0, 0, parentNextTime.Location())
-
-			if newStartDateDay.Equal(parentNextTimeDay) {
-				log.Info().
+		if hasRecurrenceRule(parentTask) {
+			parentNextTime, parentNextErr := nextRecurrenceAfter(parentTask, nowUTC)
+			if parentNextErr != nil {
+				log.Error().
+					Stack().
+					Err(parentNextErr).
 					Int64("task.id", task.ID).
 					Int64("parent.id", *task.ParentID).
-					Time("new_start_date", newStartDate).
-					Time("parent_next_time", parentNextTime).
-					Msg("rescheduling aligned to parent cron: conflict detected, using parent execution time")
-				span.SetAttributes(
-					attribute.String("reason", "conflict_with_parent"),
-					attribute.String("parent_next_time", parentNextTime.Format(time.RFC3339)),
-				)
-				span.SetStatus(codes.Ok, "rescheduling aligned to parent cron schedule")
+					Msg("failed to compute parent next recurrence for reschedule conflict check")
+			} else {
+				// Check if newStartDate falls on the same day as parent's next execution
+				newStartDateDay := time.Date(newStartDate.Year(), newStartDate.Month(), newStartDate.Day(), 0, 0, 0, 0, newStartDate.Location())
+				parentNextTimeDay := time.Date(parentNextTime.Year(), parentNextTime.Month(), parentNextTime.Day(), 0, 0, 0, 0, parentNextTime.Location())
 
-				newStartDate = parentNextTime
+				if newStartDateDay.Equal(parentNextTimeDay) {
+					log.Info().
+						Int64("task.id", task.ID).
+						Int64("parent.id", *task.ParentID).
+						Time("new_start_date", newStartDate).
+						Time("parent_next_time", parentNextTime).
+						Msg("rescheduling aligned to parent recurrence: conflict detected, using parent execution time")
+					span.SetAttributes(
+						attribute.String("reason", "conflict_with_parent"),
+						attribute.String("parent_next_time", parentNextTime.Format(time.RFC3339)),
+					)
+					span.SetStatus(codes.Ok, "rescheduling aligned to parent recurrence schedule")
+
+					newStartDate = parentNextTime
+				}
 			}
 		}
 	}
@@ -2467,9 +2523,9 @@ func (s *TaskService) RescheduleTasks(ctx context.Context, tasks []*models.Task)
 	return nil
 }
 
-// RescheduleCronTasks updates start_date for tasks with cron expression and requires_confirmation = false
-// that have passed their start_date. It calculates the next execution time from cron expression
-// and updates only the start_date field without publishing to queue.
+// RescheduleCronTasks updates start_date for recurring parent tasks (cron_expression or rrule) with
+// requires_confirmation = false that have passed their start_date. It calculates the next execution
+// time from the recurrence rule and updates only the start_date field without publishing to queue.
 func (s *TaskService) RescheduleCronTasks(ctx context.Context, tasks []*models.Task) error {
 	ctx, span := s.tracer.Start(ctx, "task_service.RescheduleCronTasks",
 		trace.WithAttributes(
@@ -2486,25 +2542,41 @@ func (s *TaskService) RescheduleCronTasks(ctx context.Context, tasks []*models.T
 	var failedCount int
 
 	for _, task := range tasks {
-		if task.CronExpression == nil {
-			log.Warn().
-				Int64("task.id", task.ID).
-				Msg("task has no cron expression, skipping")
-			continue
+		now := time.Now().UTC()
+		var nextTime time.Time
+		var hasRecurrence bool
+
+		if recurrenceFieldSet(task.CronExpression) {
+			hasRecurrence = true
+			nextTime = cronexpr.MustParse(*task.CronExpression).Next(now)
+		} else if recurrenceFieldSet(task.RRule) {
+			hasRecurrence = true
+			var err error
+			nextTime, err = nextStartFromRRule(now, *task.RRule, task.StartDate)
+			if err != nil {
+				failedCount++
+				log.Error().
+					Stack().
+					Err(err).
+					Int64("task.id", task.ID).
+					Str("rrule", *task.RRule).
+					Msg("failed to compute next start_date from rrule")
+				continue
+			}
 		}
 
-		// Calculate next execution time from cron expression
-		// Use current time as base to get the next occurrence
-		// Since we filter by start_date < NOW(), all tasks have passed their start_date
-		now := time.Now().UTC()
-		nextTime := cronexpr.MustParse(*task.CronExpression).Next(now)
+		if !hasRecurrence {
+			log.Warn().
+				Int64("task.id", task.ID).
+				Msg("task has no cron_expression or rrule, skipping")
+			continue
+		}
 
 		log.Info().
 			Int64("task.id", task.ID).
 			Time("old_start_date", task.StartDate).
 			Time("new_start_date", nextTime).
-			Str("cron_expression", *task.CronExpression).
-			Msg("updating start_date for cron task")
+			Msg("updating start_date for recurring task without confirmation")
 
 		// Update only the start_date field
 		task.StartDate = nextTime
@@ -2517,13 +2589,13 @@ func (s *TaskService) RescheduleCronTasks(ctx context.Context, tasks []*models.T
 				Stack().
 				Err(err).
 				Int64("task.id", task.ID).
-				Msg("failed to update cron task start_date")
+				Msg("failed to update recurring task start_date")
 		} else {
 			updatedCount++
 			log.Info().
 				Int64("task.id", task.ID).
 				Time("new_start_date", nextTime).
-				Msg("cron task start_date updated successfully")
+				Msg("recurring task start_date updated successfully")
 		}
 	}
 

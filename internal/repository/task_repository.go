@@ -72,8 +72,8 @@ func (r *taskRepository) CreateTask(ctx context.Context, task *models.Task) (int
 		Msg("creating task in database")
 
 	query, args, err := r.sb.Insert("tasks").
-		Columns("title", "description", "user_id", "messenger_related_user_id", "status", "parent_id", "start_date", "finish_date", "cron_expression", "requires_confirmation").
-		Values(task.Title, task.Description, task.UserID, task.MessengerRelatedUserID, task.Status, task.ParentID, task.StartDate, task.FinishDate, task.CronExpression, task.RequiresConfirmation).
+		Columns("title", "description", "user_id", "messenger_related_user_id", "status", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "requires_confirmation").
+		Values(task.Title, task.Description, task.UserID, task.MessengerRelatedUserID, task.Status, task.ParentID, task.StartDate, task.FinishDate, task.CronExpression, task.RRule, task.RequiresConfirmation).
 		Suffix("RETURNING id").
 		ToSql()
 	if err != nil {
@@ -109,7 +109,7 @@ func (r *taskRepository) GetTaskByID(ctx context.Context, id int64) (*models.Tas
 		Int64("task.id", id).
 		Msg("getting task by id from database")
 
-	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "status", "created_at", "requires_confirmation").
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": id}).
@@ -167,7 +167,7 @@ func (r *taskRepository) GetTaskByIDWithoutStatusFilter(ctx context.Context, id 
 		Int64("task.id", id).
 		Msg("getting task by id from database (without status filter)")
 
-	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "status", "created_at", "requires_confirmation").
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": id}).
@@ -228,12 +228,15 @@ func (r *taskRepository) GetTasksByUserID(ctx context.Context, userID int64) ([]
 		Int64("user.id", userID).
 		Msg("getting tasks by user id from database")
 
-	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "status", "created_at", "requires_confirmation").
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"user_id": userID}).
 		Where(squirrel.Or{
-			squirrel.Eq{"cron_expression": nil},
+			squirrel.And{
+				squirrel.Eq{"cron_expression": nil},
+				squirrel.Eq{"rrule": nil},
+			},
 			squirrel.NotEq{"parent_id": nil},
 		}).
 		ToSql()
@@ -344,11 +347,10 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 		countBuilder = countBuilder.Where(squirrel.Eq{"requires_confirmation": *requiresConfirmation})
 		span.SetAttributes(attribute.Bool("filter.requires_confirmation", *requiresConfirmation))
 	}
-	// Exclude tasks where cron_expression IS NOT NULL AND requires_confirmation == True at the same time
-	// This implements: NOT (cron_expression IS NOT NULL AND requires_confirmation == True)
-	// Using raw SQL expression to properly exclude: (cron_expression IS NULL OR requires_confirmation = false)
+	// Exclude tasks where (cron_expression OR rrule) IS NOT NULL AND requires_confirmation == True
+	// Using: (cron_expression IS NULL AND rrule IS NULL) OR requires_confirmation = false
 	if excludeCronWithConfirmation != nil && *excludeCronWithConfirmation {
-		countBuilder = countBuilder.Where(squirrel.Expr("(cron_expression IS NULL OR requires_confirmation = false)"))
+		countBuilder = countBuilder.Where(squirrel.Expr("((cron_expression IS NULL AND rrule IS NULL) OR requires_confirmation = false)"))
 		span.SetAttributes(attribute.Bool("filter.exclude_cron_with_confirmation", true))
 	}
 
@@ -369,7 +371,7 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 	}
 
 	// Build data query with filters
-	dataBuilder := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "status", "created_at", "requires_confirmation").
+	dataBuilder := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"user_id": userID})
@@ -406,11 +408,9 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 	if requiresConfirmation != nil {
 		dataBuilder = dataBuilder.Where(squirrel.Eq{"requires_confirmation": *requiresConfirmation})
 	}
-	// Exclude tasks where cron_expression IS NOT NULL AND requires_confirmation == True at the same time
-	// This implements: NOT (cron_expression IS NOT NULL AND requires_confirmation == True)
-	// Using raw SQL expression to properly exclude: (cron_expression IS NULL OR requires_confirmation = false)
+	// Exclude tasks where (cron_expression OR rrule) IS NOT NULL AND requires_confirmation == True
 	if excludeCronWithConfirmation != nil && *excludeCronWithConfirmation {
-		dataBuilder = dataBuilder.Where(squirrel.Expr("(cron_expression IS NULL OR requires_confirmation = false)"))
+		dataBuilder = dataBuilder.Where(squirrel.Expr("((cron_expression IS NULL AND rrule IS NULL) OR requires_confirmation = false)"))
 	}
 
 	query, args, err := dataBuilder.
@@ -461,7 +461,7 @@ func (r *taskRepository) GetChildTasksByParentID(ctx context.Context, parentID i
 		Int64("parent.id", parentID).
 		Msg("getting child tasks by parent id from database")
 
-	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "status", "created_at", "requires_confirmation").
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"parent_id": parentID}).
@@ -516,6 +516,7 @@ func (r *taskRepository) UpdateTask(ctx context.Context, task *models.Task) erro
 		Set("start_date", task.StartDate).
 		Set("finish_date", task.FinishDate).
 		Set("cron_expression", task.CronExpression).
+		Set("rrule", task.RRule).
 		Set("requires_confirmation", task.RequiresConfirmation).
 		Set("parent_id", task.ParentID).
 		Set("updated_at", time.Now().UTC()).
@@ -569,6 +570,7 @@ func (r *taskRepository) UpdateTaskWithTx(ctx context.Context, tx *sqlx.Tx, task
 		Set("start_date", task.StartDate).
 		Set("finish_date", task.FinishDate).
 		Set("cron_expression", task.CronExpression).
+		Set("rrule", task.RRule).
 		Set("requires_confirmation", task.RequiresConfirmation).
 		Set("parent_id", task.ParentID).
 		Set("updated_at", time.Now().UTC()).
@@ -788,7 +790,7 @@ func (r *taskRepository) DeleteChildTasksWithTx(ctx context.Context, tx *sqlx.Tx
 }
 
 // GetTasksNeedingRescheduling retrieves tasks that need to be rescheduled:
-// - no cron expression (cron_expression IS NULL)
+// - no recurrence on the row itself (cron_expression IS NULL AND rrule IS NULL), or the task is a child (parent_id IS NOT NULL)
 // - status is 'scheduled'
 // - start_date has passed (start_date < NOW())
 func (r *taskRepository) GetTasksNeedingRescheduling(ctx context.Context) ([]*models.Task, error) {
@@ -799,7 +801,7 @@ func (r *taskRepository) GetTasksNeedingRescheduling(ctx context.Context) ([]*mo
 	log.Debug().
 		Msg("getting tasks needing rescheduling from database")
 
-	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "status", "created_at", "requires_confirmation").
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Or{
@@ -808,7 +810,10 @@ func (r *taskRepository) GetTasksNeedingRescheduling(ctx context.Context) ([]*mo
 			squirrel.Eq{"status": string(models.TaskStatusPostponed)},
 		}).
 		Where(squirrel.Or{
-			squirrel.Eq{"cron_expression": nil},
+			squirrel.And{
+				squirrel.Eq{"cron_expression": nil},
+				squirrel.Eq{"rrule": nil},
+			},
 			squirrel.NotEq{"parent_id": nil},
 		}).
 		Where(squirrel.Lt{"start_date": time.Now().UTC()}).
@@ -839,7 +844,7 @@ func (r *taskRepository) GetTasksNeedingRescheduling(ctx context.Context) ([]*mo
 }
 
 // GetTasksWithCronNeedingRescheduling retrieves tasks that need to be rescheduled:
-// - have cron expression (cron_expression IS NOT NULL)
+// - have a recurrence rule (cron_expression IS NOT NULL OR rrule IS NOT NULL)
 // - requires_confirmation = false
 // - status is 'scheduled'
 // - start_date has passed (start_date < NOW())
@@ -851,11 +856,14 @@ func (r *taskRepository) GetTasksWithCronNeedingRescheduling(ctx context.Context
 	log.Debug().
 		Msg("getting tasks with cron needing rescheduling from database")
 
-	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "status", "created_at", "requires_confirmation").
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"status": string(models.TaskStatusScheduled)}).
-		Where(squirrel.NotEq{"cron_expression": nil}).
+		Where(squirrel.Or{
+			squirrel.NotEq{"cron_expression": nil},
+			squirrel.NotEq{"rrule": nil},
+		}).
 		Where(squirrel.Eq{"requires_confirmation": false}).
 		Where(squirrel.Lt{"start_date": time.Now().UTC()}).
 		ToSql()
@@ -955,11 +963,9 @@ func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, or
 		countBuilder = countBuilder.Where(squirrel.Eq{"requires_confirmation": *requiresConfirmation})
 		span.SetAttributes(attribute.Bool("filter.requires_confirmation", *requiresConfirmation))
 	}
-	// Exclude tasks where cron_expression IS NOT NULL AND requires_confirmation == True at the same time
-	// This implements: NOT (cron_expression IS NOT NULL AND requires_confirmation == True)
-	// Using raw SQL expression to properly exclude: (cron_expression IS NULL OR requires_confirmation = false)
+	// Exclude tasks where (cron_expression OR rrule) IS NOT NULL AND requires_confirmation == True
 	if excludeCronWithConfirmation != nil && *excludeCronWithConfirmation {
-		countBuilder = countBuilder.Where(squirrel.Expr("(cron_expression IS NULL OR requires_confirmation = false)"))
+		countBuilder = countBuilder.Where(squirrel.Expr("((cron_expression IS NULL AND rrule IS NULL) OR requires_confirmation = false)"))
 		span.SetAttributes(attribute.Bool("filter.exclude_cron_with_confirmation", true))
 	}
 
@@ -980,7 +986,7 @@ func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, or
 	}
 
 	// Build data query with filters
-	dataBuilder := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "status", "created_at", "requires_confirmation").
+	dataBuilder := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil})
 
@@ -1012,11 +1018,9 @@ func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, or
 	if requiresConfirmation != nil {
 		dataBuilder = dataBuilder.Where(squirrel.Eq{"requires_confirmation": *requiresConfirmation})
 	}
-	// Exclude tasks where cron_expression IS NOT NULL AND requires_confirmation == True
-	// This implements: NOT (cron_expression IS NOT NULL AND requires_confirmation == True)
-	// Using raw SQL expression to properly exclude: (cron_expression IS NULL OR requires_confirmation = false)
+	// Exclude tasks where (cron_expression OR rrule) IS NOT NULL AND requires_confirmation == True
 	if excludeCronWithConfirmation != nil && *excludeCronWithConfirmation {
-		dataBuilder = dataBuilder.Where(squirrel.Expr("(cron_expression IS NULL OR requires_confirmation = false)"))
+		dataBuilder = dataBuilder.Where(squirrel.Expr("((cron_expression IS NULL AND rrule IS NULL) OR requires_confirmation = false)"))
 	}
 
 	query, args, err := dataBuilder.

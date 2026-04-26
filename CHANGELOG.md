@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
  - Task queueing logic now uses typed `queue.TaskEvent`/`TaskEventType` contracts instead of ad-hoc maps, while preserving the existing Celery-compatible `{ "task": ..., "args": [...] }` payloads.
 
 ### Added
+- **Tasks — RRULE**: optional iCalendar **RRULE** string on tasks (`rrule` column, API field `rrule`) as an alternative to `cron_expression` for defining recurrence. `cron_expression` and `rrule` cannot both be set. RRULE strings are parsed and validated with [teambition/rrule-go](https://github.com/teambition/rrule-go); `DTSTART` defaults to the task’s `start_date` when omitted in the rule. Same parent/child model as cron: with `requires_confirmation`, the parent keeps the rule and children get the next concrete `start_date`; `RescheduleCronTasks` and “mark done → next child” use the next occurrence from either cron or RRULE. Database migration: `tasks.rrule` (TEXT).
 - **GET /api/v1/backlogs**: добавлен query-параметр `completed` для фильтрации по статусу завершения (`completed=false` — только незавершённые, `completed=true` — только завершённые).
  - New `producer.enabled` configuration flag; when set to `false`, the app runs in DB-only mode using a no-op publisher instead of RabbitMQ.
  - Explicit queue contract type `queue.TaskMessage` for task-related messages, preserving the existing `{ "task": ..., "args": [...] }` JSON format used by workers.
