@@ -441,6 +441,7 @@ func TestBacklogService_DeleteBacklog_Success(t *testing.T) {
 	ctx := context.Background()
 	backlogID := int64(1)
 
+	backlogRepo.EXPECT().GetBacklogByID(gomock.Any(), backlogID).Return(&models.Backlog{ID: backlogID, UserID: 1}, nil)
 	backlogRepo.EXPECT().DeleteBacklog(gomock.Any(), backlogID).Return(nil)
 
 	err := service.DeleteBacklog(ctx, backlogID)
@@ -452,7 +453,7 @@ func TestBacklogService_DeleteBacklog_NotFound(t *testing.T) {
 	ctx := context.Background()
 	backlogID := int64(1)
 
-	backlogRepo.EXPECT().DeleteBacklog(gomock.Any(), backlogID).Return(errs.ErrNotFound)
+	backlogRepo.EXPECT().GetBacklogByID(gomock.Any(), backlogID).Return(nil, errs.ErrNotFound)
 
 	err := service.DeleteBacklog(ctx, backlogID)
 	assert.Error(t, err)
@@ -465,6 +466,7 @@ func TestBacklogService_DeleteBacklog_RepositoryError(t *testing.T) {
 	backlogID := int64(1)
 	expectedErr := errors.New("delete failed")
 
+	backlogRepo.EXPECT().GetBacklogByID(gomock.Any(), backlogID).Return(&models.Backlog{ID: backlogID, UserID: 1}, nil)
 	backlogRepo.EXPECT().DeleteBacklog(gomock.Any(), backlogID).Return(expectedErr)
 
 	err := service.DeleteBacklog(ctx, backlogID)

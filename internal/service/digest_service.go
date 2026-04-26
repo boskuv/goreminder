@@ -182,8 +182,7 @@ func (s *DigestService) CreateDigestSettings(ctx context.Context, settings *mode
 	}
 
 	span.SetAttributes(attribute.Int64("digest_settings.id", settingsID))
-	log.Debug().
-		Int64("digest_settings.id", settingsID).
+	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "created", "digest_settings", settingsID, mapKeysForAudit(digestSettingsToAuditMap(settings)))).
 		Int64("user.id", settings.UserID).
 		Msg("digest settings created successfully")
 
@@ -247,6 +246,8 @@ func (s *DigestService) UpdateDigestSettings(ctx context.Context, userID int64, 
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
 	}
+
+	beforeMap := digestSettingsToAuditMap(oldSettings)
 
 	// Update fields if provided
 	if updateRequest.Enabled != nil {
@@ -334,7 +335,8 @@ func (s *DigestService) UpdateDigestSettings(ctx context.Context, userID int64, 
 			Msg("update_digest_settings message queued successfully")
 	}
 
-	log.Debug().
+	afterMap := digestSettingsToAuditMap(oldSettings)
+	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "updated", "digest_settings", oldSettings.ID, changedFieldsFromMaps(beforeMap, afterMap))).
 		Int64("user.id", userID).
 		Msg("digest settings updated successfully")
 	span.SetStatus(codes.Ok, "digest settings updated successfully")
@@ -605,7 +607,7 @@ func (s *DigestService) DeleteDigestSettings(ctx context.Context, userID int64, 
 			Msg("delete_digest_settings message queued successfully")
 	}
 
-	log.Debug().
+	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "deleted", "digest_settings", oldSettings.ID, mapKeysForAudit(digestSettingsToAuditMap(oldSettings)))).
 		Int64("user.id", userID).
 		Msg("digest settings deleted successfully")
 	span.SetStatus(codes.Ok, "digest settings deleted successfully")
@@ -632,4 +634,20 @@ func validateTimeFormat(timeStr string) error {
 		return errors.Wrap(err, "time must be in HH:MM format (e.g., 07:00, 10:00)")
 	}
 	return nil
+}
+
+func digestSettingsToAuditMap(settings *models.DigestSettings) map[string]interface{} {
+	result := map[string]interface{}{
+		"id":           settings.ID,
+		"user_id":      settings.UserID,
+		"enabled":      settings.Enabled,
+		"weekday_time": settings.WeekdayTime,
+		"weekend_time": settings.WeekendTime,
+	}
+
+	if settings.MessengerRelatedUserID != nil {
+		result["messenger_related_user_id"] = *settings.MessengerRelatedUserID
+	}
+
+	return result
 }

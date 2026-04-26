@@ -165,6 +165,10 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 	}
 
 	span.SetAttributes(attribute.Int64("task.id", taskID))
+	createdTaskFields := mapKeysForAudit(s.taskToMap(task))
+	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "created", "task", taskID, createdTaskFields)).
+		Int64("user.id", task.UserID).
+		Msg("task created successfully")
 	log.Debug().
 		Int64("task.id", taskID).
 		Int64("user.id", task.UserID).
@@ -1219,6 +1223,9 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		updateRequest.StartDate != nil || updateRequest.FinishDate != nil ||
 		updateRequest.CronExpression != nil || updateRequest.RRule != nil || updateRequest.RequiresConfirmation != nil
 
+	newTaskMap := s.taskToMap(oldTask)
+	updateChangedFields := changedFieldsFromMaps(oldTaskMap, newTaskMap)
+
 	if hasOtherChanges || (updateRequest.Status != nil && !statusChanged) {
 		_, updateHistorySpan := s.tracer.Start(ctx, "task_service.record_task_updated_history",
 			trace.WithAttributes(
@@ -1230,7 +1237,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			UserID:   oldTask.UserID,
 			Action:   string(models.TaskHistoryActionUpdated),
 			OldValue: oldTaskMap,
-			NewValue: s.taskToMap(oldTask),
+			NewValue: newTaskMap,
 		}
 		if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
 			log.Error().
@@ -1251,8 +1258,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		updateHistorySpan.End()
 	}
 
-	log.Debug().
-		Int64("task.id", taskID).
+	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "updated", "task", taskID, updateChangedFields)).
+		Int64("user.id", oldTask.UserID).
 		Msg("task updated successfully")
 	span.SetStatus(codes.Ok, "task updated successfully")
 	return oldTask, nil
@@ -1332,8 +1339,9 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		}
 		deleteHistorySpan.End()
 
-		log.Debug().
-			Int64("task.id", taskID).
+		deletedTaskFields := mapKeysForAudit(s.taskToMap(task))
+		withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "deleted", "task", taskID, deletedTaskFields)).
+			Int64("user.id", task.UserID).
 			Msg("task deleted successfully (non-transactional fallback)")
 		span.SetStatus(codes.Ok, "task deleted successfully (non-transactional fallback)")
 		return nil
@@ -1531,8 +1539,9 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 	}
 	deleteHistorySpan.End()
 
-	log.Debug().
-		Int64("task.id", taskID).
+	deletedTaskFields := mapKeysForAudit(s.taskToMap(task))
+	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "deleted", "task", taskID, deletedTaskFields)).
+		Int64("user.id", task.UserID).
 		Msg("task deleted successfully")
 	span.SetStatus(codes.Ok, "task deleted successfully")
 	return nil

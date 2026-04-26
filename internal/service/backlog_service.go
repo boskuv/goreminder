@@ -98,8 +98,7 @@ func (s *BacklogService) CreateBacklog(ctx context.Context, backlog *models.Back
 	}
 
 	span.SetAttributes(attribute.Int64("backlog.id", backlogID))
-	log.Debug().
-		Int64("backlog.id", backlogID).
+	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "created", "backlog", backlogID, mapKeysForAudit(backlogToAuditMap(backlog)))).
 		Int64("user.id", backlog.UserID).
 		Msg("backlog created successfully")
 
@@ -319,6 +318,8 @@ func (s *BacklogService) UpdateBacklog(ctx context.Context, id int64, updateRequ
 		return nil, errors.WithStack(err)
 	}
 
+	beforeMap := backlogToAuditMap(oldBacklog)
+
 	// Update fields if provided
 	if updateRequest.Title != nil {
 		if *updateRequest.Title == "" {
@@ -354,8 +355,9 @@ func (s *BacklogService) UpdateBacklog(ctx context.Context, id int64, updateRequ
 		return nil, errors.WithStack(err)
 	}
 
-	log.Debug().
-		Int64("backlog.id", id).
+	afterMap := backlogToAuditMap(oldBacklog)
+	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "updated", "backlog", id, changedFieldsFromMaps(beforeMap, afterMap))).
+		Int64("user.id", oldBacklog.UserID).
 		Msg("backlog updated successfully")
 	span.SetStatus(codes.Ok, "backlog updated successfully")
 	return oldBacklog, nil
@@ -374,7 +376,18 @@ func (s *BacklogService) DeleteBacklog(ctx context.Context, id int64) error {
 		Int64("backlog.id", id).
 		Msg("deleting backlog")
 
-	err := s.backlogRepo.DeleteBacklog(ctx, id)
+	existingBacklog, err := s.backlogRepo.GetBacklogByID(ctx, id)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("backlog.id", id).
+			Msg("failed to get backlog for deletion")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.WithStack(err)
+	}
+
+	err = s.backlogRepo.DeleteBacklog(ctx, id)
 	if err != nil {
 		log.Debug().
 			Err(err).
@@ -385,9 +398,27 @@ func (s *BacklogService) DeleteBacklog(ctx context.Context, id int64) error {
 		return errors.WithStack(err)
 	}
 
-	log.Debug().
-		Int64("backlog.id", id).
+	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "deleted", "backlog", id, mapKeysForAudit(backlogToAuditMap(existingBacklog)))).
+		Int64("user.id", existingBacklog.UserID).
 		Msg("backlog deleted successfully")
 	span.SetStatus(codes.Ok, "backlog deleted successfully")
 	return nil
+}
+
+func backlogToAuditMap(backlog *models.Backlog) map[string]interface{} {
+	result := map[string]interface{}{
+		"id":          backlog.ID,
+		"title":       backlog.Title,
+		"description": backlog.Description,
+		"user_id":     backlog.UserID,
+	}
+
+	if backlog.CompletedAt != nil {
+		result["completed_at"] = *backlog.CompletedAt
+	}
+	if backlog.MessengerRelatedUserID != nil {
+		result["messenger_related_user_id"] = *backlog.MessengerRelatedUserID
+	}
+
+	return result
 }

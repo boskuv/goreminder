@@ -97,8 +97,7 @@ func (s *TargetService) CreateTarget(ctx context.Context, target *models.Target)
 	}
 
 	span.SetAttributes(attribute.Int64("target.id", targetID))
-	log.Debug().
-		Int64("target.id", targetID).
+	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "created", "target", targetID, mapKeysForAudit(targetToAuditMap(target)))).
 		Int64("user.id", target.UserID).
 		Msg("target created successfully")
 
@@ -211,6 +210,8 @@ func (s *TargetService) UpdateTarget(ctx context.Context, id int64, updateReques
 		return nil, errors.WithStack(err)
 	}
 
+	beforeMap := targetToAuditMap(oldTarget)
+
 	// Update fields if provided
 	if updateRequest.Title != nil {
 		if *updateRequest.Title == "" {
@@ -246,8 +247,9 @@ func (s *TargetService) UpdateTarget(ctx context.Context, id int64, updateReques
 		return nil, errors.WithStack(err)
 	}
 
-	log.Debug().
-		Int64("target.id", id).
+	afterMap := targetToAuditMap(oldTarget)
+	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "updated", "target", id, changedFieldsFromMaps(beforeMap, afterMap))).
+		Int64("user.id", oldTarget.UserID).
 		Msg("target updated successfully")
 	span.SetStatus(codes.Ok, "target updated successfully")
 	return oldTarget, nil
@@ -266,7 +268,18 @@ func (s *TargetService) DeleteTarget(ctx context.Context, id int64) error {
 		Int64("target.id", id).
 		Msg("deleting target")
 
-	err := s.targetRepo.DeleteTarget(ctx, id)
+	existingTarget, err := s.targetRepo.GetTargetByID(ctx, id)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("target.id", id).
+			Msg("failed to get target for deletion")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.WithStack(err)
+	}
+
+	err = s.targetRepo.DeleteTarget(ctx, id)
 	if err != nil {
 		log.Debug().
 			Err(err).
@@ -277,9 +290,27 @@ func (s *TargetService) DeleteTarget(ctx context.Context, id int64) error {
 		return errors.WithStack(err)
 	}
 
-	log.Debug().
-		Int64("target.id", id).
+	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "deleted", "target", id, mapKeysForAudit(targetToAuditMap(existingTarget)))).
+		Int64("user.id", existingTarget.UserID).
 		Msg("target deleted successfully")
 	span.SetStatus(codes.Ok, "target deleted successfully")
 	return nil
+}
+
+func targetToAuditMap(target *models.Target) map[string]interface{} {
+	result := map[string]interface{}{
+		"id":          target.ID,
+		"title":       target.Title,
+		"description": target.Description,
+		"user_id":     target.UserID,
+	}
+
+	if target.CompletedAt != nil {
+		result["completed_at"] = *target.CompletedAt
+	}
+	if target.MessengerRelatedUserID != nil {
+		result["messenger_related_user_id"] = *target.MessengerRelatedUserID
+	}
+
+	return result
 }

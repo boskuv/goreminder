@@ -612,6 +612,11 @@ Structured logging using Zerolog:
 - Context-aware logging with request IDs
 - Configurable log levels
 - Request/response logging with latency tracking
+- Audit-focused CRUD logs in service layer with unified `audit.*` attributes:
+  - `audit.operation`, `audit.entity`, `audit.entity_id`
+  - `audit.actor_id` (`unknown` when actor is not available in context)
+  - `audit.changed_fields`, `audit.changed_count` for create/update/delete summaries
+  - Sensitive values are not logged directly (for example, user password hash is represented as a boolean flag only)
 
 ## API Documentation
 

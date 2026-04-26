@@ -349,6 +349,7 @@ func TestTargetService_DeleteTarget_Success(t *testing.T) {
 	ctx := context.Background()
 	targetID := int64(42)
 
+	targetRepo.EXPECT().GetTargetByID(gomock.Any(), targetID).Return(&models.Target{ID: targetID, UserID: 1}, nil)
 	targetRepo.EXPECT().DeleteTarget(gomock.Any(), targetID).Return(nil)
 
 	err := service.DeleteTarget(ctx, targetID)
@@ -360,7 +361,7 @@ func TestTargetService_DeleteTarget_NotFound(t *testing.T) {
 	ctx := context.Background()
 	targetID := int64(42)
 
-	targetRepo.EXPECT().DeleteTarget(gomock.Any(), targetID).Return(errs.ErrNotFound)
+	targetRepo.EXPECT().GetTargetByID(gomock.Any(), targetID).Return(nil, errs.ErrNotFound)
 
 	err := service.DeleteTarget(ctx, targetID)
 	assert.Error(t, err)
@@ -373,6 +374,7 @@ func TestTargetService_DeleteTarget_RepositoryError(t *testing.T) {
 	targetID := int64(42)
 	expectedErr := errors.New("database error")
 
+	targetRepo.EXPECT().GetTargetByID(gomock.Any(), targetID).Return(&models.Target{ID: targetID, UserID: 1}, nil)
 	targetRepo.EXPECT().DeleteTarget(gomock.Any(), targetID).Return(expectedErr)
 
 	err := service.DeleteTarget(ctx, targetID)
