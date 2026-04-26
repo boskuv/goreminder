@@ -21,3 +21,13 @@ func TestValidateCronExpressionAndRRuleExclusive(t *testing.T) {
 	require.NoError(t, validateCronExpressionAndRRuleExclusive(nil, ptrString("FREQ=DAILY")))
 	require.Error(t, validateCronExpressionAndRRuleExclusive(ptrString("0 * * * *"), ptrString("FREQ=DAILY")))
 }
+
+func TestRecurrenceFieldChanged(t *testing.T) {
+	oldCron := ptrString("0 9 * * *")
+
+	require.False(t, recurrenceFieldChanged(nil, oldCron), "missing field in partial update must not be treated as changed")
+	require.False(t, recurrenceFieldChanged(ptrString("0 9 * * *"), oldCron), "same value must not be treated as changed")
+	require.True(t, recurrenceFieldChanged(ptrString("0 10 * * *"), oldCron), "different value must be treated as changed")
+	require.False(t, recurrenceFieldChanged(ptrString(""), nil), "empty string and nil should be treated as equivalent unset values")
+	require.True(t, recurrenceFieldChanged(ptrString("FREQ=DAILY"), nil), "setting previously unset recurrence must be treated as changed")
+}

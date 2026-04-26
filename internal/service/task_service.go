@@ -539,12 +539,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		titleChanged := updateRequest.Title != nil && *updateRequest.Title != oldTitle
 		descriptionChanged := updateRequest.Description != nil && *updateRequest.Description != oldDescription
 		startDateChanged := updateRequest.StartDate != nil && !updateRequest.StartDate.Equal(oldStartDate)
-		cronExpressionChanged := (updateRequest.CronExpression != nil && oldCronExpression == nil) ||
-			(updateRequest.CronExpression == nil && oldCronExpression != nil) ||
-			(updateRequest.CronExpression != nil && oldCronExpression != nil && *updateRequest.CronExpression != *oldCronExpression)
-		rruleChanged := (updateRequest.RRule != nil && oldRRule == nil) ||
-			(updateRequest.RRule == nil && oldRRule != nil) ||
-			(updateRequest.RRule != nil && oldRRule != nil && *updateRequest.RRule != *oldRRule)
+		cronExpressionChanged := recurrenceFieldChanged(updateRequest.CronExpression, oldCronExpression)
+		rruleChanged := recurrenceFieldChanged(updateRequest.RRule, oldRRule)
 		recurrenceScheduleChanged := cronExpressionChanged || rruleChanged
 		statusChangedToDeleted := statusChanged && oldTask.Status == string(models.TaskStatusDeleted)
 		statusChangedToScheduled := statusChanged && oldTask.Status == string(models.TaskStatusScheduled)
@@ -813,12 +809,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			titleChanged := updateRequest.Title != nil && *updateRequest.Title != oldTitle
 			descriptionChanged := updateRequest.Description != nil && *updateRequest.Description != oldDescription
 			startDateChanged := updateRequest.StartDate != nil && !updateRequest.StartDate.Equal(oldStartDate)
-			cronExpressionChanged := (updateRequest.CronExpression != nil && oldCronExpression == nil) ||
-				(updateRequest.CronExpression == nil && oldCronExpression != nil) ||
-				(updateRequest.CronExpression != nil && oldCronExpression != nil && *updateRequest.CronExpression != *oldCronExpression)
-			rruleChanged := (updateRequest.RRule != nil && oldRRule == nil) ||
-				(updateRequest.RRule == nil && oldRRule != nil) ||
-				(updateRequest.RRule != nil && oldRRule != nil && *updateRequest.RRule != *oldRRule)
+			cronExpressionChanged := recurrenceFieldChanged(updateRequest.CronExpression, oldCronExpression)
+			rruleChanged := recurrenceFieldChanged(updateRequest.RRule, oldRRule)
 			recurrenceScheduleChanged := cronExpressionChanged || rruleChanged
 			finishDateChanged := (updateRequest.FinishDate != nil && oldFinishDate == nil) ||
 				(updateRequest.FinishDate == nil && oldFinishDate != nil) ||

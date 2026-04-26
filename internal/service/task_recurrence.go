@@ -15,6 +15,23 @@ func recurrenceFieldSet(p *string) bool {
 	return p != nil && strings.TrimSpace(*p) != ""
 }
 
+// recurrenceFieldChanged reports whether a recurrence field was explicitly changed in a partial update.
+// Nil means "field not provided", so it's not a change.
+// Empty string and nil are treated as equivalent "not set" values.
+func recurrenceFieldChanged(updated, current *string) bool {
+	if updated == nil {
+		return false
+	}
+
+	updatedValue := strings.TrimSpace(*updated)
+	currentValue := ""
+	if current != nil {
+		currentValue = strings.TrimSpace(*current)
+	}
+
+	return updatedValue != currentValue
+}
+
 func validateCronExpressionAndRRuleExclusive(cronExpr, rrule *string) error {
 	if recurrenceFieldSet(cronExpr) && recurrenceFieldSet(rrule) {
 		return fmt.Errorf("cron_expression and rrule cannot both be set")

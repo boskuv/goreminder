@@ -580,6 +580,7 @@ The application includes custom validators for request validation:
 4. **`future_date`**: Validates that dates are in the future (UTC)
    - Ensures `start_date` is not in the past
    - Works with `time.Time` and `*time.Time` types
+   - For task updates, validation is applied only when `start_date` is explicitly provided in payload (partial update semantics)
    - Returns HTTP 400 with error message: `"field 'start_date' must be a date in the future (UTC)"`
 
 ### Validation Error Handling
@@ -906,6 +907,8 @@ curl -X PUT http://localhost:8080/api/v1/tasks/1 \
 ```
 
 **Note**: Updated `start_date` must be in the future (UTC).
+
+**Recurring update behavior**: updating task fields like `title`/`description` without passing `start_date` does not auto-shift the task date. Child `start_date` recalculation is triggered only when schedule-related fields (`start_date`, `cron_expression`, `rrule`) are explicitly changed.
 
 ### Update User
 ```bash
