@@ -26,7 +26,7 @@
 - **Swagger API Documentation**: Auto-generated interactive API documentation
 - **Pagination**: Built-in pagination support for list endpoints with page, page_size, and total_pages
 - **Filtering & Ordering**: Advanced filtering and ordering capabilities for tasks
-- **Request Validation**: Custom validators for cron expressions, task status, and future dates
+- **Request Validation**: Custom validators for cron expressions, task status, and future dates; recurring tasks additionally validate RRULE strings in the service layer when `rrule` is set
 - **Observability**: 
   - **Metrics**: Prometheus metrics with HTTP request duration and count
   - **Tracing**: OpenTelemetry integration with Jaeger for distributed tracing
@@ -108,7 +108,7 @@ The API publishes messages to RabbitMQ using a simple, Celery-style JSON contrac
 }
 ```
 
-This payload is represented in code by the low-level `queue.TaskMessage` struct and is sent via the `queue.Publisher` interface. At the domain level, task messages are modeled as `queue.TaskEvent` with a `TaskEventType` (`schedule_task`, `delete_task`, etc.), which are mapped to the Celery-style JSON. For deployments that should not use RabbitMQ, set `producer.enabled: false` in the config – the application will then use a no-op publisher and work purely at the database level.
+This payload is represented in code by the low-level `queue.TaskMessage` struct and is sent via the `queue.Publisher` interface. At the domain level, task messages are modeled as `queue.TaskEvent` with a `TaskEventType` (`schedule_task`, `delete_task`, etc.), which are mapped to the Celery-style JSON. The seventh argument still reflects the task row’s `cron_expression` only; executable child tasks usually have both `cron_expression` and `rrule` unset, with the parent holding `rrule` in the database. Workers that need the RRULE string should resolve it via `task_id` (for example from the API or DB). For deployments that should not use RabbitMQ, set `producer.enabled: false` in the config – the application will then use a no-op publisher and work purely at the database level.
 
 `internal/models.ScheduledTask` uses explicit action values (`"schedule"`, `"delete"`) via `ScheduledTaskActionSchedule` and `ScheduledTaskActionDelete` constants, which are dispatched in `TaskService.QueueTask` and converted into `queue.TaskEvent` instances before publishing.
 
@@ -156,6 +156,7 @@ erDiagram
         timestamp start_date
         timestamp finish_date
         varchar cron_expression
+        text rrule
         boolean requires_confirmation
         varchar status
         timestamp created_at
@@ -245,7 +246,7 @@ erDiagram
 ### Key Features
 
 - **Soft Deletes**: `users`, `tasks`, `user_messengers`, `backlogs`, and `targets` support soft deletes via `deleted_at` column
-- **Recurring Tasks**: Tasks can have a `parent_id` pointing to another task, enabling parent-child relationships for recurring tasks
+- **Recurring Tasks**: Tasks can have a `parent_id` pointing to another task, enabling parent-child relationships for recurring tasks. Recurrence on the parent is defined by either `cron_expression` or `rrule` (iCalendar RRULE), never both.
 - **Task History**: All task changes are tracked in `task_history` table with JSONB fields for old/new values
 - **Messenger Integration**: Users can link multiple messenger accounts via `user_messengers` table
 - **Digest Settings**: Users can configure daily digest times per messenger account
@@ -384,7 +385,7 @@ The `autoreschedule` option controls whether the task scheduler should run autom
 
 **What the Scheduler Does:**
 - Finds tasks that need rescheduling (tasks with `startDate` in the past that require confirmation)
-- Finds parent tasks with cron expressions that need their `startDate` updated
+- Finds parent tasks with a recurrence rule (`cron_expression` or `rrule`) that need their `startDate` updated
 - Automatically reschedules these tasks
 
 **Use Cases:**
@@ -570,11 +571,13 @@ The application includes custom validators for request validation:
    - Supports standard cron format
    - Example: `"0 9 * * *"` (daily at 9 AM)
 
-2. **`task_status`**: Validates task status values
+2. **`rrule` (recurrence)**: When `rrule` is present on create/update, the service validates the string with [rrule-go](https://github.com/teambition/rrule-go) and rejects it if `cron_expression` is also set.
+
+3. **`task_status`**: Validates task status values
    - Valid statuses: `pending`, `scheduled`, `done`, `rescheduled`, `postponed`, `deleted`
    - Returns HTTP 400 with descriptive error message
 
-3. **`future_date`**: Validates that dates are in the future (UTC)
+4. **`future_date`**: Validates that dates are in the future (UTC)
    - Ensures `start_date` is not in the past
    - Works with `time.Time` and `*time.Time` types
    - Returns HTTP 400 with error message: `"field 'start_date' must be a date in the future (UTC)"`
@@ -698,7 +701,7 @@ GoReminder supports two types of tasks: **one-time tasks** and **recurring tasks
 
 | Field | One-time Task | Recurring Task (Parent) | Recurring Task (Child) |
 |-------|---------------|------------------------|------------------------|
-| `cron_expression` | `null` | Required (e.g., `"0 9 * * *"`) | `null` |
+| `cron_expression` / `rrule` | both `null` | Exactly one recurrence field: non-empty **cron** or non-empty **RRULE** (iCalendar rule string, e.g. `FREQ=DAILY;INTERVAL=1`). The two fields cannot both be set. | both `null` (next `start_date` is derived from the parent’s rule) |
 | `requires_confirmation` | `true` | `true` or `false` | `true` only |
 | `parent_id` | `null` | `null` | Points to parent task ID |
 | Execution | Executes once at `start_date` | Does not execute directly | Executes at calculated `start_date` |
@@ -706,15 +709,15 @@ GoReminder supports two types of tasks: **one-time tasks** and **recurring tasks
 
 ### How Recurring Tasks Work
 
-1. **Parent Task**: Contains `cron_expression` and `requires_confirmation=true`. Does not execute directly.
+1. **Parent Task**: Stores recurrence as either `cron_expression` **or** `rrule` (not both). With `requires_confirmation=true`, the parent does not execute directly; children carry the next occurrence (same model as before for cron-only parents).
 2. **Child Task**: Created automatically from parent. Has `parent_id` pointing to parent. Executes at calculated `start_date`.
-3. When a child task is marked as **done**, a new child task is created with `start_date` calculated from parent's `cron_expression`.
+3. When a child task is marked as **done**, a new child task is created with `start_date` set to the parent’s next occurrence from **cron** or **RRULE**, whichever is configured.
 
 ### Reschedule Mechanism
 
 Rescheduling occurs when a task with `requires_confirmation=true` is not confirmed by the user.
 
-#### One-time Task (no `cron_expression`, `requires_confirmation=true`)
+#### One-time Task (no `cron_expression` and no `rrule`, `requires_confirmation=true`)
 
 1. Task is sent at `start_date`
 2. User does not confirm
@@ -728,14 +731,14 @@ Rescheduling occurs when a task with `requires_confirmation=true` is not confirm
 1. Child task is sent at `start_date`
 2. User does not confirm
 3. `RescheduleTask` is called:
-   - Checks if new `start_date` (+24h) conflicts with parent's next cron execution
+   - Checks if new `start_date` (+24h) conflicts with the parent’s next occurrence (cron or RRULE)
    - **If conflict**: Rescheduling is skipped (parent will create a new child)
    - **If no conflict**: `start_date` is moved forward by 24 hours, task is re-published
 
-#### Recurring Task Parent (has `cron_expression`, `requires_confirmation=false`)
+#### Recurring Task Parent (has `cron_expression` or `rrule`, `requires_confirmation=false`)
 
 1. `RescheduleCronTasks` is called for parent tasks without confirmation
-2. `start_date` is updated to next cron execution time
+2. `start_date` is updated to the next execution time from the parent’s cron or RRULE
 3. No queue publishing (parent tasks don't execute directly)
 
 ### Mark as Done Behavior
@@ -744,8 +747,8 @@ Rescheduling occurs when a task with `requires_confirmation=true` is not confirm
 
 1. Child task status → `done`, `finish_date` → now
 2. `worker.delete_task` is queued
-3. If parent exists and has `cron_expression`:
-   - New child task is created with `start_date` = next cron execution time
+3. If parent exists and has a recurrence rule (`cron_expression` or `rrule`):
+   - New child task is created with `start_date` = next occurrence from that rule
 
 #### Marking a Parent Task as Done
 
@@ -825,6 +828,8 @@ curl -X POST http://localhost:8080/api/v1/tasks \
 ```
 
 **Note**: `start_date` must be in the future (UTC). Past dates will return HTTP 400.
+
+For a recurring parent defined by RRULE instead of cron, send `rrule` (iCalendar string) and omit `cron_expression`, for example `"rrule": "FREQ=DAILY;INTERVAL=1"`.
 
 ### Get All Tasks with Filtering
 ```bash
