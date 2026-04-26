@@ -54,10 +54,11 @@ func main() {
 	// determine minimum logging level based on flag input
 	var minlvl zerolog.Level
 	var debugMode bool
+	minlvl, _ = zerolog.ParseLevel("info")
 	if os.Getenv("DEBUG") == "true" {
 		minlvl, _ = zerolog.ParseLevel("debug")
+		debugMode = true
 	}
-	minlvl, _ = zerolog.ParseLevel("info")
 
 	// setup logger with appropriate defaults
 	log := logger.New(os.Stdout, minlvl, true)
