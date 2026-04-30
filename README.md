@@ -915,6 +915,8 @@ curl -X PUT http://localhost:8080/api/v1/tasks/1 \
 
 **Recurring update behavior**: updating task fields like `title`/`description` without passing `start_date` does not auto-shift the task date. Child `start_date` recalculation is triggered only when schedule-related fields (`start_date`, `cron_expression`, `rrule`) are explicitly changed.
 
+**Clearing recurrence fields**: on `PUT /api/v1/tasks/:id`, omitted fields are not changed. To explicitly clear recurrence, pass an empty string for `cron_expression` or `rrule`; the service normalizes empty strings to `NULL` in the database. If a recurring parent is converted to single by clearing recurrence, active child tasks are removed while `done/deleted` children are preserved.
+
 ### Update User
 ```bash
 curl -X PUT http://localhost:8080/api/v1/users/1 \
