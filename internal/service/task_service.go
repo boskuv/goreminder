@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	errs "github.com/boskuv/goreminder/internal/errors"
@@ -432,10 +433,18 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		oldTask.FinishDate = updateRequest.FinishDate
 	}
 	if updateRequest.CronExpression != nil {
-		oldTask.CronExpression = updateRequest.CronExpression
+		if strings.TrimSpace(*updateRequest.CronExpression) == "" {
+			oldTask.CronExpression = nil
+		} else {
+			oldTask.CronExpression = updateRequest.CronExpression
+		}
 	}
 	if updateRequest.RRule != nil {
-		oldTask.RRule = updateRequest.RRule
+		if strings.TrimSpace(*updateRequest.RRule) == "" {
+			oldTask.RRule = nil
+		} else {
+			oldTask.RRule = updateRequest.RRule
+		}
 	}
 
 	if updateRequest.RequiresConfirmation != nil {
@@ -453,6 +462,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 
 	// Check if this is a parent task after update (recurrence + requires_confirmation)
 	isParentTask := isRecurrenceParentWithConfirmation(oldTask)
+	recurrenceRemoved := wasParentTask && !hasRecurrenceRule(oldTask)
+	deletedActiveChildTasksCount := 0
 
 	// Get database connection for transaction if we need to update child tasks
 	// Transaction is needed if task was or is a parent task (to handle child tasks synchronization)
@@ -806,6 +817,68 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					Time("start_date", oldTask.StartDate).
 					Msg("parent task startDate is in the past, skipping queue publication (only DB update)")
 			}
+		} else if recurrenceRemoved {
+			log.Debug().
+				Int64("task.id", taskID).
+				Msg("recurrence removed, converting parent task to single and deleting active child tasks")
+
+			if len(childTasks) > 0 {
+				if oldTask.MessengerRelatedUserID == nil {
+					err := errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", oldTask.ID))
+					span.RecordError(err)
+					span.SetStatus(codes.Error, err.Error())
+					return nil, err
+				}
+
+				messengerName, err := s.getMessengerName(ctx, *oldTask.MessengerRelatedUserID)
+				if err != nil {
+					span.RecordError(err)
+					span.SetStatus(codes.Error, err.Error())
+					return nil, errors.WithStack(err)
+				}
+
+				for _, childTask := range childTasks {
+					if childTask.Status == string(models.TaskStatusDone) || childTask.Status == string(models.TaskStatusDeleted) {
+						continue
+					}
+
+					if err = s.taskRepo.DeleteTaskWithTx(ctx, tx, childTask.ID); err != nil {
+						log.Error().
+							Stack().
+							Err(err).
+							Int64("task.id", taskID).
+							Int64("child_task.id", childTask.ID).
+							Msg("failed to delete active child task in transaction")
+						span.RecordError(err)
+						span.SetStatus(codes.Error, err.Error())
+						return nil, errors.WithStack(err)
+					}
+
+					event := queue.TaskEvent{
+						Type:          queue.TaskEventDelete,
+						TaskID:        childTask.ID,
+						MessengerName: messengerName,
+					}
+					if err = s.producer.Publish(ctx, event.ToTaskMessage()); err != nil {
+						log.Error().
+							Stack().
+							Err(err).
+							Int64("task.id", taskID).
+							Int64("child_task.id", childTask.ID).
+							Msg("failed to queue delete_task message for active child task, rolling back transaction")
+						span.RecordError(err)
+						span.SetStatus(codes.Error, err.Error())
+						return nil, errors.Wrap(err, "failed to queue delete_task message for active child task")
+					}
+
+					deletedActiveChildTasksCount++
+				}
+			}
+
+			log.Debug().
+				Int64("task.id", taskID).
+				Int("child_tasks.deleted_count", deletedActiveChildTasksCount).
+				Msg("recurrence removal conversion completed")
 		} else if len(childTasks) > 0 {
 			// Update child tasks based on parent changes
 			// Only update if parent task still exists (isParentTask is true)
@@ -1258,9 +1331,12 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		updateHistorySpan.End()
 	}
 
-	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "updated", "task", taskID, updateChangedFields)).
-		Int64("user.id", oldTask.UserID).
-		Msg("task updated successfully")
+	auditEvent := withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "updated", "task", taskID, updateChangedFields)).
+		Int64("user.id", oldTask.UserID)
+	if recurrenceRemoved {
+		auditEvent = auditEvent.Int("child_tasks.deleted_count", deletedActiveChildTasksCount)
+	}
+	auditEvent.Msg("task updated successfully")
 	span.SetStatus(codes.Ok, "task updated successfully")
 	return oldTask, nil
 }
