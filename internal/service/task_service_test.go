@@ -7,11 +7,13 @@ import (
 	"testing"
 	"time"
 
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	errs "github.com/boskuv/goreminder/internal/errors"
 	mock_repositories "github.com/boskuv/goreminder/internal/mocks/repository"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/queue"
+	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
@@ -35,6 +37,19 @@ func setup(t *testing.T) (*TaskService, *mock_repositories.MockTaskRepository, *
 func ptrString(s string) *string     { return &s }
 func ptrTime(t time.Time) *time.Time { return &t }
 func ptrInt(i int) *int              { return &i }
+
+type stubPublisher struct {
+	err       error
+	published []interface{}
+}
+
+func (p *stubPublisher) Publish(ctx context.Context, message interface{}) error {
+	if p.err != nil {
+		return p.err
+	}
+	p.published = append(p.published, message)
+	return nil
+}
 
 // CreateTask Tests
 func TestTaskService_CreateTask_Success(t *testing.T) {
@@ -530,6 +545,122 @@ func TestTaskService_UpdateTask_CronAndRRuleMutuallyExclusive(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, task)
 	assert.True(t, errors.Is(err, errs.ErrValidation))
+}
+
+func TestTaskService_UpdateTask_RecurringToSingle_DeletesOnlyActiveChildren(t *testing.T) {
+	service, taskRepo, _, messengerRepo, taskHistoryRepo, _ := setup(t)
+	ctx := context.Background()
+	taskID := int64(10)
+	messengerRelatedUserID := 77
+	messengerID := int64(5)
+
+	db, mockDB, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+
+	activeChild := &models.Task{ID: 101, Status: string(models.TaskStatusPending)}
+	doneChild := &models.Task{ID: 102, Status: string(models.TaskStatusDone)}
+	deletedChild := &models.Task{ID: 103, Status: string(models.TaskStatusDeleted)}
+
+	parentTask := &models.Task{
+		ID:                   taskID,
+		UserID:               1,
+		Title:                "Recurring Parent",
+		Description:          "desc",
+		Status:               string(models.TaskStatusScheduled),
+		StartDate:            time.Now().UTC().Add(-time.Hour),
+		CronExpression:       ptrString("0 9 * * *"),
+		RequiresConfirmation: true,
+		MessengerRelatedUserID: &messengerRelatedUserID,
+	}
+	updateReq := &models.TaskUpdateRequest{
+		CronExpression: ptrString(""),
+	}
+
+	mockDB.ExpectBegin()
+	mockDB.ExpectCommit()
+
+	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(parentTask, nil)
+	taskRepo.EXPECT().GetDB().Return(sqlxDB)
+	taskRepo.EXPECT().UpdateTaskWithTx(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	taskRepo.EXPECT().GetChildTasksByParentID(gomock.Any(), taskID).Return([]*models.Task{activeChild, doneChild, deletedChild}, nil)
+	taskRepo.EXPECT().DeleteTaskWithTx(gomock.Any(), gomock.Any(), activeChild.ID).Return(nil)
+
+	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), messengerRelatedUserID).Return(&models.MessengerRelatedUser{
+		ID:          int64(messengerRelatedUserID),
+		MessengerID: &messengerID,
+	}, nil)
+	messengerRepo.EXPECT().GetMessengerByID(gomock.Any(), messengerID).Return(&models.Messenger{
+		ID:   messengerID,
+		Name: "telegram",
+	}, nil)
+
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	pub := &stubPublisher{}
+	service.producer = pub
+
+	updatedTask, err := service.UpdateTask(ctx, taskID, updateReq)
+	assert.NoError(t, err)
+	assert.NotNil(t, updatedTask)
+	assert.Nil(t, updatedTask.CronExpression)
+	assert.Len(t, pub.published, 1)
+	assert.NoError(t, mockDB.ExpectationsWereMet())
+}
+
+func TestTaskService_UpdateTask_RecurringToSingle_RollbackOnQueuePublishError(t *testing.T) {
+	service, taskRepo, _, messengerRepo, _, _ := setup(t)
+	ctx := context.Background()
+	taskID := int64(11)
+	messengerRelatedUserID := 88
+	messengerID := int64(6)
+
+	db, mockDB, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+
+	activeChild := &models.Task{ID: 201, Status: string(models.TaskStatusPending)}
+	parentTask := &models.Task{
+		ID:                     taskID,
+		UserID:                 1,
+		Title:                  "Recurring Parent",
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              time.Now().UTC().Add(-time.Hour),
+		RRule:                  ptrString("FREQ=DAILY;INTERVAL=1"),
+		RequiresConfirmation:   true,
+		MessengerRelatedUserID: &messengerRelatedUserID,
+	}
+	updateReq := &models.TaskUpdateRequest{
+		RRule: ptrString(""),
+	}
+
+	mockDB.ExpectBegin()
+	mockDB.ExpectRollback()
+
+	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(parentTask, nil)
+	taskRepo.EXPECT().GetDB().Return(sqlxDB)
+	taskRepo.EXPECT().UpdateTaskWithTx(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	taskRepo.EXPECT().GetChildTasksByParentID(gomock.Any(), taskID).Return([]*models.Task{activeChild}, nil)
+	taskRepo.EXPECT().DeleteTaskWithTx(gomock.Any(), gomock.Any(), activeChild.ID).Return(nil)
+
+	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), messengerRelatedUserID).Return(&models.MessengerRelatedUser{
+		ID:          int64(messengerRelatedUserID),
+		MessengerID: &messengerID,
+	}, nil)
+	messengerRepo.EXPECT().GetMessengerByID(gomock.Any(), messengerID).Return(&models.Messenger{
+		ID:   messengerID,
+		Name: "telegram",
+	}, nil)
+
+	service.producer = &stubPublisher{err: errors.New("publish failed")}
+
+	updatedTask, err := service.UpdateTask(ctx, taskID, updateReq)
+	assert.Error(t, err)
+	assert.Nil(t, updatedTask)
+	assert.Contains(t, err.Error(), "failed to queue delete_task message for active child task")
+	assert.NoError(t, mockDB.ExpectationsWereMet())
 }
 
 // DeleteTask Tests
