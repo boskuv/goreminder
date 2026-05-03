@@ -10,7 +10,7 @@
 - [x] **Daily Task Digest**: Send daily task summaries at specified times
 - [x] **Backlog Zone**: Tasks without fixed time and confirmation requirements
 - [x] **Targets/Goals Management**: Create and track targets (aims/goals) with completion tracking
-- [ ] **Task Muting**: Temporarily mute notifications for specific tasks
+- [x] **Task Muting**: Mute notifications per task (`muted` column; `POST /api/v1/tasks/{id}/mute` / `unmute`; worker receives `delete_task` / `schedule_task`). Daily autoreschedule still advances `start_date` in the DB for muted tasks; `schedule_task` is not enqueued while muted.
 - [ ] **Task Postponement**: Ability to postpone tasks to a later time
 - [ ] **Reminder Groups**: Group related tasks together for batch management
 - [ ] **ICS Import**: Import tasks from iCalendar (.ics) files

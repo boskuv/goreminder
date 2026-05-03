@@ -26,7 +26,9 @@ Table tasks {
   start_date timestamp
   finish_date timestamp
   cron_expression varchar(255)
+  rrule varchar(255)
   requires_confirmation boolean [default: true]
+  muted boolean [not null, default: false]
   status varchar(50) [default: 'pending']
   created_at timestamp [default: `CURRENT_TIMESTAMP`]
   updated_at timestamp
