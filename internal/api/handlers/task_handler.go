@@ -613,6 +613,86 @@ func (h *TaskHandler) MarkTaskAsDone(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// @Summary Mute task notifications
+// @Description Sets muted=true, publishes worker.delete_task for the task (and active children for recurrence parents with confirmation).
+// @Tags Tasks
+// @Produce json
+// @Param id path int true "Task ID"
+// @Success 200 {object} dto.TaskResponse "Task muted"
+// @Failure 400 {object} dto.ErrorResponse "Invalid task ID parameter"
+// @Failure 404 {object} dto.ErrorResponse "Task not found"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
+// @Router /api/v1/tasks/{id}/mute [post]
+func (h *TaskHandler) MuteTask(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
+	taskID, err := validation.ValidateInt64Param(c, "id")
+	if err != nil {
+		log.Info().
+			Err(err).
+			Str("task_id_param", c.Param("id")).
+			Msg("invalid task ID parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	log.Info().Int64("task.id", taskID).Msg("muting task")
+
+	task, err := h.taskService.MuteTask(ctx, taskID)
+	if err != nil {
+		log.Error().Stack().Err(err).Int64("task.id", taskID).Msg("error while muting task")
+		if errors.Is(err, errs.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, mapper.TaskModelToResponse(task))
+}
+
+// @Summary Unmute task notifications
+// @Description Sets muted=false and republishes worker.schedule_task when applicable.
+// @Tags Tasks
+// @Produce json
+// @Param id path int true "Task ID"
+// @Success 200 {object} dto.TaskResponse "Task unmuted"
+// @Failure 400 {object} dto.ErrorResponse "Invalid task ID parameter"
+// @Failure 404 {object} dto.ErrorResponse "Task not found"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
+// @Router /api/v1/tasks/{id}/unmute [post]
+func (h *TaskHandler) UnmuteTask(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
+	taskID, err := validation.ValidateInt64Param(c, "id")
+	if err != nil {
+		log.Info().
+			Err(err).
+			Str("task_id_param", c.Param("id")).
+			Msg("invalid task ID parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	log.Info().Int64("task.id", taskID).Msg("unmuting task")
+
+	task, err := h.taskService.UnmuteTask(ctx, taskID)
+	if err != nil {
+		log.Error().Stack().Err(err).Int64("task.id", taskID).Msg("error while unmuting task")
+		if errors.Is(err, errs.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, mapper.TaskModelToResponse(task))
+}
+
 // @Summary Get task history by task ID
 // @Description Retrieves history entries for a specific task
 // @Tags Tasks

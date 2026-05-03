@@ -12,4 +12,5 @@ type TaskUpdateRequest struct {
 	CronExpression       *string    `json:"cron_expression,omitempty"`
 	RRule                *string    `json:"rrule,omitempty"`
 	RequiresConfirmation *bool      `json:"requires_confirmation,omitempty"`
+	Muted                *bool      `json:"muted,omitempty"`
 }
