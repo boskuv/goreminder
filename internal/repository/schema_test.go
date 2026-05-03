@@ -37,7 +37,7 @@ func TestTableSchemasMatchModels(t *testing.T) {
 			expectedColumns: []string{
 				"id", "title", "description", "user_id", "messenger_related_user_id",
 				"parent_id", "start_date", "finish_date", "cron_expression", "rrule",
-				"requires_confirmation", "status", "created_at", "updated_at", "deleted_at",
+				"requires_confirmation", "muted", "status", "created_at", "updated_at", "deleted_at",
 			},
 		},
 		{
