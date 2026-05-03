@@ -75,6 +75,31 @@ func (s *TaskService) getMessengerName(ctx context.Context, messengerRelatedUser
 	return s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
 }
 
+// publishTaskEvent publishes a queue.TaskEvent unless the task is muted and the event is a schedule
+// (muted tasks must not push worker.schedule_task). Delete events are always published.
+func (s *TaskService) publishTaskEvent(ctx context.Context, task *models.Task, event queue.TaskEvent) error {
+	if task != nil && task.Muted && event.Type == queue.TaskEventSchedule {
+		log := logger.WithTraceContext(ctx, s.logger)
+		log.Debug().
+			Int64("task.id", task.ID).
+			Msg("skipping schedule publish for muted task")
+		return nil
+	}
+	return s.producer.Publish(ctx, event.ToTaskMessage())
+}
+
+// shouldRepublishScheduleAfterUnmute returns whether to send worker.schedule_task after unmuting.
+func shouldRepublishScheduleAfterUnmute(task *models.Task) bool {
+	if task == nil {
+		return false
+	}
+	now := time.Now().UTC()
+	if task.CronExpression != nil || task.RRule != nil {
+		return true
+	}
+	return task.StartDate.After(now) || task.StartDate.Equal(now)
+}
+
 // CreateTask implements BL of adding new task
 func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64, int64, error) {
 	ctx, span := s.tracer.Start(ctx, "task_service.CreateTask",
@@ -222,6 +247,7 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 			CronExpression:         nil, // Child tasks don't carry parent's recurrence
 			RRule:                  nil,
 			RequiresConfirmation:   task.RequiresConfirmation,
+			Muted:                  task.Muted,
 			Status:                 string(models.TaskStatusPending),
 		}
 
@@ -399,6 +425,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	oldRRule := oldTask.RRule
 	oldRequiresConfirmation := oldTask.RequiresConfirmation
 	oldFinishDate := oldTask.FinishDate
+	oldMuted := oldTask.Muted
 
 	// Check if this was a parent task before update (recurrence + requires_confirmation)
 	wasParentTask := isRecurrenceParentWithConfirmation(oldTask)
@@ -450,6 +477,9 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	if updateRequest.RequiresConfirmation != nil {
 		oldTask.RequiresConfirmation = *updateRequest.RequiresConfirmation
 	}
+	if updateRequest.Muted != nil {
+		oldTask.Muted = *updateRequest.Muted
+	}
 
 	if err := validateCronExpressionAndRRuleExclusive(oldTask.CronExpression, oldTask.RRule); err != nil {
 		return nil, errors.Wrap(errs.ErrValidation, err.Error())
@@ -462,6 +492,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 
 	// Check if this is a parent task after update (recurrence + requires_confirmation)
 	isParentTask := isRecurrenceParentWithConfirmation(oldTask)
+	muteTransition := updateRequest.Muted != nil && oldTask.Muted != oldMuted
 	recurrenceRemoved := wasParentTask && !hasRecurrenceRule(oldTask)
 	deletedActiveChildTasksCount := 0
 
@@ -579,7 +610,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 						MessengerName: messengerName,
 					}
 
-					err = s.producer.Publish(ctx, event.ToTaskMessage())
+					err = s.publishTaskEvent(ctx, oldTask, event)
 					if err != nil {
 						log.Error().
 							Stack().
@@ -634,7 +665,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 								RequiresConfirmation: oldTask.RequiresConfirmation,
 							}
 
-							err = s.producer.Publish(ctx, event.ToTaskMessage())
+							err = s.publishTaskEvent(ctx, oldTask, event)
 							if err != nil {
 								log.Error().
 									Stack().
@@ -656,6 +687,52 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					Int64("task.id", taskID).
 					Time("start_date", oldTask.StartDate).
 					Msg("task startDate is in the past, skipping queue publication (only DB update)")
+			}
+		}
+
+		// Mute / unmute toggled via PUT (single non-parent tasks)
+		if muteTransition {
+			if oldTask.Muted {
+				if oldTask.MessengerRelatedUserID != nil {
+					messengerName, muteErr := s.getMessengerName(ctx, *oldTask.MessengerRelatedUserID)
+					if muteErr != nil {
+						log.Error().
+							Stack().
+							Err(muteErr).
+							Int64("task.id", taskID).
+							Msg("failed to get messenger name for delete_task after mute")
+					} else {
+						ev := queue.TaskEvent{
+							Type:          queue.TaskEventDelete,
+							TaskID:        oldTask.ID,
+							MessengerName: messengerName,
+						}
+						if pubErr := s.publishTaskEvent(ctx, oldTask, ev); pubErr != nil {
+							log.Error().
+								Stack().
+								Err(pubErr).
+								Int64("task.id", taskID).
+								Msg("failed to queue delete_task after mute")
+						}
+					}
+				}
+			} else {
+				scheduleEv, muteErr := s.buildScheduleTaskEvent(ctx, oldTask)
+				if muteErr != nil {
+					log.Error().
+						Stack().
+						Err(muteErr).
+						Int64("task.id", taskID).
+						Msg("failed to build schedule event after unmute")
+				} else {
+					if pubErr := s.publishTaskEvent(ctx, oldTask, scheduleEv); pubErr != nil {
+						log.Error().
+							Stack().
+							Err(pubErr).
+							Int64("task.id", taskID).
+							Msg("failed to queue schedule_task after unmute")
+					}
+				}
 			}
 		}
 	}
@@ -727,15 +804,15 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					return nil, errors.WithStack(err)
 				}
 
-			// Queue delete_task message for each child task
-			for _, childTask := range childTasks {
-				event := queue.TaskEvent{
-					Type:          queue.TaskEventDelete,
-					TaskID:        childTask.ID,
-					MessengerName: messengerName,
-				}
+				// Queue delete_task message for each child task
+				for _, childTask := range childTasks {
+					event := queue.TaskEvent{
+						Type:          queue.TaskEventDelete,
+						TaskID:        childTask.ID,
+						MessengerName: messengerName,
+					}
 
-				err = s.producer.Publish(ctx, event.ToTaskMessage())
+					err = s.publishTaskEvent(ctx, childTask, event)
 					if err != nil {
 						log.Error().
 							Stack().
@@ -794,7 +871,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 								RequiresConfirmation: oldTask.RequiresConfirmation,
 							}
 
-							err = s.producer.Publish(ctx, event.ToTaskMessage())
+							err = s.publishTaskEvent(ctx, oldTask, event)
 							if err != nil {
 								log.Error().
 									Stack().
@@ -859,7 +936,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 						TaskID:        childTask.ID,
 						MessengerName: messengerName,
 					}
-					if err = s.producer.Publish(ctx, event.ToTaskMessage()); err != nil {
+					if err = s.publishTaskEvent(ctx, childTask, event); err != nil {
 						log.Error().
 							Stack().
 							Err(err).
@@ -902,6 +979,11 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 
 				childUpdated := false
 				startDateUpdated := false
+
+				if updateRequest.Muted != nil {
+					childTask.Muted = oldTask.Muted
+					childUpdated = true
+				}
 
 				// Update title if changed
 				if titleChanged {
@@ -1041,7 +1123,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 											RequiresConfirmation: childTask.RequiresConfirmation,
 										}
 
-										err = s.producer.Publish(ctx, event.ToTaskMessage())
+										err = s.publishTaskEvent(ctx, childTask, event)
 										if err != nil {
 											log.Error().
 												Stack().
@@ -1068,6 +1150,79 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 								Msg("child task startDate is in the past, skipping queue publication (only DB update)")
 						}
 					}
+
+					if muteTransition && (wasParentTask || isParentTask) {
+						if oldTask.Muted {
+							if childTask.MessengerRelatedUserID != nil {
+								messengerName, mutePubErr := s.getMessengerName(ctx, *childTask.MessengerRelatedUserID)
+								if mutePubErr != nil {
+									log.Error().
+										Stack().
+										Err(mutePubErr).
+										Int64("task.id", taskID).
+										Int64("child_task.id", childTask.ID).
+										Msg("failed to get messenger name for delete_task after parent mute")
+								} else {
+									ev := queue.TaskEvent{
+										Type:          queue.TaskEventDelete,
+										TaskID:        childTask.ID,
+										MessengerName: messengerName,
+									}
+									if pubErr := s.publishTaskEvent(ctx, childTask, ev); pubErr != nil {
+										log.Error().
+											Stack().
+											Err(pubErr).
+											Int64("task.id", taskID).
+											Int64("child_task.id", childTask.ID).
+											Msg("failed to queue delete_task for child after parent mute")
+									}
+								}
+							}
+						} else if shouldRepublishScheduleAfterUnmute(childTask) {
+							if childTask.MessengerRelatedUserID != nil {
+								messengerRelatedUser, mutePubErr := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *childTask.MessengerRelatedUserID)
+								if mutePubErr != nil {
+									log.Error().
+										Stack().
+										Err(mutePubErr).
+										Int64("task.id", taskID).
+										Int64("child_task.id", childTask.ID).
+										Msg("failed to get messenger related user after parent unmute")
+								} else {
+									messengerName, mnErr := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
+									if mnErr != nil {
+										log.Error().
+											Stack().
+											Err(mnErr).
+											Int64("task.id", taskID).
+											Int64("child_task.id", childTask.ID).
+											Msg("failed to get messenger name after parent unmute")
+									} else {
+										ev := queue.TaskEvent{
+											Type:                 queue.TaskEventSchedule,
+											TaskID:               childTask.ID,
+											UserID:               childTask.UserID,
+											MessengerName:        messengerName,
+											ChatID:               messengerRelatedUser.ChatID,
+											Title:                childTask.Title,
+											Description:          childTask.Description,
+											StartDate:            &childTask.StartDate,
+											CronExpression:       childTask.CronExpression,
+											RequiresConfirmation: childTask.RequiresConfirmation,
+										}
+										if pubErr := s.publishTaskEvent(ctx, childTask, ev); pubErr != nil {
+											log.Error().
+												Stack().
+												Err(pubErr).
+												Int64("task.id", taskID).
+												Int64("child_task.id", childTask.ID).
+												Msg("failed to queue schedule_task for child after parent unmute")
+										}
+									}
+								}
+							}
+						}
+					}
 				}
 			}
 
@@ -1076,6 +1231,48 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				Int("child_tasks.count", len(childTasks)).
 				Msg("child tasks synchronized successfully")
 		}
+
+			if muteTransition && (wasParentTask || isParentTask) && oldTask.Muted && oldTask.MessengerRelatedUserID != nil {
+				messengerName, parentMuteErr := s.getMessengerName(ctx, *oldTask.MessengerRelatedUserID)
+				if parentMuteErr != nil {
+					log.Error().
+						Stack().
+						Err(parentMuteErr).
+						Int64("task.id", taskID).
+						Msg("failed to get messenger name for delete_task after parent row mute")
+				} else {
+					ev := queue.TaskEvent{
+						Type:          queue.TaskEventDelete,
+						TaskID:        oldTask.ID,
+						MessengerName: messengerName,
+					}
+					if pubErr := s.publishTaskEvent(ctx, oldTask, ev); pubErr != nil {
+						log.Error().
+							Stack().
+							Err(pubErr).
+							Int64("task.id", taskID).
+							Msg("failed to queue delete_task for parent task after mute")
+					}
+				}
+			}
+			if muteTransition && (wasParentTask || isParentTask) && !oldTask.Muted && shouldRepublishScheduleAfterUnmute(oldTask) {
+				scheduleEv, parentUnmuteErr := s.buildScheduleTaskEvent(ctx, oldTask)
+				if parentUnmuteErr != nil {
+					log.Error().
+						Stack().
+						Err(parentUnmuteErr).
+						Int64("task.id", taskID).
+						Msg("failed to build schedule event for parent after unmute")
+				} else {
+					if pubErr := s.publishTaskEvent(ctx, oldTask, scheduleEv); pubErr != nil {
+						log.Error().
+							Stack().
+							Err(pubErr).
+							Int64("task.id", taskID).
+							Msg("failed to queue schedule_task for parent task after unmute")
+					}
+				}
+			}
 
 		// Commit transaction if we started one
 		if hasActiveTransaction {
@@ -1121,7 +1318,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					MessengerName: messengerName,
 				}
 
-				err = s.producer.Publish(ctx, event.ToTaskMessage())
+				err = s.publishTaskEvent(ctx, oldTask, event)
 				if err != nil {
 					log.Error().
 						Stack().
@@ -1166,6 +1363,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				CronExpression:         nil,
 				RRule:                  nil,
 				RequiresConfirmation:   oldTask.RequiresConfirmation,
+				Muted:                  oldTask.Muted,
 				Status:                 string(models.TaskStatusScheduled),
 			}
 
@@ -1225,7 +1423,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 									RequiresConfirmation: childTask.RequiresConfirmation,
 								}
 
-								err = s.producer.Publish(ctx, event.ToTaskMessage())
+								childTask.ID = childTaskID
+								err = s.publishTaskEvent(ctx, childTask, event)
 								if err != nil {
 									log.Error().
 										Stack().
@@ -1294,7 +1493,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	// Record general update history (if other fields changed, not just status)
 	hasOtherChanges := updateRequest.Title != nil || updateRequest.Description != nil ||
 		updateRequest.StartDate != nil || updateRequest.FinishDate != nil ||
-		updateRequest.CronExpression != nil || updateRequest.RRule != nil || updateRequest.RequiresConfirmation != nil
+		updateRequest.CronExpression != nil || updateRequest.RRule != nil || updateRequest.RequiresConfirmation != nil ||
+		updateRequest.Muted != nil
 
 	newTaskMap := s.taskToMap(oldTask)
 	updateChangedFields := changedFieldsFromMaps(oldTaskMap, newTaskMap)
@@ -1505,7 +1705,7 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 					MessengerName: messengerName,
 				}
 
-				err = s.producer.Publish(ctx, event.ToTaskMessage())
+				err = s.publishTaskEvent(ctx, childTask, event)
 				if err != nil {
 					log.Error().
 						Stack().
@@ -1561,7 +1761,7 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		MessengerName: messengerName,
 	}
 
-	err = s.producer.Publish(ctx, event.ToTaskMessage())
+	err = s.publishTaskEvent(ctx, task, event)
 	if err != nil {
 		log.Error().
 			Stack().
@@ -1674,7 +1874,7 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 		return err
 	}
 
-	err = s.producer.Publish(ctx, taskEvent.ToTaskMessage())
+	err = s.publishTaskEvent(ctx, task, taskEvent)
 	if err != nil {
 		log.Debug().
 			Err(err).
@@ -1743,6 +1943,166 @@ func (s *TaskService) buildDeleteTaskEvent(ctx context.Context, task *models.Tas
 		TaskID:        task.ID,
 		MessengerName: messengerName,
 	}, nil
+}
+
+// MuteTask sets muted=true on the task (and on active child tasks for recurrence parents with confirmation),
+// updates the database, and publishes worker.delete_task for each affected row.
+func (s *TaskService) MuteTask(ctx context.Context, taskID int64) (*models.Task, error) {
+	ctx, span := s.tracer.Start(ctx, "task_service.MuteTask",
+		trace.WithAttributes(attribute.Int64("task.id", taskID)))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, s.logger)
+	task, err := s.taskRepo.GetTaskByIDWithoutStatusFilter(ctx, taskID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.WithStack(err)
+	}
+	if task.Status == string(models.TaskStatusDeleted) {
+		return nil, errors.Wrap(errs.ErrNotFound, "task not found or deleted")
+	}
+	if task.Muted {
+		span.SetStatus(codes.Ok, "task already muted")
+		return task, nil
+	}
+
+	oldTaskMap := s.taskToMap(task)
+	task.Muted = true
+	if err := s.taskRepo.UpdateTask(ctx, task); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	if isRecurrenceParentWithConfirmation(task) {
+		childTasks, childErr := s.taskRepo.GetChildTasksByParentID(ctx, taskID)
+		if childErr != nil {
+			log.Error().Stack().Err(childErr).Int64("task.id", taskID).Msg("failed to get child tasks for mute")
+		} else {
+			for _, c := range childTasks {
+				if c.Status == string(models.TaskStatusDone) || c.Status == string(models.TaskStatusDeleted) {
+					continue
+				}
+				c.Muted = true
+				if upErr := s.taskRepo.UpdateTask(ctx, c); upErr != nil {
+					log.Error().Stack().Err(upErr).Int64("child_task.id", c.ID).Msg("failed to update child muted flag")
+					continue
+				}
+				delEv, evErr := s.buildDeleteTaskEvent(ctx, c)
+				if evErr != nil {
+					log.Error().Stack().Err(evErr).Int64("child_task.id", c.ID).Msg("failed to build delete event for muted child")
+					continue
+				}
+				if pubErr := s.publishTaskEvent(ctx, c, delEv); pubErr != nil {
+					log.Error().Stack().Err(pubErr).Int64("child_task.id", c.ID).Msg("failed to publish delete_task for muted child")
+				}
+			}
+		}
+	}
+
+	delEv, err := s.buildDeleteTaskEvent(ctx, task)
+	if err != nil {
+		log.Error().Stack().Err(err).Int64("task.id", taskID).Msg("failed to build delete_task event after mute")
+	} else if pubErr := s.publishTaskEvent(ctx, task, delEv); pubErr != nil {
+		log.Error().Stack().Err(pubErr).Int64("task.id", taskID).Msg("failed to publish delete_task after mute")
+	}
+
+	newTaskMap := s.taskToMap(task)
+	history := &models.TaskHistory{
+		TaskID:   taskID,
+		UserID:   task.UserID,
+		Action:   string(models.TaskHistoryActionUpdated),
+		OldValue: oldTaskMap,
+		NewValue: newTaskMap,
+	}
+	if histErr := s.taskHistoryRepo.CreateTaskHistory(ctx, history); histErr != nil {
+		log.Error().Stack().Err(histErr).Int64("task.id", taskID).Msg("failed to record mute history")
+	}
+
+	log.Debug().Int64("task.id", taskID).Msg("task muted successfully")
+	span.SetStatus(codes.Ok, "task muted")
+	return task, nil
+}
+
+// UnmuteTask sets muted=false on the task (and on active child tasks for recurrence parents with confirmation),
+// updates the database, and republishes worker.schedule_task when applicable.
+func (s *TaskService) UnmuteTask(ctx context.Context, taskID int64) (*models.Task, error) {
+	ctx, span := s.tracer.Start(ctx, "task_service.UnmuteTask",
+		trace.WithAttributes(attribute.Int64("task.id", taskID)))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, s.logger)
+	task, err := s.taskRepo.GetTaskByIDWithoutStatusFilter(ctx, taskID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.WithStack(err)
+	}
+	if task.Status == string(models.TaskStatusDeleted) {
+		return nil, errors.Wrap(errs.ErrNotFound, "task not found or deleted")
+	}
+	if !task.Muted {
+		span.SetStatus(codes.Ok, "task already unmuted")
+		return task, nil
+	}
+
+	oldTaskMap := s.taskToMap(task)
+	task.Muted = false
+	if err := s.taskRepo.UpdateTask(ctx, task); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	if isRecurrenceParentWithConfirmation(task) {
+		childTasks, childErr := s.taskRepo.GetChildTasksByParentID(ctx, taskID)
+		if childErr != nil {
+			log.Error().Stack().Err(childErr).Int64("task.id", taskID).Msg("failed to get child tasks for unmute")
+		} else {
+			for _, c := range childTasks {
+				if c.Status == string(models.TaskStatusDone) || c.Status == string(models.TaskStatusDeleted) {
+					continue
+				}
+				c.Muted = false
+				if upErr := s.taskRepo.UpdateTask(ctx, c); upErr != nil {
+					log.Error().Stack().Err(upErr).Int64("child_task.id", c.ID).Msg("failed to update child unmuted flag")
+					continue
+				}
+				if shouldRepublishScheduleAfterUnmute(c) {
+					schEv, evErr := s.buildScheduleTaskEvent(ctx, c)
+					if evErr != nil {
+						log.Error().Stack().Err(evErr).Int64("child_task.id", c.ID).Msg("failed to build schedule event for unmuted child")
+						continue
+					}
+					if pubErr := s.publishTaskEvent(ctx, c, schEv); pubErr != nil {
+						log.Error().Stack().Err(pubErr).Int64("child_task.id", c.ID).Msg("failed to publish schedule_task for unmuted child")
+					}
+				}
+			}
+		}
+	}
+
+	if shouldRepublishScheduleAfterUnmute(task) {
+		schEv, err := s.buildScheduleTaskEvent(ctx, task)
+		if err != nil {
+			log.Error().Stack().Err(err).Int64("task.id", taskID).Msg("failed to build schedule event after unmute")
+		} else if pubErr := s.publishTaskEvent(ctx, task, schEv); pubErr != nil {
+			log.Error().Stack().Err(pubErr).Int64("task.id", taskID).Msg("failed to publish schedule_task after unmute")
+		}
+	}
+
+	newTaskMap := s.taskToMap(task)
+	history := &models.TaskHistory{
+		TaskID:   taskID,
+		UserID:   task.UserID,
+		Action:   string(models.TaskHistoryActionUpdated),
+		OldValue: oldTaskMap,
+		NewValue: newTaskMap,
+	}
+	if histErr := s.taskHistoryRepo.CreateTaskHistory(ctx, history); histErr != nil {
+		log.Error().Stack().Err(histErr).Int64("task.id", taskID).Msg("failed to record unmute history")
+	}
+
+	log.Debug().Int64("task.id", taskID).Msg("task unmuted successfully")
+	span.SetStatus(codes.Ok, "task unmuted")
+	return task, nil
 }
 
 // MarkTaskAsDone marks a task as done and queues worker.delete_task in a transactional manner
@@ -1860,7 +2220,7 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 		MessengerName: messengerName,
 	}
 
-	err = s.producer.Publish(ctx, event.ToTaskMessage())
+	err = s.publishTaskEvent(ctx, task, event)
 	if err != nil {
 		log.Error().
 			Stack().
@@ -1928,6 +2288,7 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 					CronExpression:         nil,
 					RRule:                  nil,
 					RequiresConfirmation:   parentTask.RequiresConfirmation,
+					Muted:                  parentTask.Muted,
 					Status:                 string(models.TaskStatusScheduled),
 				}
 
@@ -1979,7 +2340,8 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 									CronExpression:       childTask.CronExpression,
 									RequiresConfirmation: childTask.RequiresConfirmation,
 								}
-								pubErr = s.producer.Publish(ctx, event.ToTaskMessage())
+								childTask.ID = childTaskID
+								pubErr = s.publishTaskEvent(ctx, childTask, event)
 								if pubErr != nil {
 									log.Error().
 										Stack().
@@ -2118,7 +2480,7 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 							MessengerName: messengerName,
 						}
 
-						err = s.producer.Publish(ctx, event.ToTaskMessage())
+						err = s.publishTaskEvent(ctx, childTask, event)
 						if err != nil {
 							log.Error().
 								Stack().
@@ -2312,6 +2674,7 @@ func (s *TaskService) taskToMap(task *models.Task) map[string]interface{} {
 		"description":           task.Description,
 		"status":                task.Status,
 		"requires_confirmation": task.RequiresConfirmation,
+		"muted":                 task.Muted,
 	}
 
 	if !task.StartDate.IsZero() {
@@ -2337,10 +2700,10 @@ func (s *TaskService) taskToMap(task *models.Task) map[string]interface{} {
 }
 
 // RescheduleTask reschedules a task by updating its start_date to the next day at the same time
-// It also adds a daily cron expression and publishes to the queue
+// It publishes worker.schedule_task unless the task is muted (muted rows still get DB updates; queue publish is skipped via publishTaskEvent).
 // For tasks with a parent, it checks for conflicts with parent's cron schedule and uses parent's next execution time if conflict found
 // The status remains "scheduled"
-// If queue publishing fails, the task is NOT rescheduled to prevent data loss
+// If queue publishing fails, the task is NOT rescheduled to prevent data loss (skipped publish for muted counts as success)
 func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) error {
 	ctx, span := s.tracer.Start(ctx, "task_service.RescheduleTask",
 		trace.WithAttributes(
@@ -2476,7 +2839,7 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 		Time("new_start_date", newStartDate).
 		Msg("publishing rescheduled task to queue")
 
-	err = s.producer.Publish(ctx, event.ToTaskMessage())
+	err = s.publishTaskEvent(ctx, task, event)
 	if err != nil {
 		log.Error().
 			Stack().

@@ -17,6 +17,7 @@ func CreateTaskRequestToModel(req *dto.CreateTaskRequest) *models.Task {
 		CronExpression:         req.CronExpression,
 		RRule:                  req.RRule,
 		RequiresConfirmation:   req.RequiresConfirmation,
+		Muted:                  req.Muted,
 		Status:                 req.Status,
 	}
 	if task.Status == "" {
@@ -36,6 +37,7 @@ func UpdateTaskRequestToModel(req *dto.UpdateTaskRequest) *models.TaskUpdateRequ
 		CronExpression:       req.CronExpression,
 		RRule:                req.RRule,
 		RequiresConfirmation: req.RequiresConfirmation,
+		Muted:                req.Muted,
 	}
 }
 
@@ -53,6 +55,7 @@ func TaskModelToResponse(task *models.Task) *dto.TaskResponse {
 		CronExpression:         task.CronExpression,
 		RRule:                  task.RRule,
 		RequiresConfirmation:   task.RequiresConfirmation,
+		Muted:                  task.Muted,
 		Status:                 task.Status,
 		CreatedAt:              task.CreatedAt,
 	}
@@ -72,6 +75,7 @@ func TaskModelToMarkedDoneResponse(task *models.Task) *dto.TaskMarkedDoneRespons
 		CronExpression:         task.CronExpression,
 		RRule:                  task.RRule,
 		RequiresConfirmation:   task.RequiresConfirmation,
+		Muted:                  task.Muted,
 		CreatedAt:              task.CreatedAt,
 	}
 }
