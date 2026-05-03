@@ -72,6 +72,7 @@ type Task struct {
 	CronExpression         *string    `db:"cron_expression" json:"cron_expression,omitempty"`
 	RRule                  *string    `db:"rrule" json:"rrule,omitempty"`
 	RequiresConfirmation   bool       `db:"requires_confirmation" json:"requires_confirmation,omitempty"`
+	Muted                  bool       `db:"muted" json:"muted,omitempty"`
 	Status                 string     `db:"status" json:"status"`
 	CreatedAt              time.Time  `db:"created_at" json:"created_at"`
 	DeletedAt              time.Time  `db:"deleted_at" json:"-"`

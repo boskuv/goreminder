@@ -72,8 +72,8 @@ func (r *taskRepository) CreateTask(ctx context.Context, task *models.Task) (int
 		Msg("creating task in database")
 
 	query, args, err := r.sb.Insert("tasks").
-		Columns("title", "description", "user_id", "messenger_related_user_id", "status", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "requires_confirmation").
-		Values(task.Title, task.Description, task.UserID, task.MessengerRelatedUserID, task.Status, task.ParentID, task.StartDate, task.FinishDate, task.CronExpression, task.RRule, task.RequiresConfirmation).
+		Columns("title", "description", "user_id", "messenger_related_user_id", "status", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "requires_confirmation", "muted").
+		Values(task.Title, task.Description, task.UserID, task.MessengerRelatedUserID, task.Status, task.ParentID, task.StartDate, task.FinishDate, task.CronExpression, task.RRule, task.RequiresConfirmation, task.Muted).
 		Suffix("RETURNING id").
 		ToSql()
 	if err != nil {
@@ -109,7 +109,7 @@ func (r *taskRepository) GetTaskByID(ctx context.Context, id int64) (*models.Tas
 		Int64("task.id", id).
 		Msg("getting task by id from database")
 
-	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation").
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation", "muted").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": id}).
@@ -167,7 +167,7 @@ func (r *taskRepository) GetTaskByIDWithoutStatusFilter(ctx context.Context, id 
 		Int64("task.id", id).
 		Msg("getting task by id from database (without status filter)")
 
-	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation").
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation", "muted").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": id}).
@@ -228,7 +228,7 @@ func (r *taskRepository) GetTasksByUserID(ctx context.Context, userID int64) ([]
 		Int64("user.id", userID).
 		Msg("getting tasks by user id from database")
 
-	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation").
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation", "muted").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"user_id": userID}).
@@ -371,7 +371,7 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 	}
 
 	// Build data query with filters
-	dataBuilder := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation").
+	dataBuilder := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation", "muted").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"user_id": userID})
@@ -461,7 +461,7 @@ func (r *taskRepository) GetChildTasksByParentID(ctx context.Context, parentID i
 		Int64("parent.id", parentID).
 		Msg("getting child tasks by parent id from database")
 
-	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation").
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation", "muted").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"parent_id": parentID}).
@@ -518,6 +518,7 @@ func (r *taskRepository) UpdateTask(ctx context.Context, task *models.Task) erro
 		Set("cron_expression", task.CronExpression).
 		Set("rrule", task.RRule).
 		Set("requires_confirmation", task.RequiresConfirmation).
+		Set("muted", task.Muted).
 		Set("parent_id", task.ParentID).
 		Set("updated_at", time.Now().UTC()).
 		Where(squirrel.Eq{"deleted_at": nil}).
@@ -572,6 +573,7 @@ func (r *taskRepository) UpdateTaskWithTx(ctx context.Context, tx *sqlx.Tx, task
 		Set("cron_expression", task.CronExpression).
 		Set("rrule", task.RRule).
 		Set("requires_confirmation", task.RequiresConfirmation).
+		Set("muted", task.Muted).
 		Set("parent_id", task.ParentID).
 		Set("updated_at", time.Now().UTC()).
 		Where(squirrel.Eq{"deleted_at": nil}).
@@ -793,6 +795,7 @@ func (r *taskRepository) DeleteChildTasksWithTx(ctx context.Context, tx *sqlx.Tx
 // - no recurrence on the row itself (cron_expression IS NULL AND rrule IS NULL), or the task is a child (parent_id IS NOT NULL)
 // - status is 'scheduled'
 // - start_date has passed (start_date < NOW())
+// Includes muted tasks so start_date stays current in DB; the service skips queue publish for muted rows.
 func (r *taskRepository) GetTasksNeedingRescheduling(ctx context.Context) ([]*models.Task, error) {
 	ctx, span := r.tracer.Start(ctx, "task_repository.GetTasksNeedingRescheduling")
 	defer span.End()
@@ -801,7 +804,7 @@ func (r *taskRepository) GetTasksNeedingRescheduling(ctx context.Context) ([]*mo
 	log.Debug().
 		Msg("getting tasks needing rescheduling from database")
 
-	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation").
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation", "muted").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Or{
@@ -848,6 +851,7 @@ func (r *taskRepository) GetTasksNeedingRescheduling(ctx context.Context) ([]*mo
 // - requires_confirmation = false
 // - status is 'scheduled'
 // - start_date has passed (start_date < NOW())
+// Includes muted tasks so start_date stays current in DB (this path does not publish to the queue).
 func (r *taskRepository) GetTasksWithCronNeedingRescheduling(ctx context.Context) ([]*models.Task, error) {
 	ctx, span := r.tracer.Start(ctx, "task_repository.GetTasksWithCronNeedingRescheduling")
 	defer span.End()
@@ -856,7 +860,7 @@ func (r *taskRepository) GetTasksWithCronNeedingRescheduling(ctx context.Context
 	log.Debug().
 		Msg("getting tasks with cron needing rescheduling from database")
 
-	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation").
+	query, args, err := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation", "muted").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"status": string(models.TaskStatusScheduled)}).
@@ -986,7 +990,7 @@ func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, or
 	}
 
 	// Build data query with filters
-	dataBuilder := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation").
+	dataBuilder := r.sb.Select("id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "start_date", "finish_date", "cron_expression", "rrule", "status", "created_at", "requires_confirmation", "muted").
 		From("tasks").
 		Where(squirrel.Eq{"deleted_at": nil})
 
