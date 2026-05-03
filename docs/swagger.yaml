@@ -166,6 +166,9 @@ definitions:
       messenger_related_user_id:
         example: 123
         type: integer
+      muted:
+        example: false
+        type: boolean
       requires_confirmation:
         example: true
         type: boolean
@@ -519,6 +522,9 @@ definitions:
       messenger_related_user_id:
         example: 123
         type: integer
+      muted:
+        example: false
+        type: boolean
       parent_id:
         example: 5
         type: integer
@@ -558,6 +564,9 @@ definitions:
       messenger_related_user_id:
         example: 123
         type: integer
+      muted:
+        example: false
+        type: boolean
       parent_id:
         example: 5
         type: integer
@@ -639,6 +648,9 @@ definitions:
       finish_date:
         example: "2024-01-20T18:00:00Z"
         type: string
+      muted:
+        example: false
+        type: boolean
       requires_confirmation:
         example: true
         type: boolean
@@ -1902,6 +1914,69 @@ paths:
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
       summary: Get task history by task ID
+      tags:
+      - Tasks
+  /api/v1/tasks/{id}/mute:
+    post:
+      description: Sets muted=true, publishes worker.delete_task for the task (and
+        active children for recurrence parents with confirmation).
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task muted
+          schema:
+            $ref: '#/definitions/dto.TaskResponse'
+        "400":
+          description: Invalid task ID parameter
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Task not found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Mute task notifications
+      tags:
+      - Tasks
+  /api/v1/tasks/{id}/unmute:
+    post:
+      description: Sets muted=false and republishes worker.schedule_task when applicable.
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task unmuted
+          schema:
+            $ref: '#/definitions/dto.TaskResponse'
+        "400":
+          description: Invalid task ID parameter
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Task not found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Unmute task notifications
       tags:
       - Tasks
   /api/v1/tasks/queue:

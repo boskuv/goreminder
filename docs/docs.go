@@ -1810,6 +1810,100 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/tasks/{id}/mute": {
+            "post": {
+                "description": "Sets muted=true, publishes worker.delete_task for the task (and active children for recurrence parents with confirmation).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tasks"
+                ],
+                "summary": "Mute task notifications",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Task muted",
+                        "schema": {
+                            "$ref": "#/definitions/dto.TaskResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid task ID parameter",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Task not found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/tasks/{id}/unmute": {
+            "post": {
+                "description": "Sets muted=false and republishes worker.schedule_task when applicable.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tasks"
+                ],
+                "summary": "Unmute task notifications",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Task unmuted",
+                        "schema": {
+                            "$ref": "#/definitions/dto.TaskResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid task ID parameter",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Task not found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users": {
             "get": {
                 "description": "Retrieves all users with pagination and ordering",
@@ -2547,6 +2641,10 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 123
                 },
+                "muted": {
+                    "type": "boolean",
+                    "example": false
+                },
                 "requires_confirmation": {
                     "type": "boolean",
                     "example": true
@@ -3039,6 +3137,10 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 123
                 },
+                "muted": {
+                    "type": "boolean",
+                    "example": false
+                },
                 "parent_id": {
                     "type": "integer",
                     "example": 5
@@ -3091,6 +3193,10 @@ const docTemplate = `{
                 "messenger_related_user_id": {
                     "type": "integer",
                     "example": 123
+                },
+                "muted": {
+                    "type": "boolean",
+                    "example": false
                 },
                 "parent_id": {
                     "type": "integer",
@@ -3201,6 +3307,10 @@ const docTemplate = `{
                 "finish_date": {
                     "type": "string",
                     "example": "2024-01-20T18:00:00Z"
+                },
+                "muted": {
+                    "type": "boolean",
+                    "example": false
                 },
                 "requires_confirmation": {
                     "type": "boolean",
