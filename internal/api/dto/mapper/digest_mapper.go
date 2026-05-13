@@ -54,27 +54,10 @@ func DigestSettingsModelsToResponse(settings []*models.DigestSettings) []dto.Dig
 }
 
 // DigestServiceResponseToDTO converts service.DigestResponse to dto.DigestResponse
-// Note: This function imports TaskModelToResponse from task_mapper package
 func DigestServiceResponseToDTO(digest *service.DigestResponse) *dto.DigestResponse {
-	// Convert tasks from models to DTOs using TaskModelToResponse from task_mapper
 	tasks := make([]dto.TaskResponse, len(digest.Tasks))
 	for i, task := range digest.Tasks {
-		// Import task_mapper functions - we need to call it directly
-		// Since we can't import from same package, we'll inline the conversion
-		tasks[i] = dto.TaskResponse{
-			ID:                     task.ID,
-			Title:                  task.Title,
-			Description:            task.Description,
-			UserID:                 task.UserID,
-			MessengerRelatedUserID: task.MessengerRelatedUserID,
-			ParentID:               task.ParentID,
-			StartDate:              task.StartDate,
-			FinishDate:             task.FinishDate,
-			CronExpression:         task.CronExpression,
-			RequiresConfirmation:   task.RequiresConfirmation,
-			Status:                 task.Status,
-			CreatedAt:              task.CreatedAt,
-		}
+		tasks[i] = *TaskModelToResponse(task)
 	}
 
 	// Convert targets from models to DTOs

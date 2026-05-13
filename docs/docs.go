@@ -1810,6 +1810,100 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/tasks/{id}/mute": {
+            "post": {
+                "description": "Sets muted=true, publishes worker.delete_task for the task (and active children for recurrence parents with confirmation).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tasks"
+                ],
+                "summary": "Mute task notifications",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Task muted",
+                        "schema": {
+                            "$ref": "#/definitions/dto.TaskResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid task ID parameter",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Task not found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/tasks/{id}/unmute": {
+            "post": {
+                "description": "Sets muted=false and republishes worker.schedule_task when applicable.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tasks"
+                ],
+                "summary": "Unmute task notifications",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Task unmuted",
+                        "schema": {
+                            "$ref": "#/definitions/dto.TaskResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid task ID parameter",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Task not found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users": {
             "get": {
                 "description": "Retrieves all users with pagination and ordering",
@@ -2198,6 +2292,70 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/users/{user_id}/tasks/calendar": {
+            "get": {
+                "description": "Returns task occurrences in a date range: real tasks plus virtual recurrences from cron parents (phantom occurrences for editing parent only)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tasks"
+                ],
+                "summary": "Get user tasks for calendar view",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Range start (RFC3339)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Range end (RFC3339)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Calendar occurrences (virtual=true for phantom)",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/dto.CalendarOccurrenceResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable entity",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users/{user_id}/tasks/history": {
             "get": {
                 "description": "Retrieves task history entries for a user with pagination",
@@ -2366,6 +2524,63 @@ const docTemplate = `{
                     "items": {
                         "type": "integer"
                     }
+                }
+            }
+        },
+        "dto.CalendarOccurrenceResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Write comprehensive documentation for the API"
+                },
+                "finish_date": {
+                    "type": "string",
+                    "example": "2024-01-20T18:00:00Z"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "messenger_related_user_id": {
+                    "type": "integer",
+                    "example": 123
+                },
+                "parent_id": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "start_date": {
+                    "type": "string",
+                    "example": "2024-01-15T10:00:00Z"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "pending",
+                        "scheduled",
+                        "done",
+                        "rescheduled",
+                        "postponed",
+                        "deleted"
+                    ],
+                    "example": "pending"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Complete project documentation"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "virtual": {
+                    "type": "boolean",
+                    "example": false
                 }
             }
         },
@@ -2550,10 +2765,6 @@ const docTemplate = `{
                 "requires_confirmation": {
                     "type": "boolean",
                     "example": true
-                },
-                "rrule": {
-                    "type": "string",
-                    "example": "FREQ=DAILY;INTERVAL=1"
                 },
                 "start_date": {
                     "type": "string",
@@ -3039,6 +3250,10 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 123
                 },
+                "muted": {
+                    "type": "boolean",
+                    "example": false
+                },
                 "parent_id": {
                     "type": "integer",
                     "example": 5
@@ -3099,10 +3314,6 @@ const docTemplate = `{
                 "requires_confirmation": {
                     "type": "boolean",
                     "example": true
-                },
-                "rrule": {
-                    "type": "string",
-                    "example": "FREQ=DAILY;INTERVAL=1"
                 },
                 "start_date": {
                     "type": "string",
@@ -3205,10 +3416,6 @@ const docTemplate = `{
                 "requires_confirmation": {
                     "type": "boolean",
                     "example": true
-                },
-                "rrule": {
-                    "type": "string",
-                    "example": "FREQ=DAILY;INTERVAL=1"
                 },
                 "start_date": {
                     "type": "string",

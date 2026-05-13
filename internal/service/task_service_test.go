@@ -16,6 +16,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -37,6 +38,7 @@ func setup(t *testing.T) (*TaskService, *mock_repositories.MockTaskRepository, *
 func ptrString(s string) *string     { return &s }
 func ptrTime(t time.Time) *time.Time { return &t }
 func ptrInt(i int) *int              { return &i }
+func ptrInt64(i int64) *int64 { return &i }
 
 type stubPublisher struct {
 	err       error
@@ -883,4 +885,190 @@ func TestTaskService_GetUserTaskHistory_UserNotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, histories)
 	assert.Contains(t, err.Error(), "unprocessable entity")
+}
+
+func TestTaskService_MuteTask_PublishesDelete(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	taskRepo := mock_repositories.NewMockTaskRepository(ctrl)
+	userRepo := mock_repositories.NewMockUserRepository(ctrl)
+	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
+	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
+	pub := &stubPublisher{}
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, testLogger)
+
+	ctx := context.Background()
+	mu := 5
+	task := &models.Task{
+		ID:                     1,
+		UserID:                 1,
+		Title:                  "t",
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              time.Now().UTC().Add(24 * time.Hour),
+		MessengerRelatedUserID: &mu,
+		Muted:                  false,
+	}
+	taskRepo.EXPECT().GetTaskByIDWithoutStatusFilter(gomock.Any(), int64(1)).Return(task, nil)
+	taskRepo.EXPECT().UpdateTask(gomock.Any(), gomock.Any()).Return(nil)
+	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), mu).Return(&models.MessengerRelatedUser{
+		ID: int64(mu), MessengerID: ptrInt64(1),
+	}, nil)
+	messengerRepo.EXPECT().GetMessengerByID(gomock.Any(), int64(1)).Return(&models.Messenger{ID: 1, Name: "telegram"}, nil)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	out, err := service.MuteTask(ctx, 1)
+	assert.NoError(t, err)
+	assert.True(t, out.Muted)
+	require.Len(t, pub.published, 1)
+	msg := pub.published[0].(queue.TaskMessage)
+	assert.Equal(t, "worker.delete_task", msg.Task)
+}
+
+func TestTaskService_MuteTask_IdempotentAlreadyMuted(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	taskRepo := mock_repositories.NewMockTaskRepository(ctrl)
+	userRepo := mock_repositories.NewMockUserRepository(ctrl)
+	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
+	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
+	pub := &stubPublisher{}
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, testLogger)
+
+	ctx := context.Background()
+	mu := 5
+	task := &models.Task{
+		ID:                     1,
+		UserID:                 1,
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              time.Now().UTC().Add(time.Hour),
+		MessengerRelatedUserID: &mu,
+		Muted:                  true,
+	}
+	taskRepo.EXPECT().GetTaskByIDWithoutStatusFilter(gomock.Any(), int64(1)).Return(task, nil)
+
+	out, err := service.MuteTask(ctx, 1)
+	assert.NoError(t, err)
+	assert.True(t, out.Muted)
+	assert.Len(t, pub.published, 0)
+}
+
+func TestTaskService_UnmuteTask_PublishesSchedule(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	taskRepo := mock_repositories.NewMockTaskRepository(ctrl)
+	userRepo := mock_repositories.NewMockUserRepository(ctrl)
+	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
+	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
+	pub := &stubPublisher{}
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, testLogger)
+
+	ctx := context.Background()
+	mu := 5
+	start := time.Now().UTC().Add(48 * time.Hour)
+	task := &models.Task{
+		ID:                     1,
+		UserID:                 1,
+		Title:                  "t",
+		Description:            "d",
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              start,
+		MessengerRelatedUserID: &mu,
+		Muted:                  true,
+	}
+	taskRepo.EXPECT().GetTaskByIDWithoutStatusFilter(gomock.Any(), int64(1)).Return(task, nil)
+	taskRepo.EXPECT().UpdateTask(gomock.Any(), gomock.Any()).Return(nil)
+	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), mu).Return(&models.MessengerRelatedUser{
+		ID: int64(mu), MessengerID: ptrInt64(1), ChatID: "c1",
+	}, nil)
+	messengerRepo.EXPECT().GetMessengerByID(gomock.Any(), int64(1)).Return(&models.Messenger{ID: 1, Name: "telegram"}, nil)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	out, err := service.UnmuteTask(ctx, 1)
+	assert.NoError(t, err)
+	assert.False(t, out.Muted)
+	require.Len(t, pub.published, 1)
+	msg := pub.published[0].(queue.TaskMessage)
+	assert.Equal(t, "worker.schedule_task", msg.Task)
+}
+
+func TestTaskService_UpdateTask_MutedSkipsSchedulePublish(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	taskRepo := mock_repositories.NewMockTaskRepository(ctrl)
+	userRepo := mock_repositories.NewMockUserRepository(ctrl)
+	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
+	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
+	pub := &stubPublisher{}
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, testLogger)
+
+	ctx := context.Background()
+	taskID := int64(1)
+	mu := 5
+	originalTask := &models.Task{
+		ID:                     taskID,
+		Title:                  "Old",
+		Description:            "d",
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              time.Now().UTC().Add(24 * time.Hour),
+		MessengerRelatedUserID: &mu,
+		Muted:                  true,
+		RequiresConfirmation:   false,
+	}
+	updateReq := &models.TaskUpdateRequest{Title: ptrString("New Title")}
+
+	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(originalTask, nil)
+	taskRepo.EXPECT().UpdateTask(gomock.Any(), gomock.Any()).Return(nil)
+	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), mu).Return(&models.MessengerRelatedUser{
+		ID: int64(mu), MessengerID: ptrInt64(1), ChatID: "c1",
+	}, nil)
+	messengerRepo.EXPECT().GetMessengerByID(gomock.Any(), int64(1)).Return(&models.Messenger{ID: 1, Name: "telegram"}, nil)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	_, err := service.UpdateTask(ctx, taskID, updateReq)
+	assert.NoError(t, err)
+	assert.Len(t, pub.published, 0, "muted task must not publish schedule_task on title change")
+}
+
+func TestTaskService_RescheduleTask_MutedSkipsQueueButUpdatesDB(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	taskRepo := mock_repositories.NewMockTaskRepository(ctrl)
+	userRepo := mock_repositories.NewMockUserRepository(ctrl)
+	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
+	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
+	pub := &stubPublisher{}
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, testLogger)
+
+	ctx := context.Background()
+	mu := 7
+	oldStart := time.Now().UTC().Add(-72 * time.Hour)
+	task := &models.Task{
+		ID:                     99,
+		UserID:                 1,
+		Title:                  "x",
+		Description:            "y",
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              oldStart,
+		MessengerRelatedUserID: &mu,
+		Muted:                  true,
+		RequiresConfirmation:   false,
+	}
+
+	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), mu).Return(&models.MessengerRelatedUser{
+		ID: int64(mu), MessengerID: ptrInt64(1), ChatID: "c1",
+	}, nil)
+	messengerRepo.EXPECT().GetMessengerByID(gomock.Any(), int64(1)).Return(&models.Messenger{ID: 1, Name: "telegram"}, nil)
+	taskRepo.EXPECT().UpdateTask(gomock.Any(), gomock.Any()).Return(nil)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	err := service.RescheduleTask(ctx, task)
+	assert.NoError(t, err)
+	assert.Len(t, pub.published, 0, "muted reschedule must not enqueue schedule_task")
+	assert.Equal(t, string(models.TaskStatusRescheduled), task.Status)
+	assert.True(t, task.StartDate.After(oldStart))
 }
