@@ -10,7 +10,7 @@
 - [x] **Daily Task Digest**: Send daily task summaries at specified times
 - [x] **Backlog Zone**: Tasks without fixed time and confirmation requirements
 - [x] **Targets/Goals Management**: Create and track targets (aims/goals) with completion tracking
-- [x] **Task Muting**: Mute notifications per task (`muted` column; `POST /api/v1/tasks/{id}/mute` / `unmute`; worker receives `delete_task` / `schedule_task`). Daily autoreschedule still advances `start_date` in the DB for muted tasks; `schedule_task` is not enqueued while muted.
+- [x] **Task Muting**: Per-task silence for the worker queue (see [Task muting (`muted`)](#task-muting-muted)).
 - [ ] **Task Postponement**: Ability to postpone tasks to a later time
 - [ ] **Reminder Groups**: Group related tasks together for batch management
 - [ ] **ICS Import**: Import tasks from iCalendar (.ics) files
@@ -158,6 +158,7 @@ erDiagram
         varchar cron_expression
         text rrule
         boolean requires_confirmation
+        boolean muted
         varchar status
         timestamp created_at
         timestamp updated_at
@@ -637,6 +638,8 @@ Access Swagger UI at: `http://localhost:8080/swagger/index.html`
 | `/api/v1/tasks` | POST | Create a new task | - |
 | `/api/v1/tasks/:id` | GET | Get task by ID | - |
 | `/api/v1/tasks/:id` | PUT | Update task by ID | - |
+| `/api/v1/tasks/:id/mute` | POST | Set `muted=true` and publish `delete_task` where applicable | - |
+| `/api/v1/tasks/:id/unmute` | POST | Set `muted=false` and republish `schedule_task` where applicable | - |
 | `/api/v1/tasks/:id` | DELETE | Soft delete task | - |
 | `/api/v1/tasks/:id/history` | GET | Get task history | - |
 | `/api/v1/tasks/:id/done` | POST | Mark task as done | - |
@@ -699,6 +702,20 @@ Access Swagger UI at: `http://localhost:8080/swagger/index.html`
 | `/api/v1/digests/settings` | DELETE | Delete digest settings | `user_id` |
 | `/api/v1/digests/settings/all` | GET | Get all digest settings | `page`, `page_size`, `order_by` |
 
+## Task muting (`muted`)
+
+Each task row has a boolean **`muted`** (PostgreSQL `tasks.muted`). It controls **whether the API enqueues `worker.schedule_task`** for that row; it does not remove the task from the database.
+
+| Mechanism | Behavior |
+|-----------|----------|
+| **JSON** | Every task returned as `TaskResponse` (list, get, update, mute/unmute, mark-done payload) includes `"muted": true \| false`. Tasks inside **`GET /api/v1/digests`** use the same mapping (including `rrule` / `cron_expression`). |
+| **Create / update** | Optional `muted` on `POST /api/v1/tasks` and `PUT /api/v1/tasks/:id`. Dedicated **`POST /api/v1/tasks/:id/mute`** and **`POST /api/v1/tasks/:id/unmute`** toggle the flag and run the associated queue side effects. |
+| **`worker.schedule_task`** | Not published while `muted` is true (internal `publishTaskEvent` skips schedule events for muted tasks). Changing time, title, recurrence, etc. still **persists** in the DB; a new schedule message is **not** sent until the task is unmuted (or the same `PUT` sets `muted: false`). |
+| **`worker.delete_task`** | Still published when needed (for example soft delete, explicit mute, or clearing a stale worker job). |
+| **Autoreschedule** | May still move `start_date` forward in the DB for overdue rows; muted tasks **do not** get a new `schedule_task` from that path. |
+
+For recurring **parents** with `requires_confirmation`, mute/unmute can propagate to active child tasks (see `MuteTask` / `UnmuteTask` in `internal/service/task_service.go`).
+
 ## Task Types
 
 GoReminder supports two types of tasks: **one-time tasks** and **recurring tasks**.
@@ -710,6 +727,7 @@ GoReminder supports two types of tasks: **one-time tasks** and **recurring tasks
 | `cron_expression` / `rrule` | both `null` | Exactly one recurrence field: non-empty **cron** or non-empty **RRULE** (iCalendar rule string, e.g. `FREQ=DAILY;INTERVAL=1`). The two fields cannot both be set. | both `null` (next `start_date` is derived from the parent’s rule) |
 | `requires_confirmation` | `true` | `true` or `false` | `true` only |
 | `parent_id` | `null` | `null` | Points to parent task ID |
+| `muted` | Optional; while `true`, new `worker.schedule_task` messages are not enqueued (row still updated; `delete_task` still sent when required). | Same | Same |
 | Execution | Executes once at `start_date` | Does not execute directly | Executes at calculated `start_date` |
 | Auto-creates child | No | Yes (on creation and when child is done) | No |
 
@@ -916,6 +934,8 @@ curl -X PUT http://localhost:8080/api/v1/tasks/1 \
 **Recurring update behavior**: updating task fields like `title`/`description` without passing `start_date` does not auto-shift the task date. Child `start_date` recalculation is triggered only when schedule-related fields (`start_date`, `cron_expression`, `rrule`) are explicitly changed.
 
 **Clearing recurrence fields**: on `PUT /api/v1/tasks/:id`, omitted fields are not changed. To explicitly clear recurrence, pass an empty string for `cron_expression` or `rrule`; the service normalizes empty strings to `NULL` in the database. If a recurring parent is converted to single by clearing recurrence, active child tasks are removed while `done/deleted` children are preserved.
+
+**Muting**: optional `"muted": true` / `false` in the JSON body. While the stored task is muted, schedule-related queue messages are suppressed; see [Task muting (`muted`)](#task-muting-muted). To toggle without sending a full `PUT`, use `POST /api/v1/tasks/:id/mute` or `.../unmute`.
 
 ### Update User
 ```bash
