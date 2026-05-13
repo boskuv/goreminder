@@ -44,7 +44,7 @@ type TaskResponse struct {
 	CronExpression         *string    `json:"cron_expression,omitempty" example:"0 9 * * *"`
 	RRule                  *string    `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 	RequiresConfirmation   bool       `json:"requires_confirmation,omitempty" example:"true"`
-	Muted                  bool       `json:"muted,omitempty" example:"false"`
+	Muted                  bool       `json:"muted" example:"false"`
 	Status                 string     `json:"status" example:"pending" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
 	CreatedAt              time.Time  `json:"created_at" example:"2024-01-10T08:00:00Z"`
 }
@@ -63,7 +63,7 @@ type TaskMarkedDoneResponse struct {
 	CronExpression         *string    `json:"cron_expression,omitempty" example:"0 9 * * *"`
 	RRule                  *string    `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 	RequiresConfirmation   bool       `json:"requires_confirmation,omitempty" example:"true"`
-	Muted                  bool       `json:"muted,omitempty" example:"false"`
+	Muted                  bool       `json:"muted" example:"false"`
 	CreatedAt              time.Time  `json:"created_at" example:"2024-01-10T08:00:00Z"`
 }
 
