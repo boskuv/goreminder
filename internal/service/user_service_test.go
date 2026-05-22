@@ -9,6 +9,7 @@ import (
 	mock_repository "github.com/boskuv/goreminder/internal/mocks/repository"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/pkg/logger"
+	"github.com/boskuv/goreminder/pkg/attachments"
 	"github.com/boskuv/goreminder/pkg/queue"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -24,7 +25,7 @@ func TestUserService_CreateUser(t *testing.T) {
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, testLogger)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -60,7 +61,7 @@ func TestUserService_GetUser(t *testing.T) {
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, testLogger)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -88,7 +89,7 @@ func TestUserService_UpdateUser(t *testing.T) {
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, testLogger)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -141,7 +142,7 @@ func TestUserService_DeleteUser(t *testing.T) {
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, testLogger)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {

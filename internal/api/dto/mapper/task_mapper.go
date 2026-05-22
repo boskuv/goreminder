@@ -80,6 +80,28 @@ func TaskModelToMarkedDoneResponse(task *models.Task) *dto.TaskMarkedDoneRespons
 	}
 }
 
+// TaskModelToDetailResponse converts models.Task to TaskDetailResponse DTO.
+func TaskModelToDetailResponse(task *models.Task, attachments []dto.AttachmentResponse) *dto.TaskDetailResponse {
+	base := TaskModelToResponse(task)
+	return &dto.TaskDetailResponse{
+		ID:                     base.ID,
+		Title:                  base.Title,
+		Description:            base.Description,
+		UserID:                 base.UserID,
+		MessengerRelatedUserID: base.MessengerRelatedUserID,
+		ParentID:               base.ParentID,
+		StartDate:              base.StartDate,
+		FinishDate:             base.FinishDate,
+		CronExpression:         base.CronExpression,
+		RRule:                  base.RRule,
+		RequiresConfirmation:   base.RequiresConfirmation,
+		Muted:                  base.Muted,
+		Status:                 base.Status,
+		CreatedAt:              base.CreatedAt,
+		Attachments:            attachments,
+	}
+}
+
 // TasksModelToResponse converts slice of models.Task to slice of TaskResponse DTOs
 func TasksModelToResponse(tasks []*models.Task) []*dto.TaskResponse {
 	responses := make([]*dto.TaskResponse, len(tasks))

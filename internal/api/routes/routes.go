@@ -7,7 +7,7 @@ import (
 )
 
 // RegisterRoutes registers all API routes
-func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userHandler *handlers.UserHandler, messengerHandler *handlers.MessengerHandler, backlogHandler *handlers.BacklogHandler, targetHandler *handlers.TargetHandler, digestHandler *handlers.DigestHandler) {
+func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userHandler *handlers.UserHandler, messengerHandler *handlers.MessengerHandler, backlogHandler *handlers.BacklogHandler, targetHandler *handlers.TargetHandler, digestHandler *handlers.DigestHandler, attachmentHandler *handlers.AttachmentHandler) {
 	api := router.Group("/api/v1")
 	{
 		// Task routes
@@ -23,6 +23,14 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 		api.POST("/tasks/:id/mute", taskHandler.MuteTask)
 		api.POST("/tasks/:id/unmute", taskHandler.UnmuteTask)
 		api.DELETE("/tasks/:id", taskHandler.DeleteTask)
+
+		// Task attachment routes
+		api.GET("/tasks/:id/attachments", attachmentHandler.ListAttachments)
+		api.POST("/tasks/:id/attachments", attachmentHandler.CreateAttachment)
+		api.POST("/tasks/:id/attachments/:attachment_id/complete", attachmentHandler.CompleteUpload)
+		api.GET("/tasks/:id/attachments/:attachment_id/download", attachmentHandler.GetDownloadURL)
+		api.GET("/tasks/:id/attachments/:attachment_id/content", attachmentHandler.GetAttachmentContent)
+		api.DELETE("/tasks/:id/attachments/:attachment_id", attachmentHandler.DeleteAttachment)
 
 		// User routes
 		api.GET("/users", userHandler.GetAllUsers)

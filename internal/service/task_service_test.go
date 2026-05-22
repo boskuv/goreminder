@@ -12,6 +12,7 @@ import (
 	mock_repositories "github.com/boskuv/goreminder/internal/mocks/repository"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/pkg/logger"
+	"github.com/boskuv/goreminder/pkg/attachments"
 	"github.com/boskuv/goreminder/pkg/queue"
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog"
@@ -30,7 +31,7 @@ func setup(t *testing.T) (*TaskService, *mock_repositories.MockTaskRepository, *
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
 
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer, testLogger)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer, attachments.NewNoopClient(), testLogger)
 	return service, taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer
 }
 
@@ -734,7 +735,7 @@ func TestNewTaskService(t *testing.T) {
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
 
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer, testLogger)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer, attachments.NewNoopClient(), testLogger)
 
 	assert.NotNil(t, service)
 	assert.Equal(t, taskRepo, service.taskRepo)
@@ -896,7 +897,7 @@ func TestTaskService_MuteTask_PublishesDelete(t *testing.T) {
 	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	pub := &stubPublisher{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, testLogger)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), testLogger)
 
 	ctx := context.Background()
 	mu := 5
@@ -934,7 +935,7 @@ func TestTaskService_MuteTask_IdempotentAlreadyMuted(t *testing.T) {
 	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	pub := &stubPublisher{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, testLogger)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), testLogger)
 
 	ctx := context.Background()
 	mu := 5
@@ -963,7 +964,7 @@ func TestTaskService_UnmuteTask_PublishesSchedule(t *testing.T) {
 	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	pub := &stubPublisher{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, testLogger)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), testLogger)
 
 	ctx := context.Background()
 	mu := 5
@@ -1003,7 +1004,7 @@ func TestTaskService_UpdateTask_MutedSkipsSchedulePublish(t *testing.T) {
 	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	pub := &stubPublisher{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, testLogger)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), testLogger)
 
 	ctx := context.Background()
 	taskID := int64(1)
@@ -1042,7 +1043,7 @@ func TestTaskService_RescheduleTask_MutedSkipsQueueButUpdatesDB(t *testing.T) {
 	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	pub := &stubPublisher{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, testLogger)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), testLogger)
 
 	ctx := context.Background()
 	mu := 7
