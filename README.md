@@ -330,6 +330,7 @@ attachments:
   directUploadMaxBytes: 2097152 # Max multipart upload on POST .../attachments (default 2 MiB)
   proxyDownloadEnabled: true    # GET .../content proxies bytes via API (default true in code)
   proxyDownloadMaxBytes: 2097152 # Max size for proxy download (default 2 MiB)
+  purgeOnTaskDone: false        # Purge attachments after POST .../done (requires enabled: true)
 
 producer:
   enabled: true                 # Enable RabbitMQ producer (false = DB-only mode)
@@ -674,6 +675,8 @@ Files larger than the direct limit via multipart receive **413** — use the pre
 **Attachment statuses:** `pending` (presigned flow, awaiting `complete`), `ready` (available for download), `failed`.
 
 **Task history:** `GET /api/v1/tasks/{id}/history` records `attachment_added` when an attachment becomes `ready` (after `UploadDirect` or `CompleteUpload`) and `attachment_removed` on delete. Presigned init (`pending`) is not logged. Purge on task/user delete does not emit per-file history entries.
+
+**Purge on done (optional):** by default attachments remain after `POST .../done`. Set `attachments.purgeOnTaskDone: true` (with `attachments.enabled: true`) to run `PurgeByTask` after a successful mark-as-done (parent + child task IDs for recurring parents). Best-effort; S3 cleanup is asynchronous (outbox).
 
 When `attachments.enabled: false`, attachment endpoints return **503** with `error: attachments_disabled`. Contract details: [api/README.md](api/README.md).
 

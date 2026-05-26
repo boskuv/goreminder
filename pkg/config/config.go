@@ -44,6 +44,7 @@ type AttachmentsConfiguration struct {
 	DirectUploadMaxBytes  int64  `mapstructure:"directUploadMaxBytes" default:"2097152" validate:"gte=1"`
 	ProxyDownloadEnabled  bool   `mapstructure:"proxyDownloadEnabled" default:"true"`
 	ProxyDownloadMaxBytes int64  `mapstructure:"proxyDownloadMaxBytes" default:"2097152" validate:"gte=1"`
+	PurgeOnTaskDone       bool   `mapstructure:"purgeOnTaskDone" default:"false"`
 }
 
 type DatabaseConfiguration struct {

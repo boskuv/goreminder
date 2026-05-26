@@ -197,12 +197,16 @@ func main() {
 			log.Fatal().Stack().Err(err).Msg("failed to create attachments grpc client")
 		}
 		log.Info().Str("grpc_addr", cfg.Attachments.GRPCAddr).Msg("attachments client enabled")
+		if cfg.Attachments.PurgeOnTaskDone {
+			log.Info().Msg("attachments will be purged after POST /tasks/{id}/done")
+		}
 	} else {
 		log.Info().Msg("attachments client disabled")
 	}
 
 	// setup services
-	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, publisher, attClient, log)
+	purgeAttachmentsOnDone := cfg.Attachments.Enabled && cfg.Attachments.PurgeOnTaskDone
+	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, publisher, attClient, purgeAttachmentsOnDone, log)
 	userService := service.NewUserService(userRepo, taskRepo, messengerRepo, publisher, attClient, log)
 	messengerService := service.NewMessengerService(messengerRepo, userRepo, log)
 	backlogService := service.NewBacklogService(backlogRepo, userRepo, messengerRepo, log)

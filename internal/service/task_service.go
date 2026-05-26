@@ -30,22 +30,25 @@ type TaskService struct {
 	messengerRepo   repository.MessengerRepository
 	taskHistoryRepo repository.TaskHistoryRepository
 	producer        queue.Publisher
-	attachments     attachments.Client
-	tracer          trace.Tracer
-	logger          zerolog.Logger
+	attachments                attachments.Client
+	attachmentsPurgeOnTaskDone bool
+	tracer                     trace.Tracer
+	logger                     zerolog.Logger
 }
 
-// NewTaskService creates a new TaskService
-func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, taskHistoryRepo repository.TaskHistoryRepository, producer queue.Publisher, attClient attachments.Client, logger zerolog.Logger) *TaskService {
+// NewTaskService creates a new TaskService.
+// attachmentsPurgeOnTaskDone should be true only when attachments.enabled and purgeOnTaskDone are set in config.
+func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, taskHistoryRepo repository.TaskHistoryRepository, producer queue.Publisher, attClient attachments.Client, attachmentsPurgeOnTaskDone bool, logger zerolog.Logger) *TaskService {
 	return &TaskService{
-		taskRepo:        taskRepo,
-		userRepo:        userRepo,
-		messengerRepo:   messengerRepo,
-		taskHistoryRepo: taskHistoryRepo,
-		producer:        producer,
-		attachments:     attClient,
-		tracer:          otel.Tracer("task-service"),
-		logger:          logger,
+		taskRepo:                   taskRepo,
+		userRepo:                   userRepo,
+		messengerRepo:              messengerRepo,
+		taskHistoryRepo:            taskHistoryRepo,
+		producer:                   producer,
+		attachments:                attClient,
+		attachmentsPurgeOnTaskDone: attachmentsPurgeOnTaskDone,
+		tracer:                     otel.Tracer("task-service"),
+		logger:                     logger,
 	}
 }
 
@@ -2573,11 +2576,32 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 	}
 	historySpan.End()
 
+	if s.attachmentsPurgeOnTaskDone {
+		s.purgeAttachmentsAfterTaskDone(ctx, log, taskID)
+	}
+
 	log.Debug().
 		Int64("task.id", taskID).
 		Msg("task marked as done successfully")
 	span.SetStatus(codes.Ok, "task marked as done successfully")
 	return task, nil
+}
+
+func (s *TaskService) purgeAttachmentsAfterTaskDone(ctx context.Context, log zerolog.Logger, taskID int64) {
+	var childTaskIDs []int64
+	childTasks, err := s.taskRepo.GetChildTasksByParentID(ctx, taskID)
+	if err != nil {
+		log.Warn().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("failed to list child tasks for attachment purge after done")
+	} else {
+		childTaskIDs = make([]int64, 0, len(childTasks))
+		for _, c := range childTasks {
+			childTaskIDs = append(childTaskIDs, c.ID)
+		}
+	}
+	s.purgeAttachmentsBestEffort(ctx, log, taskID, childTaskIDs)
 }
 
 // GetTaskHistory implements BL of retrieving task history by task ID
@@ -3157,7 +3181,7 @@ func (s *TaskService) purgeAttachmentsBestEffort(ctx context.Context, log zerolo
 	log.Warn().
 		Err(lastErr).
 		Int64("task.id", taskID).
-		Msg("attachment purge after task delete failed after retries")
+		Msg("attachment purge after task delete or done failed after retries")
 }
 
 // AttachmentHistoryMeta is stored in task_history for attachment add/remove events.

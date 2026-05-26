@@ -16,6 +16,7 @@ attachments:
   directUploadMaxBytes: 2097152
   proxyDownloadEnabled: false
   proxyDownloadMaxBytes: 2097152
+  purgeOnTaskDone: false
 
 producer:
   enabled: false

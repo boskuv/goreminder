@@ -31,7 +31,7 @@ func setup(t *testing.T) (*TaskService, *mock_repositories.MockTaskRepository, *
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
 
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer, attachments.NewNoopClient(), testLogger)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer, attachments.NewNoopClient(), false, testLogger)
 	return service, taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer
 }
 
@@ -735,7 +735,7 @@ func TestNewTaskService(t *testing.T) {
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
 
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer, attachments.NewNoopClient(), testLogger)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, producer, attachments.NewNoopClient(), false, testLogger)
 
 	assert.NotNil(t, service)
 	assert.Equal(t, taskRepo, service.taskRepo)
@@ -897,7 +897,7 @@ func TestTaskService_MuteTask_PublishesDelete(t *testing.T) {
 	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	pub := &stubPublisher{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), testLogger)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), false, testLogger)
 
 	ctx := context.Background()
 	mu := 5
@@ -935,7 +935,7 @@ func TestTaskService_MuteTask_IdempotentAlreadyMuted(t *testing.T) {
 	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	pub := &stubPublisher{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), testLogger)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), false, testLogger)
 
 	ctx := context.Background()
 	mu := 5
@@ -964,7 +964,7 @@ func TestTaskService_UnmuteTask_PublishesSchedule(t *testing.T) {
 	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	pub := &stubPublisher{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), testLogger)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), false, testLogger)
 
 	ctx := context.Background()
 	mu := 5
@@ -1004,7 +1004,7 @@ func TestTaskService_UpdateTask_MutedSkipsSchedulePublish(t *testing.T) {
 	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	pub := &stubPublisher{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), testLogger)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), false, testLogger)
 
 	ctx := context.Background()
 	taskID := int64(1)
@@ -1043,7 +1043,7 @@ func TestTaskService_RescheduleTask_MutedSkipsQueueButUpdatesDB(t *testing.T) {
 	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	pub := &stubPublisher{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), testLogger)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), false, testLogger)
 
 	ctx := context.Background()
 	mu := 7
@@ -1084,6 +1084,7 @@ func TestRecordAttachmentAdded_writesHistory(t *testing.T) {
 		taskHistoryRepo,
 		&queue.Producer{},
 		attachments.NewNoopClient(),
+		false,
 		logger.New(io.Discard, zerolog.DebugLevel, false),
 	)
 
@@ -1117,6 +1118,7 @@ func TestRecordAttachmentRemoved_writesHistory(t *testing.T) {
 		taskHistoryRepo,
 		&queue.Producer{},
 		attachments.NewNoopClient(),
+		false,
 		logger.New(io.Discard, zerolog.DebugLevel, false),
 	)
 
