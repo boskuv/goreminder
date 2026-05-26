@@ -29,11 +29,21 @@ type Configuration struct {
 	Server         ServerConfiguration         `mapstructure:"server"`
 	Database       DatabaseConfiguration       `mapstructure:"database"`
 	Producer       ProducerConfiguration       `mapstructure:"producer"`
+	Attachments    AttachmentsConfiguration    `mapstructure:"attachments"`
 	Tracing        TracingConfiguration        `mapstructure:"tracing"`
 	Metrics        MetricsConfiguration        `mapstructure:"metrics"`
 	RateLimit      RateLimitConfiguration      `mapstructure:"ratelimit"`
 	Cors           CorsConfiguration           `mapstructure:"cors"`
 	Autoreschedule AutorescheduleConfiguration `mapstructure:"autoreschedule"`
+}
+
+type AttachmentsConfiguration struct {
+	Enabled               bool   `mapstructure:"enabled" default:"false"`
+	GRPCAddr              string `mapstructure:"grpcAddr"`
+	Timeout               string `mapstructure:"timeout" default:"5s"`
+	DirectUploadMaxBytes  int64  `mapstructure:"directUploadMaxBytes" default:"2097152" validate:"gte=1"`
+	ProxyDownloadEnabled  bool   `mapstructure:"proxyDownloadEnabled" default:"true"`
+	ProxyDownloadMaxBytes int64  `mapstructure:"proxyDownloadMaxBytes" default:"2097152" validate:"gte=1"`
 }
 
 type DatabaseConfiguration struct {
@@ -151,6 +161,12 @@ func Setup(configPath string) error {
 	if configuration.RateLimit.Window != "" {
 		if _, err := time.ParseDuration(configuration.RateLimit.Window); err != nil {
 			return fmt.Errorf("invalid ratelimit.window duration: %w", err)
+		}
+	}
+
+	if configuration.Attachments.Enabled && configuration.Attachments.Timeout != "" {
+		if _, err := time.ParseDuration(configuration.Attachments.Timeout); err != nil {
+			return fmt.Errorf("invalid attachments.timeout duration: %w", err)
 		}
 	}
 

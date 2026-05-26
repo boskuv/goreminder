@@ -11,7 +11,6 @@
 - [x] **Backlog Zone**: Tasks without fixed time and confirmation requirements
 - [x] **Targets/Goals Management**: Create and track targets (aims/goals) with completion tracking
 - [x] **Task Muting**: Per-task silence for the worker queue (see [Task muting (`muted`)](#task-muting-muted)).
-- [ ] **Task Postponement**: Ability to postpone tasks to a later time
 - [ ] **Reminder Groups**: Group related tasks together for batch management
 - [ ] **ICS Import**: Import tasks from iCalendar (.ics) files
 - [ ] **Advanced Reminders**: Pre-reminders before task deadlines
@@ -34,6 +33,7 @@
 - **Message Queue**: RabbitMQ integration for asynchronous task processing with retry support (can be disabled for DB-only mode)
 - **Containerized Setup**: Complete Docker Compose configuration
 - **Database Migrations**: Goose-based migration system
+- **Task Attachments**: REST BFF in core + separate attachments gRPC service (hybrid presigned / direct multipart upload, optional proxy download; contract in `api/proto/attachments/v1/`)
 - **Comprehensive Testing**: Unit tests, integration tests, and E2E tests
 
 ## Prerequisites
@@ -50,9 +50,12 @@
 ```
 .
 ├── cmd/                    # Main applications of the project
-│   └── core/              # The API server application
+│   └── core/              # The API server application (REST BFF)
 │       ├── main.go        # Application entry point
 │       └── config.yaml    # Configuration file
+├── api/                   # gRPC contracts (see api/README.md)
+│   ├── proto/attachments/v1/attachments.proto
+│   └── gen/attachments/v1/   # protoc output (*.pb.go messages, *_grpc.pb.go RPC)
 ├── docs/                  # Generated Swagger documentation
 ├── internal/              # Private application and library code
 │   ├── api/               # API routes, handlers, and middleware
@@ -83,6 +86,7 @@
 │   ├── database/          # Database connection and retry logic
 │   ├── logger/            # Structured logging
 │   ├── observability/     # Metrics and tracing setup
+│   ├── attachments/       # gRPC client to attachments service
 │   └── queue/             # Message queue integration with retries
 ├── scripts/               # Database initialization scripts
 └── tests/                 # Test suites (E2E tests)
@@ -318,6 +322,14 @@ database:
   maxIdleConns: 10              # Maximum idle connections
   connMaxLifetime: 30m          # Connection max lifetime (duration format)
   maxRetries: 3                 # Maximum retry attempts for database operations
+
+attachments:
+  enabled: false                # Enable attachments gRPC client + REST routes
+  grpcAddr: "localhost:50051"   # Attachments gRPC service (separate repo / process)
+  timeout: "5s"                 # Per-RPC timeout
+  directUploadMaxBytes: 2097152 # Max multipart upload on POST .../attachments (default 2 MiB)
+  proxyDownloadEnabled: true    # GET .../content proxies bytes via API (default true in code)
+  proxyDownloadMaxBytes: 2097152 # Max size for proxy download (default 2 MiB)
 
 producer:
   enabled: true                 # Enable RabbitMQ producer (false = DB-only mode)
@@ -619,6 +631,52 @@ Structured logging using Zerolog:
   - `audit.changed_fields`, `audit.changed_count` for create/update/delete summaries
   - Sensitive values are not logged directly (for example, user password hash is represented as a boolean flag only)
 
+### Task attachments
+
+**Architecture**
+
+| Component | Location | Role |
+|-----------|----------|------|
+| REST API | `internal/api/handlers/attachment_handler.go` | Authz via task ownership, multipart vs JSON on one `POST` |
+| gRPC client | `pkg/attachments/` | Calls attachment service; noop when `attachments.enabled: false` |
+| Contract | `api/proto/attachments/v1/`, `api/gen/attachments/v1/` | Shared protobuf; regenerate with `make proto-attachments` |
+| Service + S3 + attachment DB | **Separate repository** (not in this monorepo) | `AttachmentService` implementation, MinIO/S3, outbox deletes |
+
+`docker-compose.dev.yml` in this repo starts core dependencies only (Postgres, RabbitMQ, tracing). For attachment E2E tests, run the attachments service stack separately and set `attachments.enabled: true` with `grpcAddr` pointing at it.
+
+Attachment metadata is stored in the **attachment service database** (`attachments.task_id` links to core tasks). Core does not have an `tasks_attachments` table.
+
+### Task attachment upload flow
+
+When `attachments.enabled: true`, `POST /api/v1/tasks/{id}/attachments` supports two modes on the **same** endpoint:
+
+**Direct upload (files ≤ `attachments.directUploadMaxBytes`, default 2 MB):**
+
+- `Content-Type: multipart/form-data`, field `file` (optional form field `idempotency_key`).
+- Response **201** with `status: ready` — **no** `complete` step.
+
+```bash
+curl -X POST "http://localhost:8080/api/v1/tasks/1/attachments" \
+  -F "file=@small.pdf"
+```
+
+**Presigned upload (larger files or explicit flow):**
+
+1. `POST` with JSON `original_name`, `content_type`, `size_bytes` → `upload_url`, `status: pending`.
+2. Client `PUT` file to object storage (not through GoReminder API).
+3. `POST .../attachments/{attachment_id}/complete` → `ready`.
+4. `GET .../download` → presigned download URL.
+
+**Proxy download (small ready files, optional):** when `attachments.proxyDownloadEnabled: true`, `GET .../attachments/{attachment_id}/content` returns file bytes through the API (no MinIO CORS). Limited to `proxyDownloadMaxBytes` (default 2 MB); larger files → **413**, use `.../download` presigned URL.
+
+Files larger than the direct limit via multipart receive **413** — use the presigned flow.
+
+**Attachment statuses:** `pending` (presigned flow, awaiting `complete`), `ready` (available for download), `failed`.
+
+**Task history:** `GET /api/v1/tasks/{id}/history` records `attachment_added` when an attachment becomes `ready` (after `UploadDirect` or `CompleteUpload`) and `attachment_removed` on delete. Presigned init (`pending`) is not logged. Purge on task/user delete does not emit per-file history entries.
+
+When `attachments.enabled: false`, attachment endpoints return **503** with `error: attachments_disabled`. Contract details: [api/README.md](api/README.md).
+
 ## API Documentation
 
 ### Generate Swagger Docs
@@ -636,13 +694,19 @@ Access Swagger UI at: `http://localhost:8080/swagger/index.html`
 |----------|--------|-------------|------------------|
 | `/api/v1/tasks` | GET | Get all tasks with pagination | `page`, `page_size`, `order_by`, `status`, `start_date_from`, `start_date_to`, `user_id` |
 | `/api/v1/tasks` | POST | Create a new task | - |
-| `/api/v1/tasks/:id` | GET | Get task by ID | - |
+| `/api/v1/tasks/:id` | GET | Get task by ID (`TaskDetailResponse`; includes `attachments` when enabled and non-empty) | - |
 | `/api/v1/tasks/:id` | PUT | Update task by ID | - |
 | `/api/v1/tasks/:id/mute` | POST | Set `muted=true` and publish `delete_task` where applicable | - |
 | `/api/v1/tasks/:id/unmute` | POST | Set `muted=false` and republish `schedule_task` where applicable | - |
 | `/api/v1/tasks/:id` | DELETE | Soft delete task | - |
 | `/api/v1/tasks/:id/history` | GET | Get task history | - |
 | `/api/v1/tasks/:id/done` | POST | Mark task as done | - |
+| `/api/v1/tasks/:id/attachments` | GET | List task attachments (`ready` / `pending`) | - |
+| `/api/v1/tasks/:id/attachments` | POST | Presigned init (JSON) **or** direct upload (`multipart/form-data`, field `file`) | - |
+| `/api/v1/tasks/:id/attachments/:attachment_id/complete` | POST | Complete upload after S3 PUT | - |
+| `/api/v1/tasks/:id/attachments/:attachment_id/download` | GET | Get presigned download URL | - |
+| `/api/v1/tasks/:id/attachments/:attachment_id/content` | GET | Download file via API (proxy; requires `proxyDownloadEnabled`) | - |
+| `/api/v1/tasks/:id/attachments/:attachment_id` | DELETE | Delete attachment | - |
 | `/api/v1/tasks/queue` | POST | Queue task for processing | - |
 | `/api/v1/users/:user_id/tasks` | GET | Get all tasks for user | - |
 | `/api/v1/users/:user_id/tasks/history` | GET | Get user task history | `limit`, `offset` |
@@ -1104,6 +1168,14 @@ make docker-down
 docker-compose up --build
 ```
 
+### Attachments (optional)
+
+1. Run the **attachments service** from its own repository (Postgres for attachments, MinIO/S3, gRPC on `:50051` by default).
+2. In `cmd/core/config.yaml` set `attachments.enabled: true` and `grpcAddr` (e.g. `localhost:50051` when core runs on the host, `attachments:50051` when core runs in Docker on the same compose network as the attachment service).
+3. Regenerate protobuf stubs after contract changes: `make proto-attachments` or `make proto-attachments-docker`.
+
+Sync `api/proto/attachments/v1/attachments.proto` with the attachments service repo before releasing.
+
 ## Architecture
 
 ### Layers
@@ -1116,6 +1188,7 @@ docker-compose up --build
 - **Gin Router**: Fast HTTP routing
 - **PostgreSQL**: Primary database with connection pooling
 - **RabbitMQ**: Message queue with retry support
+- **Attachments gRPC client** (`pkg/attachments`): optional; talks to external attachment service
 - **OpenTelemetry**: Distributed tracing
 - **Prometheus**: Metrics collection
 - **Jaeger**: Trace visualization

@@ -24,7 +24,10 @@ COMPOSE=docker compose
 POSTGRES_CONTAINER=postgres_container
 PG_PORT=5432
 
-.PHONY: all lint build run test swagger docker-up docker-down clean version
+PROTO_FILES=api/proto/attachments/v1/attachments.proto
+PROTO_INCLUDES=$(shell go list -f '{{ .Dir }}' -m google.golang.org/protobuf)/types
+
+.PHONY: all lint build run test swagger proto-attachments docker-up docker-down clean version
 
 # Default target
 all: build
@@ -62,6 +65,23 @@ coverage:
 # Generate Swagger documentation
 swagger:
 	swag init --dir ./cmd/core,./internal/api/handlers,./internal/api/dto --output ./docs
+
+# Regenerate attachments gRPC stubs from api/proto (requires protoc + protoc-gen-go + protoc-gen-go-grpc)
+proto-attachments:
+	@test -n "$$(command -v protoc)" || (echo "protoc not found; install protobuf-compiler or run: make proto-attachments-docker" && exit 1)
+	protoc -I api/proto -I $(PROTO_INCLUDES) \
+		--go_out=. --go_opt=module=github.com/boskuv/goreminder \
+		--go-grpc_out=. --go-grpc_opt=module=github.com/boskuv/goreminder \
+		$(PROTO_FILES)
+
+# Regenerate attachments stubs via Docker (no local protoc required)
+proto-attachments-docker:
+	docker run --rm -u $$(id -u):$$(id -g) -v "$(CURDIR):/workspace" -w /workspace \
+		namely/protoc-all:1.51_1 \
+		-f $(PROTO_FILES) -l go -o api/gen/attachments/v1 --with-grpc
+	@docker run --rm -u $$(id -u):$$(id -g) -v "$(CURDIR):/workspace" -w /workspace alpine \
+		sh -c 'for f in api/gen/attachments/v1/github.com/boskuv/goreminder/api/gen/attachments/v1/*.go; do \
+			[ -f "$$f" ] && mv "$$f" api/gen/attachments/v1/; done; rm -rf api/gen/attachments/v1/github.com 2>/dev/null; true'
 
 # Start Docker containers
 docker-up:

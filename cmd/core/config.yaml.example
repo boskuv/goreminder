@@ -9,6 +9,14 @@ database:
   maxOpenConns: 100       # Maximum open connections
   maxIdleConns: 10        # Maximum idle connections
 
+attachments:
+  enabled: false
+  grpcAddr: "attachments:50051"
+  timeout: "5s"
+  directUploadMaxBytes: 2097152
+  proxyDownloadEnabled: false
+  proxyDownloadMaxBytes: 2097152
+
 producer:
   enabled: false
   user: "guest"    

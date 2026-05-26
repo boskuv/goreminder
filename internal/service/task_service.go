@@ -9,6 +9,7 @@ import (
 	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/repository"
+	"github.com/boskuv/goreminder/pkg/attachments"
 	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/queue"
 	"github.com/gorhill/cronexpr"
@@ -29,18 +30,20 @@ type TaskService struct {
 	messengerRepo   repository.MessengerRepository
 	taskHistoryRepo repository.TaskHistoryRepository
 	producer        queue.Publisher
+	attachments     attachments.Client
 	tracer          trace.Tracer
 	logger          zerolog.Logger
 }
 
 // NewTaskService creates a new TaskService
-func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, taskHistoryRepo repository.TaskHistoryRepository, producer queue.Publisher, logger zerolog.Logger) *TaskService {
+func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, taskHistoryRepo repository.TaskHistoryRepository, producer queue.Publisher, attClient attachments.Client, logger zerolog.Logger) *TaskService {
 	return &TaskService{
 		taskRepo:        taskRepo,
 		userRepo:        userRepo,
 		messengerRepo:   messengerRepo,
 		taskHistoryRepo: taskHistoryRepo,
 		producer:        producer,
+		attachments:     attClient,
 		tracer:          otel.Tracer("task-service"),
 		logger:          logger,
 	}
@@ -1620,6 +1623,7 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 			Int64("user.id", task.UserID).
 			Msg("task deleted successfully (non-transactional fallback)")
 		span.SetStatus(codes.Ok, "task deleted successfully (non-transactional fallback)")
+		s.purgeAttachmentsBestEffort(ctx, log, taskID, nil)
 		return nil
 	}
 
@@ -1650,6 +1654,8 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		}
 	}()
 
+	var childTaskIDsForPurge []int64
+
 	// If task has a recurrence rule, it may be a parent task — delete all child tasks first
 	if hasRecurrenceRule(task) {
 		log.Debug().
@@ -1670,6 +1676,10 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		}
 
 		if len(childTasks) > 0 {
+			childTaskIDsForPurge = make([]int64, 0, len(childTasks))
+			for _, c := range childTasks {
+				childTaskIDsForPurge = append(childTaskIDsForPurge, c.ID)
+			}
 			if task.MessengerRelatedUserID == nil {
 				err := errors.Wrap(errs.ErrUnprocessableEntity, fmt.Sprintf("task with ID %d has no MessengerRelatedUserID value", task.ID))
 				span.RecordError(err)
@@ -1820,6 +1830,7 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		Int64("user.id", task.UserID).
 		Msg("task deleted successfully")
 	span.SetStatus(codes.Ok, "task deleted successfully")
+	s.purgeAttachmentsBestEffort(ctx, log, taskID, childTaskIDsForPurge)
 	return nil
 }
 
@@ -3126,4 +3137,97 @@ func (s *TaskService) GetAllTasks(ctx context.Context, page, pageSize int, order
 	)
 	span.SetStatus(codes.Ok, "tasks retrieved successfully")
 	return tasks, totalCount, nil
+}
+
+func (s *TaskService) purgeAttachmentsBestEffort(ctx context.Context, log zerolog.Logger, taskID int64, childTaskIDs []int64) {
+	if s.attachments == nil {
+		return
+	}
+	const maxAttempts = 3
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * 200 * time.Millisecond)
+		}
+		lastErr = s.attachments.PurgeByTask(ctx, taskID, childTaskIDs)
+		if lastErr == nil {
+			return
+		}
+	}
+	log.Warn().
+		Err(lastErr).
+		Int64("task.id", taskID).
+		Msg("attachment purge after task delete failed after retries")
+}
+
+// AttachmentHistoryMeta is stored in task_history for attachment add/remove events.
+type AttachmentHistoryMeta struct {
+	AttachmentID string
+	OriginalName string
+	ContentType  string
+	SizeBytes    int64
+}
+
+// AttachmentHistoryMetaFromModel builds metadata from an attachment client model.
+func AttachmentHistoryMetaFromModel(a *attachments.Attachment) AttachmentHistoryMeta {
+	if a == nil {
+		return AttachmentHistoryMeta{}
+	}
+	return AttachmentHistoryMeta{
+		AttachmentID: a.ID,
+		OriginalName: a.OriginalName,
+		ContentType:  a.ContentType,
+		SizeBytes:    a.SizeBytes,
+	}
+}
+
+func attachmentHistoryValue(m AttachmentHistoryMeta) map[string]interface{} {
+	v := map[string]interface{}{
+		"attachment_id": m.AttachmentID,
+	}
+	if m.OriginalName != "" {
+		v["original_name"] = m.OriginalName
+	}
+	if m.ContentType != "" {
+		v["content_type"] = m.ContentType
+	}
+	if m.SizeBytes > 0 {
+		v["size_bytes"] = m.SizeBytes
+	}
+	return v
+}
+
+// RecordAttachmentAdded writes task history when an attachment becomes ready (best-effort).
+func (s *TaskService) RecordAttachmentAdded(ctx context.Context, taskID, userID int64, meta AttachmentHistoryMeta) {
+	s.recordAttachmentHistory(ctx, taskID, userID, models.TaskHistoryActionAttachmentAdded, nil, attachmentHistoryValue(meta))
+}
+
+// RecordAttachmentRemoved writes task history after a successful attachment delete (best-effort).
+func (s *TaskService) RecordAttachmentRemoved(ctx context.Context, taskID, userID int64, meta AttachmentHistoryMeta) {
+	s.recordAttachmentHistory(ctx, taskID, userID, models.TaskHistoryActionAttachmentRemoved, attachmentHistoryValue(meta), nil)
+}
+
+func (s *TaskService) recordAttachmentHistory(
+	ctx context.Context,
+	taskID, userID int64,
+	action models.TaskHistoryAction,
+	oldValue, newValue map[string]interface{},
+) {
+	log := logger.WithTraceContext(ctx, s.logger)
+	history := &models.TaskHistory{
+		TaskID:   taskID,
+		UserID:   userID,
+		Action:   string(action),
+		OldValue: oldValue,
+		NewValue: newValue,
+	}
+	if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Int64("user.id", userID).
+			Str("action", string(action)).
+			Msg("failed to record attachment task history")
+	}
 }

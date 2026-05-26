@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"time"
 
 	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/internal/repository"
+	"github.com/boskuv/goreminder/pkg/attachments"
 	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/queue"
 	"go.opentelemetry.io/otel"
@@ -23,17 +25,19 @@ type UserService struct {
 	taskRepo      repository.TaskRepository
 	messengerRepo repository.MessengerRepository
 	producer      queue.Publisher
+	attachments   attachments.Client
 	tracer        trace.Tracer
 	logger        zerolog.Logger
 }
 
 // NewUserService creates a new instance of UserService
-func NewUserService(userRepo repository.UserRepository, taskRepo repository.TaskRepository, messengerRepo repository.MessengerRepository, producer queue.Publisher, logger zerolog.Logger) *UserService {
+func NewUserService(userRepo repository.UserRepository, taskRepo repository.TaskRepository, messengerRepo repository.MessengerRepository, producer queue.Publisher, attClient attachments.Client, logger zerolog.Logger) *UserService {
 	return &UserService{
 		userRepo:      userRepo,
 		taskRepo:      taskRepo,
 		messengerRepo: messengerRepo,
 		producer:      producer,
+		attachments:   attClient,
 		tracer:        otel.Tracer("user-service"),
 		logger:        logger,
 	}
@@ -314,7 +318,29 @@ func (s *UserService) DeleteUser(ctx context.Context, userID int64) error {
 	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "deleted", "user", userID, mapKeysForAudit(userToAuditMap(user)))).
 		Msg("user deleted successfully")
 	span.SetStatus(codes.Ok, "user deleted successfully")
+	s.purgeUserAttachmentsBestEffort(ctx, log, userID)
 	return nil
+}
+
+func (s *UserService) purgeUserAttachmentsBestEffort(ctx context.Context, log zerolog.Logger, userID int64) {
+	if s.attachments == nil {
+		return
+	}
+	const maxAttempts = 3
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * 200 * time.Millisecond)
+		}
+		lastErr = s.attachments.PurgeByUser(ctx, userID)
+		if lastErr == nil {
+			return
+		}
+	}
+	log.Warn().
+		Err(lastErr).
+		Int64("user.id", userID).
+		Msg("attachment purge after user delete failed after retries")
 }
 
 // GetAllUsers implements BL of retrieving all users with pagination and ordering

@@ -26,6 +26,7 @@ import (
 	"github.com/boskuv/goreminder/internal/repository"
 	"github.com/boskuv/goreminder/internal/service"
 	"github.com/boskuv/goreminder/pkg/args"
+	"github.com/boskuv/goreminder/pkg/attachments"
 	"github.com/boskuv/goreminder/pkg/config"
 	"github.com/boskuv/goreminder/pkg/database"
 	"github.com/boskuv/goreminder/pkg/logger"
@@ -176,9 +177,33 @@ func main() {
 		publisher = queue.NoopPublisher{}
 	}
 
+	var attClient attachments.Client = attachments.NewNoopClient()
+	if cfg.Attachments.Enabled {
+		attTimeout, err := time.ParseDuration(cfg.Attachments.Timeout)
+		if err != nil {
+			log.Fatal().Stack().Err(err).Msg("invalid attachments.timeout")
+		}
+		maxGRPCPayload := cfg.Attachments.DirectUploadMaxBytes
+		if cfg.Attachments.ProxyDownloadMaxBytes > maxGRPCPayload {
+			maxGRPCPayload = cfg.Attachments.ProxyDownloadMaxBytes
+		}
+		maxSend := int(maxGRPCPayload) + 4*1024*1024
+		attClient, err = attachments.NewGRPCClient(attachments.GRPCConfig{
+			Addr:               cfg.Attachments.GRPCAddr,
+			Timeout:            attTimeout,
+			MaxSendMessageSize: maxSend,
+		})
+		if err != nil {
+			log.Fatal().Stack().Err(err).Msg("failed to create attachments grpc client")
+		}
+		log.Info().Str("grpc_addr", cfg.Attachments.GRPCAddr).Msg("attachments client enabled")
+	} else {
+		log.Info().Msg("attachments client disabled")
+	}
+
 	// setup services
-	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, publisher, log)
-	userService := service.NewUserService(userRepo, taskRepo, messengerRepo, publisher, log)
+	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, publisher, attClient, log)
+	userService := service.NewUserService(userRepo, taskRepo, messengerRepo, publisher, attClient, log)
 	messengerService := service.NewMessengerService(messengerRepo, userRepo, log)
 	backlogService := service.NewBacklogService(backlogRepo, userRepo, messengerRepo, log)
 	targetService := service.NewTargetService(targetRepo, userRepo, messengerRepo, log)
@@ -188,12 +213,24 @@ func main() {
 	taskScheduler := service.NewTaskScheduler(taskRepo, taskService, log)
 
 	// initialize handlers
-	taskHandler := handlers.NewTaskHandler(taskService, log)
+	taskHandler := handlers.NewTaskHandler(taskService, attClient, cfg.Attachments.Enabled, log)
 	userHandler := handlers.NewUserHandler(userService, log)
 	messengerHandler := handlers.NewMessengerHandler(messengerService, log)
 	backlogHandler := handlers.NewBacklogHandler(backlogService, log)
 	targetHandler := handlers.NewTargetHandler(targetService, log)
 	digestHandler := handlers.NewDigestHandler(digestService, log)
+	directMax := cfg.Attachments.DirectUploadMaxBytes
+	if directMax <= 0 {
+		directMax = 2 * 1024 * 1024
+	}
+	proxyMax := cfg.Attachments.ProxyDownloadMaxBytes
+	if proxyMax <= 0 {
+		proxyMax = directMax
+	}
+	attachmentHandler := handlers.NewAttachmentHandler(
+		taskService, attClient, cfg.Attachments.Enabled, directMax,
+		cfg.Attachments.ProxyDownloadEnabled, proxyMax, log,
+	)
 
 	// setup swagger info
 	appVersion := version.GetVersion()
@@ -210,6 +247,9 @@ func main() {
 	}
 
 	router := gin.Default()
+	if cfg.Attachments.Enabled && cfg.Attachments.DirectUploadMaxBytes > 0 {
+		router.MaxMultipartMemory = cfg.Attachments.DirectUploadMaxBytes + 1024*1024
+	}
 
 	// Register custom validators
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
@@ -268,7 +308,7 @@ func main() {
 	}
 
 	// register application routes
-	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler, backlogHandler, targetHandler, digestHandler)
+	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler, backlogHandler, targetHandler, digestHandler, attachmentHandler)
 	routes.RegisterSystemRoutes(router, appVersion)
 
 	log.Info().Msg("graceful startup")

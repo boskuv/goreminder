@@ -1546,7 +1546,7 @@
         },
         "/api/v1/tasks/{id}": {
             "get": {
-                "description": "Retrieves a task by its ID",
+                "description": "Retrieves a task by its ID. When attachments.enabled is true, includes attachments array (omitted when empty or when attachment list fails).",
                 "produces": [
                     "application/json"
                 ],
@@ -1567,7 +1567,7 @@
                     "200": {
                         "description": "Task details",
                         "schema": {
-                            "$ref": "#/definitions/dto.TaskResponse"
+                            "$ref": "#/definitions/dto.TaskDetailResponse"
                         }
                     },
                     "400": {
@@ -1694,6 +1694,264 @@
                         "description": "Internal server error",
                         "schema": {
                             "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/tasks/{id}/attachments": {
+            "get": {
+                "tags": [
+                    "Task Attachments"
+                ],
+                "summary": "List task attachments",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "example": 42,
+                        "description": "Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ListAttachmentsResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "JSON body: presigned upload (pending + upload_url). multipart/form-data with field file: direct upload (max 2MB, status ready, no complete step).",
+                "consumes": [
+                    "application/json",
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Task Attachments"
+                ],
+                "summary": "Create or initialize task attachment",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "example": 42,
+                        "description": "Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "File for direct upload (multipart only)",
+                        "name": "file",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "example": "550e8400-e29b-41d4-a716-446655440000",
+                        "description": "Idempotency key (multipart only)",
+                        "name": "idempotency_key",
+                        "in": "formData"
+                    },
+                    {
+                        "description": "Presigned init (JSON only)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/dto.InitAttachmentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Direct upload (multipart)",
+                        "schema": {
+                            "$ref": "#/definitions/dto.AttachmentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/dto.AttachmentsDisabledResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/tasks/{id}/attachments/{attachment_id}": {
+            "delete": {
+                "tags": [
+                    "Task Attachments"
+                ],
+                "summary": "Delete attachment",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "example": 42,
+                        "description": "Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "example": "550e8400-e29b-41d4-a716-446655440000",
+                        "description": "Attachment ID",
+                        "name": "attachment_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/api/v1/tasks/{id}/attachments/{attachment_id}/complete": {
+            "post": {
+                "tags": [
+                    "Task Attachments"
+                ],
+                "summary": "Complete attachment upload",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "example": 42,
+                        "description": "Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "example": "550e8400-e29b-41d4-a716-446655440000",
+                        "description": "Attachment ID",
+                        "name": "attachment_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.AttachmentResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/tasks/{id}/attachments/{attachment_id}/content": {
+            "get": {
+                "description": "Returns file bytes for ready attachments within proxyDownloadMaxBytes when proxyDownloadEnabled is true. Use GET .../download for presigned URL (large files).",
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "Task Attachments"
+                ],
+                "summary": "Download attachment file via API (proxy)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "example": 42,
+                        "description": "Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "example": "550e8400-e29b-41d4-a716-446655440000",
+                        "description": "Attachment ID",
+                        "name": "attachment_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File content",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/dto.AttachmentsDisabledResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/tasks/{id}/attachments/{attachment_id}/download": {
+            "get": {
+                "tags": [
+                    "Task Attachments"
+                ],
+                "summary": "Get attachment download URL",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "example": 42,
+                        "description": "Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "example": "550e8400-e29b-41d4-a716-446655440000",
+                        "description": "Attachment ID",
+                        "name": "attachment_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.DownloadAttachmentResponse"
                         }
                     }
                 }
@@ -2281,70 +2539,6 @@
                 }
             }
         },
-        "/api/v1/users/{user_id}/tasks/calendar": {
-            "get": {
-                "description": "Returns task occurrences in a date range: real tasks plus virtual recurrences from cron parents (phantom occurrences for editing parent only)",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Tasks"
-                ],
-                "summary": "Get user tasks for calendar view",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "User ID",
-                        "name": "user_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Range start (RFC3339)",
-                        "name": "start_date",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Range end (RFC3339)",
-                        "name": "end_date",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Calendar occurrences (virtual=true for phantom)",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/dto.CalendarOccurrenceResponse"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ErrorResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "Unprocessable entity",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/users/{user_id}/tasks/history": {
             "get": {
                 "description": "Retrieves task history entries for a user with pagination",
@@ -2464,6 +2658,57 @@
         }
     },
     "definitions": {
+        "dto.AttachmentResponse": {
+            "type": "object",
+            "properties": {
+                "content_type": {
+                    "type": "string",
+                    "example": "application/pdf"
+                },
+                "created_at": {
+                    "type": "string",
+                    "example": "2026-05-21T12:00:00Z"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "original_name": {
+                    "type": "string",
+                    "example": "report.pdf"
+                },
+                "size_bytes": {
+                    "type": "integer",
+                    "example": 1048576
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "pending",
+                        "ready",
+                        "failed"
+                    ],
+                    "example": "ready"
+                },
+                "task_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "dto.AttachmentsDisabledResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "attachments_disabled"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Attachment storage is disabled in this deployment"
+                }
+            }
+        },
         "dto.BacklogResponse": {
             "type": "object",
             "properties": {
@@ -2513,63 +2758,6 @@
                     "items": {
                         "type": "integer"
                     }
-                }
-            }
-        },
-        "dto.CalendarOccurrenceResponse": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string",
-                    "example": "2024-01-10T08:00:00Z"
-                },
-                "description": {
-                    "type": "string",
-                    "example": "Write comprehensive documentation for the API"
-                },
-                "finish_date": {
-                    "type": "string",
-                    "example": "2024-01-20T18:00:00Z"
-                },
-                "id": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "messenger_related_user_id": {
-                    "type": "integer",
-                    "example": 123
-                },
-                "parent_id": {
-                    "type": "integer",
-                    "example": 5
-                },
-                "start_date": {
-                    "type": "string",
-                    "example": "2024-01-15T10:00:00Z"
-                },
-                "status": {
-                    "type": "string",
-                    "enum": [
-                        "pending",
-                        "scheduled",
-                        "done",
-                        "rescheduled",
-                        "postponed",
-                        "deleted"
-                    ],
-                    "example": "pending"
-                },
-                "title": {
-                    "type": "string",
-                    "example": "Complete project documentation"
-                },
-                "user_id": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "virtual": {
-                    "type": "boolean",
-                    "example": false
                 }
             }
         },
@@ -2751,9 +2939,17 @@
                     "type": "integer",
                     "example": 123
                 },
+                "muted": {
+                    "type": "boolean",
+                    "example": false
+                },
                 "requires_confirmation": {
                     "type": "boolean",
                     "example": true
+                },
+                "rrule": {
+                    "type": "string",
+                    "example": "FREQ=DAILY;INTERVAL=1"
                 },
                 "start_date": {
                     "type": "string",
@@ -2901,6 +3097,19 @@
                 }
             }
         },
+        "dto.DownloadAttachmentResponse": {
+            "type": "object",
+            "properties": {
+                "download_url": {
+                    "type": "string",
+                    "example": "http://localhost:9000/goreminder-attachments/attachments/1/42/550e8400-e29b-41d4-a716-446655440000?X-Amz-Algorithm=AWS4-HMAC-SHA256"
+                },
+                "expires_at": {
+                    "type": "string",
+                    "example": "2026-05-21T12:30:00Z"
+                }
+            }
+        },
         "dto.ErrorResponse": {
             "type": "object",
             "properties": {
@@ -2925,6 +3134,79 @@
                 "id": {
                     "type": "integer",
                     "example": 1
+                }
+            }
+        },
+        "dto.InitAttachmentRequest": {
+            "type": "object",
+            "required": [
+                "content_type",
+                "original_name",
+                "size_bytes"
+            ],
+            "properties": {
+                "content_type": {
+                    "type": "string",
+                    "example": "application/pdf"
+                },
+                "idempotency_key": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "original_name": {
+                    "type": "string",
+                    "example": "report.pdf"
+                },
+                "size_bytes": {
+                    "type": "integer",
+                    "example": 1048576
+                }
+            }
+        },
+        "dto.InitAttachmentResponse": {
+            "type": "object",
+            "properties": {
+                "expires_at": {
+                    "type": "string",
+                    "example": "2026-05-21T12:15:00Z"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "required_headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "pending",
+                        "ready",
+                        "failed"
+                    ],
+                    "example": "pending"
+                },
+                "task_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "upload_url": {
+                    "type": "string",
+                    "example": "http://localhost:9000/goreminder-attachments/attachments/1/42/550e8400-e29b-41d4-a716-446655440000?X-Amz-Algorithm=AWS4-HMAC-SHA256"
+                }
+            }
+        },
+        "dto.ListAttachmentsResponse": {
+            "type": "object",
+            "properties": {
+                "attachments": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.AttachmentResponse"
+                    }
                 }
             }
         },
@@ -3096,6 +3378,19 @@
                 }
             }
         },
+        "dto.ProxyDownloadDisabledResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "proxy_download_disabled"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Proxy download is disabled; use GET .../download for a presigned URL"
+                }
+            }
+        },
         "dto.QueueTaskRequest": {
             "type": "object",
             "required": [
@@ -3172,6 +3467,82 @@
                 }
             }
         },
+        "dto.TaskDetailResponse": {
+            "type": "object",
+            "properties": {
+                "attachments": {
+                    "description": "when attachments.enabled; omitted when empty",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.AttachmentResponse"
+                    }
+                },
+                "created_at": {
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
+                },
+                "cron_expression": {
+                    "type": "string",
+                    "example": "0 9 * * *"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Write comprehensive documentation for the API"
+                },
+                "finish_date": {
+                    "type": "string",
+                    "example": "2024-01-20T18:00:00Z"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "messenger_related_user_id": {
+                    "type": "integer",
+                    "example": 123
+                },
+                "muted": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "parent_id": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "requires_confirmation": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "rrule": {
+                    "type": "string",
+                    "example": "FREQ=DAILY;INTERVAL=1"
+                },
+                "start_date": {
+                    "type": "string",
+                    "example": "2024-01-15T10:00:00Z"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "pending",
+                        "scheduled",
+                        "done",
+                        "rescheduled",
+                        "postponed",
+                        "deleted"
+                    ],
+                    "example": "pending"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Complete project documentation"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
         "dto.TaskHistoryResponse": {
             "type": "object",
             "properties": {
@@ -3181,7 +3552,9 @@
                         "created",
                         "updated",
                         "deleted",
-                        "status_changed"
+                        "status_changed",
+                        "attachment_added",
+                        "attachment_removed"
                     ],
                     "example": "created"
                 },
@@ -3296,6 +3669,10 @@
                     "type": "integer",
                     "example": 123
                 },
+                "muted": {
+                    "type": "boolean",
+                    "example": false
+                },
                 "parent_id": {
                     "type": "integer",
                     "example": 5
@@ -3303,6 +3680,10 @@
                 "requires_confirmation": {
                     "type": "boolean",
                     "example": true
+                },
+                "rrule": {
+                    "type": "string",
+                    "example": "FREQ=DAILY;INTERVAL=1"
                 },
                 "start_date": {
                     "type": "string",
@@ -3402,9 +3783,17 @@
                     "type": "string",
                     "example": "2024-01-20T18:00:00Z"
                 },
+                "muted": {
+                    "type": "boolean",
+                    "example": false
+                },
                 "requires_confirmation": {
                     "type": "boolean",
                     "example": true
+                },
+                "rrule": {
+                    "type": "string",
+                    "example": "FREQ=DAILY;INTERVAL=1"
                 },
                 "start_date": {
                     "type": "string",

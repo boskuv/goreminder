@@ -31,7 +31,7 @@ type UpdateTaskRequest struct {
 	RRule                *string    `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 }
 
-// TaskResponse represents the response DTO for a task
+// TaskResponse represents a task in list and mutation responses (no attachments).
 type TaskResponse struct {
 	ID                     int64      `json:"id" example:"1"`
 	Title                  string     `json:"title" example:"Complete project documentation"`
@@ -47,6 +47,25 @@ type TaskResponse struct {
 	Muted                  bool       `json:"muted" example:"false"`
 	Status                 string     `json:"status" example:"pending" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
 	CreatedAt              time.Time  `json:"created_at" example:"2024-01-10T08:00:00Z"`
+}
+
+// TaskDetailResponse represents a single task from GET /tasks/{id} (may include attachments).
+type TaskDetailResponse struct {
+	ID                     int64                `json:"id" example:"1"`
+	Title                  string               `json:"title" example:"Complete project documentation"`
+	Description            string               `json:"description" example:"Write comprehensive documentation for the API"`
+	UserID                 int64                `json:"user_id" example:"1"`
+	MessengerRelatedUserID *int                 `json:"messenger_related_user_id,omitempty" example:"123"`
+	ParentID               *int64               `json:"parent_id,omitempty" example:"5"`
+	StartDate              time.Time            `json:"start_date" example:"2024-01-15T10:00:00Z"`
+	FinishDate             *time.Time           `json:"finish_date,omitempty" example:"2024-01-20T18:00:00Z"`
+	CronExpression         *string              `json:"cron_expression,omitempty" example:"0 9 * * *"`
+	RRule                  *string              `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
+	RequiresConfirmation   bool                 `json:"requires_confirmation,omitempty" example:"true"`
+	Muted                  bool                 `json:"muted" example:"false"`
+	Status                 string               `json:"status" example:"pending" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
+	CreatedAt              time.Time            `json:"created_at" example:"2024-01-10T08:00:00Z"`
+	Attachments            []AttachmentResponse `json:"attachments,omitempty"` // when attachments.enabled; omitted when empty
 }
 
 // TaskMarkedDoneResponse represents the response DTO for mark-as-done endpoint.

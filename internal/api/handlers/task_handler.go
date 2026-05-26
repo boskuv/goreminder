@@ -13,20 +13,30 @@ import (
 	"github.com/boskuv/goreminder/internal/api/validation"
 	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/service"
+	"github.com/boskuv/goreminder/pkg/attachments"
 	"github.com/boskuv/goreminder/pkg/logger"
 )
 
 // TaskHandler handles task-related HTTP requests
 type TaskHandler struct {
-	logger      zerolog.Logger
-	taskService *service.TaskService
+	logger             zerolog.Logger
+	taskService        *service.TaskService
+	attClient          attachments.Client
+	attachmentsEnabled bool
 }
 
 // NewTaskHandler creates a new TaskHandler
-func NewTaskHandler(taskService *service.TaskService, logger zerolog.Logger) *TaskHandler {
+func NewTaskHandler(
+	taskService *service.TaskService,
+	attClient attachments.Client,
+	attachmentsEnabled bool,
+	logger zerolog.Logger,
+) *TaskHandler {
 	return &TaskHandler{
-		logger:      logger,
-		taskService: taskService,
+		logger:             logger,
+		taskService:        taskService,
+		attClient:          attClient,
+		attachmentsEnabled: attachmentsEnabled,
 	}
 }
 
@@ -96,11 +106,11 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 }
 
 // @Summary Get task by ID
-// @Description Retrieves a task by its ID
+// @Description Retrieves a task by its ID. When attachments.enabled is true, includes attachments array (omitted when empty or when attachment list fails).
 // @Tags Tasks
 // @Produce json
 // @Param id path int true "Task ID"
-// @Success 200 {object} dto.TaskResponse "Task details"
+// @Success 200 {object} dto.TaskDetailResponse "Task details"
 // @Failure 400 {object} dto.ErrorResponse "Bad request"
 // @Failure 404 {object} dto.ErrorResponse "Task not found"
 // @Failure 500 {object} dto.ErrorResponse "Internal server error"
@@ -146,9 +156,16 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 		Int64("task.id", taskID).
 		Msg("task retrieved successfully")
 
-	// Convert model to response DTO
-	response := mapper.TaskModelToResponse(task)
-	c.JSON(http.StatusOK, response)
+	var atts []dto.AttachmentResponse
+	if h.attachmentsEnabled {
+		list, err := h.attClient.ListAttachments(ctx, taskID)
+		if err != nil {
+			log.Warn().Err(err).Int64("task.id", taskID).Msg("list attachments for task response failed")
+		} else {
+			atts = mapper.AttachmentsToResponse(list)
+		}
+	}
+	c.JSON(http.StatusOK, mapper.TaskModelToDetailResponse(task, atts))
 }
 
 // @Summary Get all user's tasks by userID
