@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"io"
 	"mime"
 	"net/http"
@@ -170,6 +171,7 @@ func (h *AttachmentHandler) uploadDirect(c *gin.Context) {
 			h.mapAttachmentError(ctx, err)
 			return
 		}
+		h.recordAttachmentAdded(ctx.Request.Context(), taskID, task.UserID, att)
 		ctx.JSON(http.StatusCreated, attachmentResponse(att))
 	})
 }
@@ -183,11 +185,17 @@ func (h *AttachmentHandler) uploadDirect(c *gin.Context) {
 func (h *AttachmentHandler) CompleteUpload(c *gin.Context) {
 	h.withTask(c, func(ctx *gin.Context, taskID int64) {
 		attID := ctx.Param("attachment_id")
+		task, err := h.taskService.GetTask(ctx.Request.Context(), taskID)
+		if err != nil {
+			h.mapTaskError(ctx, err)
+			return
+		}
 		att, err := h.attClient.CompleteUpload(ctx.Request.Context(), taskID, attID)
 		if err != nil {
 			h.mapAttachmentError(ctx, err)
 			return
 		}
+		h.recordAttachmentAdded(ctx.Request.Context(), taskID, task.UserID, att)
 		ctx.JSON(http.StatusOK, attachmentResponse(att))
 	})
 }
@@ -301,10 +309,17 @@ func (h *AttachmentHandler) GetAttachmentContent(c *gin.Context) {
 func (h *AttachmentHandler) DeleteAttachment(c *gin.Context) {
 	h.withTask(c, func(ctx *gin.Context, taskID int64) {
 		attID := ctx.Param("attachment_id")
+		task, err := h.taskService.GetTask(ctx.Request.Context(), taskID)
+		if err != nil {
+			h.mapTaskError(ctx, err)
+			return
+		}
+		meta := h.attachmentHistoryMeta(ctx.Request.Context(), taskID, attID)
 		if err := h.attClient.DeleteAttachment(ctx.Request.Context(), taskID, attID); err != nil {
 			h.mapAttachmentError(ctx, err)
 			return
 		}
+		h.recordAttachmentRemoved(ctx.Request.Context(), taskID, task.UserID, meta)
 		ctx.Status(http.StatusNoContent)
 	})
 }
@@ -387,4 +402,26 @@ func (h *AttachmentHandler) mapAttachmentError(c *gin.Context, err error) {
 func attachmentResponse(a *attachments.Attachment) dto.AttachmentResponse {
 	list := mapper.AttachmentsToResponse([]attachments.Attachment{*a})
 	return list[0]
+}
+
+func (h *AttachmentHandler) recordAttachmentAdded(ctx context.Context, taskID, userID int64, att *attachments.Attachment) {
+	h.taskService.RecordAttachmentAdded(ctx, taskID, userID, service.AttachmentHistoryMetaFromModel(att))
+}
+
+func (h *AttachmentHandler) recordAttachmentRemoved(ctx context.Context, taskID, userID int64, meta service.AttachmentHistoryMeta) {
+	h.taskService.RecordAttachmentRemoved(ctx, taskID, userID, meta)
+}
+
+func (h *AttachmentHandler) attachmentHistoryMeta(ctx context.Context, taskID int64, attachmentID string) service.AttachmentHistoryMeta {
+	meta := service.AttachmentHistoryMeta{AttachmentID: attachmentID}
+	list, err := h.attClient.ListAttachments(ctx, taskID)
+	if err != nil {
+		return meta
+	}
+	for i := range list {
+		if list[i].ID == attachmentID {
+			return service.AttachmentHistoryMetaFromModel(&list[i])
+		}
+	}
+	return meta
 }

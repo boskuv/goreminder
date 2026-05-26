@@ -673,6 +673,8 @@ Files larger than the direct limit via multipart receive **413** — use the pre
 
 **Attachment statuses:** `pending` (presigned flow, awaiting `complete`), `ready` (available for download), `failed`.
 
+**Task history:** `GET /api/v1/tasks/{id}/history` records `attachment_added` when an attachment becomes `ready` (after `UploadDirect` or `CompleteUpload`) and `attachment_removed` on delete. Presigned init (`pending`) is not logged. Purge on task/user delete does not emit per-file history entries.
+
 When `attachments.enabled: false`, attachment endpoints return **503** with `error: attachments_disabled`. Contract details: [api/README.md](api/README.md).
 
 ## API Documentation

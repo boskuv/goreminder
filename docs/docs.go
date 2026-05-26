@@ -3563,7 +3563,9 @@ const docTemplate = `{
                         "created",
                         "updated",
                         "deleted",
-                        "status_changed"
+                        "status_changed",
+                        "attachment_added",
+                        "attachment_removed"
                     ],
                     "example": "created"
                 },

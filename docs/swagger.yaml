@@ -645,6 +645,8 @@ definitions:
         - updated
         - deleted
         - status_changed
+        - attachment_added
+        - attachment_removed
         example: created
         type: string
       created_at:

@@ -3159,3 +3159,75 @@ func (s *TaskService) purgeAttachmentsBestEffort(ctx context.Context, log zerolo
 		Int64("task.id", taskID).
 		Msg("attachment purge after task delete failed after retries")
 }
+
+// AttachmentHistoryMeta is stored in task_history for attachment add/remove events.
+type AttachmentHistoryMeta struct {
+	AttachmentID string
+	OriginalName string
+	ContentType  string
+	SizeBytes    int64
+}
+
+// AttachmentHistoryMetaFromModel builds metadata from an attachment client model.
+func AttachmentHistoryMetaFromModel(a *attachments.Attachment) AttachmentHistoryMeta {
+	if a == nil {
+		return AttachmentHistoryMeta{}
+	}
+	return AttachmentHistoryMeta{
+		AttachmentID: a.ID,
+		OriginalName: a.OriginalName,
+		ContentType:  a.ContentType,
+		SizeBytes:    a.SizeBytes,
+	}
+}
+
+func attachmentHistoryValue(m AttachmentHistoryMeta) map[string]interface{} {
+	v := map[string]interface{}{
+		"attachment_id": m.AttachmentID,
+	}
+	if m.OriginalName != "" {
+		v["original_name"] = m.OriginalName
+	}
+	if m.ContentType != "" {
+		v["content_type"] = m.ContentType
+	}
+	if m.SizeBytes > 0 {
+		v["size_bytes"] = m.SizeBytes
+	}
+	return v
+}
+
+// RecordAttachmentAdded writes task history when an attachment becomes ready (best-effort).
+func (s *TaskService) RecordAttachmentAdded(ctx context.Context, taskID, userID int64, meta AttachmentHistoryMeta) {
+	s.recordAttachmentHistory(ctx, taskID, userID, models.TaskHistoryActionAttachmentAdded, nil, attachmentHistoryValue(meta))
+}
+
+// RecordAttachmentRemoved writes task history after a successful attachment delete (best-effort).
+func (s *TaskService) RecordAttachmentRemoved(ctx context.Context, taskID, userID int64, meta AttachmentHistoryMeta) {
+	s.recordAttachmentHistory(ctx, taskID, userID, models.TaskHistoryActionAttachmentRemoved, attachmentHistoryValue(meta), nil)
+}
+
+func (s *TaskService) recordAttachmentHistory(
+	ctx context.Context,
+	taskID, userID int64,
+	action models.TaskHistoryAction,
+	oldValue, newValue map[string]interface{},
+) {
+	log := logger.WithTraceContext(ctx, s.logger)
+	history := &models.TaskHistory{
+		TaskID:   taskID,
+		UserID:   userID,
+		Action:   string(action),
+		OldValue: oldValue,
+		NewValue: newValue,
+	}
+	if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("task.id", taskID).
+			Int64("user.id", userID).
+			Str("action", string(action)).
+			Msg("failed to record attachment task history")
+	}
+}

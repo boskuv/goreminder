@@ -8,10 +8,12 @@ import (
 type TaskHistoryAction string
 
 const (
-	TaskHistoryActionCreated       TaskHistoryAction = "created"
-	TaskHistoryActionUpdated       TaskHistoryAction = "updated"
-	TaskHistoryActionDeleted       TaskHistoryAction = "deleted"
-	TaskHistoryActionStatusChanged TaskHistoryAction = "status_changed"
+	TaskHistoryActionCreated            TaskHistoryAction = "created"
+	TaskHistoryActionUpdated            TaskHistoryAction = "updated"
+	TaskHistoryActionDeleted            TaskHistoryAction = "deleted"
+	TaskHistoryActionStatusChanged      TaskHistoryAction = "status_changed"
+	TaskHistoryActionAttachmentAdded    TaskHistoryAction = "attachment_added"
+	TaskHistoryActionAttachmentRemoved  TaskHistoryAction = "attachment_removed"
 )
 
 // TaskHistory represents the history entry for a task
