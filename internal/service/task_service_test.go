@@ -955,6 +955,54 @@ func TestTaskService_MuteTask_IdempotentAlreadyMuted(t *testing.T) {
 	assert.Len(t, pub.published, 0)
 }
 
+func TestTaskService_UnmuteTask_RecurringCronAdvancesPastStartDate(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	taskRepo := mock_repositories.NewMockTaskRepository(ctrl)
+	userRepo := mock_repositories.NewMockUserRepository(ctrl)
+	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
+	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
+	pub := &stubPublisher{}
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), false, testLogger)
+
+	ctx := context.Background()
+	mu := 5
+	cron := "0 9 * * *"
+	pastStart := time.Now().UTC().Add(-72 * time.Hour)
+	task := &models.Task{
+		ID:                     1,
+		UserID:                 1,
+		Title:                  "t",
+		Description:            "d",
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              pastStart,
+		CronExpression:         &cron,
+		RequiresConfirmation:   false,
+		MessengerRelatedUserID: &mu,
+		Muted:                  true,
+	}
+	taskRepo.EXPECT().GetTaskByIDWithoutStatusFilter(gomock.Any(), int64(1)).Return(task, nil)
+	taskRepo.EXPECT().UpdateTask(gomock.Any(), gomock.Any()).Return(nil).Times(2)
+	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), mu).Return(&models.MessengerRelatedUser{
+		ID: int64(mu), MessengerID: ptrInt64(1), ChatID: "c1",
+	}, nil)
+	messengerRepo.EXPECT().GetMessengerByID(gomock.Any(), int64(1)).Return(&models.Messenger{ID: 1, Name: "telegram"}, nil)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	out, err := service.UnmuteTask(ctx, 1)
+	assert.NoError(t, err)
+	assert.False(t, out.Muted)
+	assert.True(t, out.StartDate.After(time.Now().UTC()))
+	require.Len(t, pub.published, 1)
+	msg := pub.published[0].(queue.TaskMessage)
+	assert.Equal(t, "worker.schedule_task", msg.Task)
+	startArg, ok := msg.Args[5].(*time.Time)
+	require.True(t, ok)
+	require.NotNil(t, startArg)
+	assert.True(t, startArg.After(time.Now().UTC()))
+}
+
 func TestTaskService_UnmuteTask_PublishesSchedule(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

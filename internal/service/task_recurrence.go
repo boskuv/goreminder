@@ -87,6 +87,35 @@ func hasRecurrenceRule(t *models.Task) bool {
 	return recurrenceFieldSet(t.CronExpression) || recurrenceFieldSet(t.RRule)
 }
 
+// nextExecutableStartDate returns the start_date to use when publishing worker.schedule_task after unmute.
+// If start_date is already in the future (or now), it is returned unchanged.
+// For executable recurring rows (cron/rrule on the task, not confirmation parents), returns the next
+// occurrence from the rule when start_date is in the past (same calculation as RescheduleCronTasks).
+// For child tasks with a parent recurrence rule, returns the parent's next occurrence after now.
+// For one-time tasks with start_date in the past, returns zero time.
+func nextExecutableStartDate(task *models.Task, parent *models.Task, now time.Time) (time.Time, error) {
+	if task == nil {
+		return time.Time{}, fmt.Errorf("task is nil")
+	}
+	now = now.UTC()
+	if !task.StartDate.Before(now) {
+		return task.StartDate.UTC(), nil
+	}
+	if isRecurrenceParentWithConfirmation(task) {
+		return time.Time{}, nil
+	}
+	if recurrenceFieldSet(task.CronExpression) {
+		return cronexpr.MustParse(*task.CronExpression).Next(now), nil
+	}
+	if recurrenceFieldSet(task.RRule) {
+		return nextStartFromRRule(now, *task.RRule, task.StartDate)
+	}
+	if task.ParentID != nil && parent != nil && hasRecurrenceRule(parent) {
+		return nextRecurrenceAfter(parent, now)
+	}
+	return time.Time{}, nil
+}
+
 // nextRecurrenceAfter returns the first occurrence strictly after `from` using whichever recurrence
 // field is set on the parent (cron and rrule are mutually exclusive).
 func nextRecurrenceAfter(parent *models.Task, from time.Time) (time.Time, error) {

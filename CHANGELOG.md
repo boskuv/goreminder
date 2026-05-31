@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - **PUT /api/v1/tasks/{id}** recurrence cleanup now supports recurring-to-single conversion in one update: when recurrence is removed from a recurring parent, only active child tasks are deleted (done/deleted children are preserved), and queue publish failures still rollback the transaction.
 - **PUT /api/v1/tasks/{id}** now normalizes empty recurrence values (`cron_expression`, `rrule`) to `NULL` in DB instead of persisting empty strings.
 
+### Fixed
+- **Task unmute** (`POST /api/v1/tasks/{id}/unmute`, `PUT /api/v1/tasks/{id}` with `muted: false`): republishing `worker.schedule_task` no longer sends a past `start_date` for recurring tasks with `cron_expression` or `rrule` — when `start_date` is overdue, it is advanced to the next occurrence (same calculation as autoreschedule) and persisted before publish; future `start_date` is left unchanged. Recurrence parents with `requires_confirmation` are no longer scheduled on unmute (only active child tasks are republished). Child tasks with a stale `start_date` are advanced from the parent’s recurrence rule. `PUT` unmute now follows the same republish rules as `POST .../unmute` (one-time tasks with a past `start_date` are not enqueued).
+
 ### Added
 - **Task attachments** (S3-compatible object storage; **attachment service** is a separate deployable, **core** is REST BFF):
   - **REST** (GoReminder API): `GET/POST /api/v1/tasks/{id}/attachments`, `POST .../attachments/{attachment_id}/complete`, `GET .../attachments/{attachment_id}/download`, `GET .../attachments/{attachment_id}/content`, `DELETE .../attachments/{attachment_id}`.

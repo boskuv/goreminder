@@ -99,11 +99,63 @@ func shouldRepublishScheduleAfterUnmute(task *models.Task) bool {
 	if task == nil {
 		return false
 	}
+	// Recurrence parents with confirmation do not execute directly; only their children are scheduled.
+	if isRecurrenceParentWithConfirmation(task) {
+		return false
+	}
 	now := time.Now().UTC()
-	if task.CronExpression != nil || task.RRule != nil {
+	if hasRecurrenceRule(task) {
 		return true
 	}
-	return task.StartDate.After(now) || task.StartDate.Equal(now)
+	// Child rows may have a stale start_date; publishScheduleForTaskAfterUnmute advances from the parent rule.
+	if task.ParentID != nil {
+		return true
+	}
+	return !task.StartDate.Before(now)
+}
+
+// publishScheduleForTaskAfterUnmute republishes worker.schedule_task after unmute when applicable.
+// Past start_date values are advanced using the task's recurrence rule or the parent's rule (for children).
+func (s *TaskService) publishScheduleForTaskAfterUnmute(ctx context.Context, task *models.Task) error {
+	if !shouldRepublishScheduleAfterUnmute(task) {
+		return nil
+	}
+
+	log := logger.WithTraceContext(ctx, s.logger)
+	now := time.Now().UTC()
+
+	var parent *models.Task
+	if task.ParentID != nil && task.StartDate.Before(now) {
+		p, err := s.taskRepo.GetTaskByIDWithoutStatusFilter(ctx, *task.ParentID)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		parent = p
+	}
+
+	effectiveStart, err := nextExecutableStartDate(task, parent, now)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if effectiveStart.IsZero() {
+		log.Debug().
+			Int64("task.id", task.ID).
+			Msg("skipping schedule_task after unmute: no future start_date")
+		return nil
+	}
+
+	if !effectiveStart.Equal(task.StartDate) {
+		task.StartDate = effectiveStart
+		if err := s.taskRepo.UpdateTask(ctx, task); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	schEv, err := s.buildScheduleTaskEvent(ctx, task)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	return s.publishTaskEvent(ctx, task, schEv)
 }
 
 // CreateTask implements BL of adding new task
@@ -722,22 +774,13 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 						}
 					}
 				}
-			} else {
-				scheduleEv, muteErr := s.buildScheduleTaskEvent(ctx, oldTask)
-				if muteErr != nil {
+			} else if shouldRepublishScheduleAfterUnmute(oldTask) {
+				if pubErr := s.publishScheduleForTaskAfterUnmute(ctx, oldTask); pubErr != nil {
 					log.Error().
 						Stack().
-						Err(muteErr).
+						Err(pubErr).
 						Int64("task.id", taskID).
-						Msg("failed to build schedule event after unmute")
-				} else {
-					if pubErr := s.publishTaskEvent(ctx, oldTask, scheduleEv); pubErr != nil {
-						log.Error().
-							Stack().
-							Err(pubErr).
-							Int64("task.id", taskID).
-							Msg("failed to queue schedule_task after unmute")
-					}
+						Msg("failed to queue schedule_task after unmute")
 				}
 			}
 		}
@@ -1185,47 +1228,13 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 								}
 							}
 						} else if shouldRepublishScheduleAfterUnmute(childTask) {
-							if childTask.MessengerRelatedUserID != nil {
-								messengerRelatedUser, mutePubErr := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *childTask.MessengerRelatedUserID)
-								if mutePubErr != nil {
-									log.Error().
-										Stack().
-										Err(mutePubErr).
-										Int64("task.id", taskID).
-										Int64("child_task.id", childTask.ID).
-										Msg("failed to get messenger related user after parent unmute")
-								} else {
-									messengerName, mnErr := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
-									if mnErr != nil {
-										log.Error().
-											Stack().
-											Err(mnErr).
-											Int64("task.id", taskID).
-											Int64("child_task.id", childTask.ID).
-											Msg("failed to get messenger name after parent unmute")
-									} else {
-										ev := queue.TaskEvent{
-											Type:                 queue.TaskEventSchedule,
-											TaskID:               childTask.ID,
-											UserID:               childTask.UserID,
-											MessengerName:        messengerName,
-											ChatID:               messengerRelatedUser.ChatID,
-											Title:                childTask.Title,
-											Description:          childTask.Description,
-											StartDate:            &childTask.StartDate,
-											CronExpression:       childTask.CronExpression,
-											RequiresConfirmation: childTask.RequiresConfirmation,
-										}
-										if pubErr := s.publishTaskEvent(ctx, childTask, ev); pubErr != nil {
-											log.Error().
-												Stack().
-												Err(pubErr).
-												Int64("task.id", taskID).
-												Int64("child_task.id", childTask.ID).
-												Msg("failed to queue schedule_task for child after parent unmute")
-										}
-									}
-								}
+							if pubErr := s.publishScheduleForTaskAfterUnmute(ctx, childTask); pubErr != nil {
+								log.Error().
+									Stack().
+									Err(pubErr).
+									Int64("task.id", taskID).
+									Int64("child_task.id", childTask.ID).
+									Msg("failed to queue schedule_task for child after parent unmute")
 							}
 						}
 					}
@@ -1261,25 +1270,6 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					}
 				}
 			}
-			if muteTransition && (wasParentTask || isParentTask) && !oldTask.Muted && shouldRepublishScheduleAfterUnmute(oldTask) {
-				scheduleEv, parentUnmuteErr := s.buildScheduleTaskEvent(ctx, oldTask)
-				if parentUnmuteErr != nil {
-					log.Error().
-						Stack().
-						Err(parentUnmuteErr).
-						Int64("task.id", taskID).
-						Msg("failed to build schedule event for parent after unmute")
-				} else {
-					if pubErr := s.publishTaskEvent(ctx, oldTask, scheduleEv); pubErr != nil {
-						log.Error().
-							Stack().
-							Err(pubErr).
-							Int64("task.id", taskID).
-							Msg("failed to queue schedule_task for parent task after unmute")
-					}
-				}
-			}
-
 		// Commit transaction if we started one
 		if hasActiveTransaction {
 			err = tx.Commit()
@@ -2079,27 +2069,15 @@ func (s *TaskService) UnmuteTask(ctx context.Context, taskID int64) (*models.Tas
 					log.Error().Stack().Err(upErr).Int64("child_task.id", c.ID).Msg("failed to update child unmuted flag")
 					continue
 				}
-				if shouldRepublishScheduleAfterUnmute(c) {
-					schEv, evErr := s.buildScheduleTaskEvent(ctx, c)
-					if evErr != nil {
-						log.Error().Stack().Err(evErr).Int64("child_task.id", c.ID).Msg("failed to build schedule event for unmuted child")
-						continue
-					}
-					if pubErr := s.publishTaskEvent(ctx, c, schEv); pubErr != nil {
-						log.Error().Stack().Err(pubErr).Int64("child_task.id", c.ID).Msg("failed to publish schedule_task for unmuted child")
-					}
+				if pubErr := s.publishScheduleForTaskAfterUnmute(ctx, c); pubErr != nil {
+					log.Error().Stack().Err(pubErr).Int64("child_task.id", c.ID).Msg("failed to publish schedule_task for unmuted child")
 				}
 			}
 		}
 	}
 
-	if shouldRepublishScheduleAfterUnmute(task) {
-		schEv, err := s.buildScheduleTaskEvent(ctx, task)
-		if err != nil {
-			log.Error().Stack().Err(err).Int64("task.id", taskID).Msg("failed to build schedule event after unmute")
-		} else if pubErr := s.publishTaskEvent(ctx, task, schEv); pubErr != nil {
-			log.Error().Stack().Err(pubErr).Int64("task.id", taskID).Msg("failed to publish schedule_task after unmute")
-		}
+	if pubErr := s.publishScheduleForTaskAfterUnmute(ctx, task); pubErr != nil {
+		log.Error().Stack().Err(pubErr).Int64("task.id", taskID).Msg("failed to publish schedule_task after unmute")
 	}
 
 	newTaskMap := s.taskToMap(task)

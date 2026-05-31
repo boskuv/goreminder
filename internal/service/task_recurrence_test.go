@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boskuv/goreminder/internal/models"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,6 +21,38 @@ func TestValidateCronExpressionAndRRuleExclusive(t *testing.T) {
 	require.NoError(t, validateCronExpressionAndRRuleExclusive(ptrString("0 * * * *"), nil))
 	require.NoError(t, validateCronExpressionAndRRuleExclusive(nil, ptrString("FREQ=DAILY")))
 	require.Error(t, validateCronExpressionAndRRuleExclusive(ptrString("0 * * * *"), ptrString("FREQ=DAILY")))
+}
+
+func TestNextExecutableStartDate_CronPast(t *testing.T) {
+	cron := "0 9 * * *"
+	past := time.Date(2020, 1, 1, 9, 0, 0, 0, time.UTC)
+	now := time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC)
+	task := &models.Task{
+		StartDate:            past,
+		CronExpression:       &cron,
+		RequiresConfirmation: false,
+	}
+	next, err := nextExecutableStartDate(task, nil, now)
+	require.NoError(t, err)
+	require.True(t, next.After(now))
+}
+
+func TestNextExecutableStartDate_OneTimePastReturnsZero(t *testing.T) {
+	past := time.Date(2020, 1, 1, 9, 0, 0, 0, time.UTC)
+	now := time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC)
+	task := &models.Task{StartDate: past}
+	next, err := nextExecutableStartDate(task, nil, now)
+	require.NoError(t, err)
+	require.True(t, next.IsZero())
+}
+
+func TestShouldRepublishScheduleAfterUnmute_ParentWithConfirmation(t *testing.T) {
+	cron := "0 9 * * *"
+	parent := &models.Task{
+		CronExpression:       &cron,
+		RequiresConfirmation: true,
+	}
+	require.False(t, shouldRepublishScheduleAfterUnmute(parent))
 }
 
 func TestRecurrenceFieldChanged(t *testing.T) {
