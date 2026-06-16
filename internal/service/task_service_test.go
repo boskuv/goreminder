@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -11,8 +12,8 @@ import (
 	errs "github.com/boskuv/goreminder/internal/errors"
 	mock_repositories "github.com/boskuv/goreminder/internal/mocks/repository"
 	"github.com/boskuv/goreminder/internal/models"
-	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/attachments"
+	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/queue"
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog"
@@ -39,7 +40,7 @@ func setup(t *testing.T) (*TaskService, *mock_repositories.MockTaskRepository, *
 func ptrString(s string) *string     { return &s }
 func ptrTime(t time.Time) *time.Time { return &t }
 func ptrInt(i int) *int              { return &i }
-func ptrInt64(i int64) *int64 { return &i }
+func ptrInt64(i int64) *int64        { return &i }
 
 type stubPublisher struct {
 	err       error
@@ -567,14 +568,14 @@ func TestTaskService_UpdateTask_RecurringToSingle_DeletesOnlyActiveChildren(t *t
 	deletedChild := &models.Task{ID: 103, Status: string(models.TaskStatusDeleted)}
 
 	parentTask := &models.Task{
-		ID:                   taskID,
-		UserID:               1,
-		Title:                "Recurring Parent",
-		Description:          "desc",
-		Status:               string(models.TaskStatusScheduled),
-		StartDate:            time.Now().UTC().Add(-time.Hour),
-		CronExpression:       ptrString("0 9 * * *"),
-		RequiresConfirmation: true,
+		ID:                     taskID,
+		UserID:                 1,
+		Title:                  "Recurring Parent",
+		Description:            "desc",
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              time.Now().UTC().Add(-time.Hour),
+		CronExpression:         ptrString("0 9 * * *"),
+		RequiresConfirmation:   true,
 		MessengerRelatedUserID: &messengerRelatedUserID,
 	}
 	updateReq := &models.TaskUpdateRequest{
@@ -1120,6 +1121,87 @@ func TestTaskService_RescheduleTask_MutedSkipsQueueButUpdatesDB(t *testing.T) {
 	assert.Len(t, pub.published, 0, "muted reschedule must not enqueue schedule_task")
 	assert.Equal(t, string(models.TaskStatusRescheduled), task.Status)
 	assert.True(t, task.StartDate.After(oldStart))
+}
+
+func TestTaskService_RescheduleTask_MutedChildAdvancesByParentRecurrence(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	taskRepo := mock_repositories.NewMockTaskRepository(ctrl)
+	userRepo := mock_repositories.NewMockUserRepository(ctrl)
+	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
+	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
+	pub := &stubPublisher{}
+
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), false, testLogger)
+
+	ctx := context.Background()
+	parentID := int64(123)
+	mu := 7
+
+	// Pick parent recurrence such that its next occurrence is >= 2 days from now.
+	// That makes it impossible for the old "+24h + same-day snap" logic to align.
+	nowUTC := time.Now().UTC()
+	parentWeekday := int(nowUTC.Weekday())
+	var cronStr string
+	var expectedNext time.Time
+	for i := 2; i <= 8; i++ {
+		targetWeekday := (parentWeekday + i) % 7
+		cron := fmt.Sprintf("%d %d * * %d", nowUTC.Minute(), nowUTC.Hour(), targetWeekday)
+
+		parentTask := &models.Task{
+			ID:                   parentID,
+			UserID:               1,
+			CronExpression:       &cron,
+			RequiresConfirmation: true,
+		}
+
+		next, err := nextRecurrenceAfter(parentTask, nowUTC)
+		require.NoError(t, err)
+		if next.Sub(nowUTC) >= 48*time.Hour {
+			cronStr = cron
+			expectedNext = next
+			break
+		}
+	}
+	require.NotEmpty(t, cronStr)
+
+	parentTask := &models.Task{
+		ID:                   parentID,
+		UserID:               1,
+		CronExpression:       &cronStr,
+		RequiresConfirmation: true,
+	}
+
+	oldStart := nowUTC.Add(-72 * time.Hour)
+	task := &models.Task{
+		ID:                     99,
+		UserID:                 1,
+		Title:                  "x",
+		Description:            "y",
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              oldStart,
+		ParentID:               &parentID,
+		MessengerRelatedUserID: &mu,
+		Muted:                  true,
+		RequiresConfirmation:   true,
+	}
+
+	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), mu).Return(&models.MessengerRelatedUser{
+		ID: int64(mu), MessengerID: ptrInt64(1), ChatID: "c1",
+	}, nil)
+	messengerRepo.EXPECT().GetMessengerByID(gomock.Any(), int64(1)).Return(&models.Messenger{ID: 1, Name: "telegram"}, nil)
+	taskRepo.EXPECT().GetTaskByIDWithoutStatusFilter(gomock.Any(), parentID).Return(parentTask, nil)
+	taskRepo.EXPECT().UpdateTask(gomock.Any(), gomock.Any()).Return(nil)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	err := service.RescheduleTask(ctx, task)
+	assert.NoError(t, err)
+	assert.Len(t, pub.published, 0, "muted reschedule must not enqueue schedule_task")
+	assert.Equal(t, string(models.TaskStatusRescheduled), task.Status)
+	assert.True(t, task.StartDate.After(nowUTC))
+	require.True(t, task.StartDate.Equal(expectedNext), "expected muted child to jump to parent's next occurrence")
 }
 
 func TestRecordAttachmentAdded_writesHistory(t *testing.T) {

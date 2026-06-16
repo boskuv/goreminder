@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Fixed
 - **Task unmute** (`POST /api/v1/tasks/{id}/unmute`, `PUT /api/v1/tasks/{id}` with `muted: false`): republishing `worker.schedule_task` no longer sends a past `start_date` for recurring tasks with `cron_expression` or `rrule` — when `start_date` is overdue, it is advanced to the next occurrence (same calculation as autoreschedule) and persisted before publish; future `start_date` is left unchanged. Recurrence parents with `requires_confirmation` are no longer scheduled on unmute (only active child tasks are republished). Child tasks with a stale `start_date` are advanced from the parent’s recurrence rule. `PUT` unmute now follows the same republish rules as `POST .../unmute` (one-time tasks with a past `start_date` are not enqueued).
+- **Autoreschedule**: for `muted` recurring child tasks (`parent_id != null`, `requires_confirmation=true`), daily autoreschedule now advances `start_date` directly to the parent's next `cron_expression`/`rrule` occurrence (instead of shifting by `+24h`).
 
 ### Added
 - **Task attachments** (S3-compatible object storage; **attachment service** is a separate deployable, **core** is REST BFF):

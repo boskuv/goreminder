@@ -25,11 +25,11 @@ import (
 
 // TaskService defines methods for task-related business logic
 type TaskService struct {
-	taskRepo        repository.TaskRepository
-	userRepo        repository.UserRepository
-	messengerRepo   repository.MessengerRepository
-	taskHistoryRepo repository.TaskHistoryRepository
-	producer        queue.Publisher
+	taskRepo                   repository.TaskRepository
+	userRepo                   repository.UserRepository
+	messengerRepo              repository.MessengerRepository
+	taskHistoryRepo            repository.TaskHistoryRepository
+	producer                   queue.Publisher
 	attachments                attachments.Client
 	attachmentsPurgeOnTaskDone bool
 	tracer                     trace.Tracer
@@ -1247,29 +1247,29 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				Msg("child tasks synchronized successfully")
 		}
 
-			if muteTransition && (wasParentTask || isParentTask) && oldTask.Muted && oldTask.MessengerRelatedUserID != nil {
-				messengerName, parentMuteErr := s.getMessengerName(ctx, *oldTask.MessengerRelatedUserID)
-				if parentMuteErr != nil {
+		if muteTransition && (wasParentTask || isParentTask) && oldTask.Muted && oldTask.MessengerRelatedUserID != nil {
+			messengerName, parentMuteErr := s.getMessengerName(ctx, *oldTask.MessengerRelatedUserID)
+			if parentMuteErr != nil {
+				log.Error().
+					Stack().
+					Err(parentMuteErr).
+					Int64("task.id", taskID).
+					Msg("failed to get messenger name for delete_task after parent row mute")
+			} else {
+				ev := queue.TaskEvent{
+					Type:          queue.TaskEventDelete,
+					TaskID:        oldTask.ID,
+					MessengerName: messengerName,
+				}
+				if pubErr := s.publishTaskEvent(ctx, oldTask, ev); pubErr != nil {
 					log.Error().
 						Stack().
-						Err(parentMuteErr).
+						Err(pubErr).
 						Int64("task.id", taskID).
-						Msg("failed to get messenger name for delete_task after parent row mute")
-				} else {
-					ev := queue.TaskEvent{
-						Type:          queue.TaskEventDelete,
-						TaskID:        oldTask.ID,
-						MessengerName: messengerName,
-					}
-					if pubErr := s.publishTaskEvent(ctx, oldTask, ev); pubErr != nil {
-						log.Error().
-							Stack().
-							Err(pubErr).
-							Int64("task.id", taskID).
-							Msg("failed to queue delete_task for parent task after mute")
-					}
+						Msg("failed to queue delete_task for parent task after mute")
 				}
 			}
+		}
 		// Commit transaction if we started one
 		if hasActiveTransaction {
 			err = tx.Commit()
@@ -2770,24 +2770,40 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 					Int64("parent.id", *task.ParentID).
 					Msg("failed to compute parent next recurrence for reschedule conflict check")
 			} else {
-				// Check if newStartDate falls on the same day as parent's next execution
-				newStartDateDay := time.Date(newStartDate.Year(), newStartDate.Month(), newStartDate.Day(), 0, 0, 0, 0, newStartDate.Location())
-				parentNextTimeDay := time.Date(parentNextTime.Year(), parentNextTime.Month(), parentNextTime.Day(), 0, 0, 0, 0, parentNextTime.Location())
-
-				if newStartDateDay.Equal(parentNextTimeDay) {
+				// Muted child tasks must be advanced strictly by the parent's recurrence interval.
+				// This prevents "shifting by +24h" and ensures missed occurrences jump to the next real slot.
+				if task.Muted {
 					log.Info().
 						Int64("task.id", task.ID).
 						Int64("parent.id", *task.ParentID).
 						Time("new_start_date", newStartDate).
 						Time("parent_next_time", parentNextTime).
-						Msg("rescheduling aligned to parent recurrence: conflict detected, using parent execution time")
+						Msg("rescheduling muted child aligned to parent recurrence")
 					span.SetAttributes(
-						attribute.String("reason", "conflict_with_parent"),
+						attribute.String("reason", "muted_child_next_by_parent_recurrence"),
 						attribute.String("parent_next_time", parentNextTime.Format(time.RFC3339)),
 					)
-					span.SetStatus(codes.Ok, "rescheduling aligned to parent recurrence schedule")
-
+					span.SetStatus(codes.Ok, "muted child rescheduled by parent recurrence schedule")
 					newStartDate = parentNextTime
+				} else {
+					// Check if newStartDate falls on the same day as parent's next execution
+					newStartDateDay := time.Date(newStartDate.Year(), newStartDate.Month(), newStartDate.Day(), 0, 0, 0, 0, newStartDate.Location())
+					parentNextTimeDay := time.Date(parentNextTime.Year(), parentNextTime.Month(), parentNextTime.Day(), 0, 0, 0, 0, parentNextTime.Location())
+
+					if newStartDateDay.Equal(parentNextTimeDay) {
+						log.Info().
+							Int64("task.id", task.ID).
+							Int64("parent.id", *task.ParentID).
+							Time("new_start_date", newStartDate).
+							Time("parent_next_time", parentNextTime).
+							Msg("rescheduling aligned to parent recurrence: conflict detected, using parent execution time")
+						span.SetAttributes(
+							attribute.String("reason", "conflict_with_parent"),
+							attribute.String("parent_next_time", parentNextTime.Format(time.RFC3339)),
+						)
+						span.SetStatus(codes.Ok, "rescheduling aligned to parent recurrence schedule")
+						newStartDate = parentNextTime
+					}
 				}
 			}
 		}

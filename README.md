@@ -779,7 +779,7 @@ Each task row has a boolean **`muted`** (PostgreSQL `tasks.muted`). It controls 
 | **Create / update** | Optional `muted` on `POST /api/v1/tasks` and `PUT /api/v1/tasks/:id`. Dedicated **`POST /api/v1/tasks/:id/mute`** and **`POST /api/v1/tasks/:id/unmute`** toggle the flag and run the associated queue side effects. |
 | **`worker.schedule_task`** | Not published while `muted` is true (internal `publishTaskEvent` skips schedule events for muted tasks). Changing time, title, recurrence, etc. still **persists** in the DB; a new schedule message is **not** sent until the task is unmuted (or the same `PUT` sets `muted: false`). |
 | **`worker.delete_task`** | Still published when needed (for example soft delete, explicit mute, or clearing a stale worker job). |
-| **Autoreschedule** | May still move `start_date` forward in the DB for overdue rows; muted tasks **do not** get a new `schedule_task` from that path. |
+| **Autoreschedule** | May still move `start_date` forward in the DB for overdue rows; muted tasks **do not** get a new `schedule_task` from that path. For muted recurring child tasks (`parent_id != null`, `requires_confirmation=true`), `start_date` is advanced directly to the parent's next `cron_expression`/`rrule` occurrence. |
 
 For recurring **parents** with `requires_confirmation`, mute/unmute can propagate to active child tasks (see `MuteTask` / `UnmuteTask` in `internal/service/task_service.go`).
 
@@ -825,6 +825,7 @@ Rescheduling occurs when a task with `requires_confirmation=true` is not confirm
    - Checks if new `start_date` (+24h) conflicts with the parent’s next occurrence (cron or RRULE)
    - **If conflict**: Rescheduling is skipped (parent will create a new child)
    - **If no conflict**: `start_date` is moved forward by 24 hours, task is re-published
+   - **Muted child override**: when `muted=true`, `start_date` is advanced directly to the parent’s next `cron_expression`/`rrule` occurrence.
 
 #### Recurring Task Parent (has `cron_expression` or `rrule`, `requires_confirmation=false`)
 
