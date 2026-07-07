@@ -25,6 +25,9 @@ type MessengerRepository interface {
 	GetMessengerIDByName(ctx context.Context, messengerName string) (int64, error)
 	CreateMessengerRelatedUser(ctx context.Context, messengerRelatedUser *models.MessengerRelatedUser) (int64, error)
 	GetMessengerRelatedUser(ctx context.Context, chatID string, messengerUserID string, userID *int64, messengerID *int64) (*models.MessengerRelatedUser, error)
+	// GetMessengerRelatedUserIDsByMessengerUserID returns IDs from `user_messengers` filtered by `messenger_user_id`
+	// and optionally by `user_id`.
+	GetMessengerRelatedUserIDsByMessengerUserID(ctx context.Context, userID *int64, messengerUserID string) ([]int, error)
 	GetUserID(ctx context.Context, messengerUserID string) (int64, error)
 	GetMessengerRelatedUserByID(ctx context.Context, messengerUserID int) (*models.MessengerRelatedUser, error)
 	DeleteMessengerRelatedUserByUserID(ctx context.Context, userID int64) error
@@ -336,6 +339,61 @@ func (r *messengerRepository) GetMessengerRelatedUser(ctx context.Context, chatI
 	span.SetAttributes(attribute.Int64("messenger_related_user.id", messengerRelatedUser.ID))
 	span.SetStatus(codes.Ok, "messenger-related user retrieved successfully")
 	return &messengerRelatedUser, nil
+}
+
+// GetMessengerRelatedUserIDsByMessengerUserID returns messenger-related user IDs filtered by messenger_user_id
+// and optionally by user_id. Used to map external messenger identifiers to internal `messenger_related_user_id`.
+func (r *messengerRepository) GetMessengerRelatedUserIDsByMessengerUserID(ctx context.Context, userID *int64, messengerUserID string) ([]int, error) {
+	ctx, span := r.tracer.Start(ctx, "messenger_repository.GetMessengerRelatedUserIDsByMessengerUserID",
+		trace.WithAttributes(
+			attribute.String("messenger_user.id", messengerUserID),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Str("messenger_user.id", messengerUserID).
+		Msg("getting messenger-related user ids by messenger_user_id")
+
+	if messengerUserID == "" {
+		return nil, nil
+	}
+
+	queryBuilder := r.sb.Select("id").
+		From("user_messengers").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"messenger_user_id": messengerUserID})
+
+	if userID != nil {
+		queryBuilder = queryBuilder.Where(squirrel.Eq{"user_id": *userID})
+		span.SetAttributes(attribute.Int64("user.id", *userID))
+	}
+
+	query, args, err := queryBuilder.ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to build query while getting messenger related user ids")
+	}
+
+	var ids []int
+	err = r.db.SelectContext(ctx, &ids, query, args...)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Str("messenger_user.id", messengerUserID).
+			Msg("failed to get messenger-related user ids from database")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to get messenger-related user ids")
+	}
+
+	log.Debug().
+		Int("ids.count", len(ids)).
+		Msg("messenger-related user ids retrieved successfully from database")
+	span.SetAttributes(attribute.Int("ids.count", len(ids)))
+	span.SetStatus(codes.Ok, "messenger-related user ids retrieved successfully")
+	return ids, nil
 }
 
 // GetUserID retrieves a userID user by messengerUserID

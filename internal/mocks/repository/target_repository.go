@@ -65,9 +65,9 @@ func (mr *MockTargetRepositoryMockRecorder) DeleteTarget(ctx, id interface{}) *g
 }
 
 // GetAllTargets mocks base method.
-func (m *MockTargetRepository) GetAllTargets(ctx context.Context, page, pageSize int, orderBy string, userID *int64) ([]*models.Target, int, error) {
+func (m *MockTargetRepository) GetAllTargets(ctx context.Context, page, pageSize int, orderBy string, userID *int64, messengerRelatedUserIDs *[]int) ([]*models.Target, int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAllTargets", ctx, page, pageSize, orderBy, userID)
+	ret := m.ctrl.Call(m, "GetAllTargets", ctx, page, pageSize, orderBy, userID, messengerRelatedUserIDs)
 	ret0, _ := ret[0].([]*models.Target)
 	ret1, _ := ret[1].(int)
 	ret2, _ := ret[2].(error)
@@ -75,9 +75,9 @@ func (m *MockTargetRepository) GetAllTargets(ctx context.Context, page, pageSize
 }
 
 // GetAllTargets indicates an expected call of GetAllTargets.
-func (mr *MockTargetRepositoryMockRecorder) GetAllTargets(ctx, page, pageSize, orderBy, userID interface{}) *gomock.Call {
+func (mr *MockTargetRepositoryMockRecorder) GetAllTargets(ctx, page, pageSize, orderBy, userID, messengerRelatedUserIDs interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllTargets", reflect.TypeOf((*MockTargetRepository)(nil).GetAllTargets), ctx, page, pageSize, orderBy, userID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllTargets", reflect.TypeOf((*MockTargetRepository)(nil).GetAllTargets), ctx, page, pageSize, orderBy, userID, messengerRelatedUserIDs)
 }
 
 // GetTargetByID mocks base method.

@@ -186,6 +186,7 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 // @Param cron_expression_is_null query bool false "Filter by cron_expression IS NULL (true) or IS NOT NULL (false)"
 // @Param requires_confirmation query bool false "Filter by requires_confirmation (true/false)"
 // @Param exclude_cron_with_confirmation query bool false "Exclude tasks where cron_expression IS NOT NULL AND requires_confirmation == True (implements: NOT (cron_expression IS NOT NULL AND requires_confirmation == True))"
+// @Param messenger_user_id query string false "Filter by messenger_user_id"
 // @Success 200 {object} dto.PaginatedTasksResponse "Paginated list of tasks"
 // @Failure 400 {object} dto.ErrorResponse "Bad request"
 // @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
@@ -312,6 +313,17 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		return
 	}
 
+	messengerUserID, err := validation.ValidateOptionalStringQuery(c, "messenger_user_id")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid messenger_user_id query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	var messengerUserIDPtr *string
+	if messengerUserID != "" {
+		messengerUserIDPtr = &messengerUserID
+	}
+
 	log.Info().
 		Int64("user.id", userID).
 		Int64("page", page).
@@ -319,7 +331,7 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		Str("order_by", orderBy).
 		Msg("getting user tasks")
 
-	tasks, totalCount, err := h.taskService.GetUserTasks(ctx, userID, int(page), int(pageSize), orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, statusPtr, statusNotPtr, cronExpressionPtr, cronExpressionIsNull, excludeCronWithConfirmation)
+	tasks, totalCount, err := h.taskService.GetUserTasks(ctx, userID, int(page), int(pageSize), orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, statusPtr, statusNotPtr, cronExpressionPtr, cronExpressionIsNull, excludeCronWithConfirmation, messengerUserIDPtr)
 	if err != nil {
 		log.Error().
 			Stack().

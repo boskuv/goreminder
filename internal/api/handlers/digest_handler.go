@@ -264,6 +264,7 @@ func (h *DigestHandler) UpdateDigestSettings(c *gin.Context) {
 // @Produce json
 // @Param user_id query int true "User ID"
 // @Param messenger_related_user_id query int false "Messenger Related User ID"
+// @Param messenger_user_id query string false "Messenger User ID"
 // @Param start_date_from query string false "Filter by start_date from (RFC3339 format, inclusive)"
 // @Param start_date_to query string false "Filter by start_date to (RFC3339 format, inclusive)"
 // @Success 200 {object} dto.DigestResponse "Digest data"
@@ -294,6 +295,17 @@ func (h *DigestHandler) GetDigest(c *gin.Context) {
 			return
 		}
 		messengerRelatedUserID = &mruID
+	}
+
+	messengerUserID, err := validation.ValidateOptionalStringQuery(c, "messenger_user_id")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid messenger_user_id query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	var messengerUserIDPtr *string
+	if messengerUserID != "" {
+		messengerUserIDPtr = &messengerUserID
 	}
 
 	// Optional date filters
@@ -334,7 +346,7 @@ func (h *DigestHandler) GetDigest(c *gin.Context) {
 		Int64("user.id", userID).
 		Msg("generating digest")
 
-	digest, err := h.digestService.GetDigest(ctx, userID, messengerRelatedUserID, startDateFrom, startDateTo)
+	digest, err := h.digestService.GetDigest(ctx, userID, messengerRelatedUserID, messengerUserIDPtr, startDateFrom, startDateTo)
 	if err != nil {
 		log.Error().
 			Stack().
@@ -371,6 +383,7 @@ func (h *DigestHandler) GetDigest(c *gin.Context) {
 // @Param page_size query int false "Page size" default(50)
 // @Param order_by query string false "Order by" default(created_at DESC)
 // @Param user_id query int false "Filter by user ID"
+// @Param messenger_user_id query string false "Messenger User ID"
 // @Success 200 {object} dto.PaginatedDigestSettingsResponse "Paginated digest settings"
 // @Failure 400 {object} dto.ErrorResponse "Bad request"
 // @Failure 500 {object} dto.ErrorResponse "Internal server error"
@@ -417,13 +430,24 @@ func (h *DigestHandler) GetAllDigestSettings(c *gin.Context) {
 		userID = &uid
 	}
 
+	messengerUserID, err := validation.ValidateOptionalStringQuery(c, "messenger_user_id")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid messenger_user_id query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	var messengerUserIDPtr *string
+	if messengerUserID != "" {
+		messengerUserIDPtr = &messengerUserID
+	}
+
 	log.Info().
 		Int64("page", page).
 		Int64("page_size", pageSize).
 		Str("order_by", orderBy).
 		Msg("getting all digest settings")
 
-	settings, totalCount, err := h.digestService.GetAllDigestSettings(ctx, int(page), int(pageSize), orderBy, userID)
+	settings, totalCount, err := h.digestService.GetAllDigestSettings(ctx, int(page), int(pageSize), orderBy, userID, messengerUserIDPtr)
 	if err != nil {
 		log.Error().
 			Stack().

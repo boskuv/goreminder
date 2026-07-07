@@ -71,9 +71,9 @@ func (mr *MockDigestSettingsRepositoryMockRecorder) DeleteDigestSettings(ctx, us
 }
 
 // GetAllDigestSettings mocks base method.
-func (m *MockDigestSettingsRepository) GetAllDigestSettings(ctx context.Context, page, pageSize int, orderBy string, userID *int64) ([]*models.DigestSettings, int, error) {
+func (m *MockDigestSettingsRepository) GetAllDigestSettings(ctx context.Context, page, pageSize int, orderBy string, userID *int64, messengerRelatedUserIDs *[]int) ([]*models.DigestSettings, int, error) {
         m.ctrl.T.Helper()
-        ret := m.ctrl.Call(m, "GetAllDigestSettings", ctx, page, pageSize, orderBy, userID)
+        ret := m.ctrl.Call(m, "GetAllDigestSettings", ctx, page, pageSize, orderBy, userID, messengerRelatedUserIDs)
         ret0, _ := ret[0].([]*models.DigestSettings)
         ret1, _ := ret[1].(int)
         ret2, _ := ret[2].(error)
@@ -81,9 +81,9 @@ func (m *MockDigestSettingsRepository) GetAllDigestSettings(ctx context.Context,
 }
 
 // GetAllDigestSettings indicates an expected call of GetAllDigestSettings.
-func (mr *MockDigestSettingsRepositoryMockRecorder) GetAllDigestSettings(ctx, page, pageSize, orderBy, userID any) *gomock.Call {
+func (mr *MockDigestSettingsRepositoryMockRecorder) GetAllDigestSettings(ctx, page, pageSize, orderBy, userID, messengerRelatedUserIDs any) *gomock.Call {
         mr.mock.ctrl.T.Helper()
-        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllDigestSettings", reflect.TypeOf((*MockDigestSettingsRepository)(nil).GetAllDigestSettings), ctx, page, pageSize, orderBy, userID)
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllDigestSettings", reflect.TypeOf((*MockDigestSettingsRepository)(nil).GetAllDigestSettings), ctx, page, pageSize, orderBy, userID, messengerRelatedUserIDs)
 }
 
 // GetDigestSettingsByID mocks base method.

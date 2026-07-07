@@ -344,7 +344,7 @@ func (s *DigestService) UpdateDigestSettings(ctx context.Context, userID int64, 
 }
 
 // GetDigest generates a digest for a user with statistics
-func (s *DigestService) GetDigest(ctx context.Context, userID int64, messengerRelatedUserID *int, startDateFrom, startDateTo *time.Time) (*DigestResponse, error) {
+func (s *DigestService) GetDigest(ctx context.Context, userID int64, messengerRelatedUserID *int, messengerUserID *string, startDateFrom, startDateTo *time.Time) (*DigestResponse, error) {
 	ctx, span := s.tracer.Start(ctx, "digest_service.GetDigest",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
@@ -412,7 +412,7 @@ func (s *DigestService) GetDigest(ctx context.Context, userID int64, messengerRe
 	}
 
 	// Get tasks for the period
-	tasks, _, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, 1, 1000, "start_date ASC", startDateFromInTZ, startDateToInTZ, nil, nil, nil, nil, nil, nil, nil, nil)
+	tasks, _, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, 1, 1000, "start_date ASC", startDateFromInTZ, startDateToInTZ, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		log.Debug().
 			Err(err).
@@ -424,7 +424,7 @@ func (s *DigestService) GetDigest(ctx context.Context, userID int64, messengerRe
 	}
 
 	// Get all targets for the user (not filtered by date, as targets are goals/aims)
-	targets, _, err := s.targetRepo.GetAllTargets(ctx, 1, 1000, "created_at DESC", &userID)
+	targets, _, err := s.targetRepo.GetAllTargets(ctx, 1, 1000, "created_at DESC", &userID, nil)
 	if err != nil {
 		log.Debug().
 			Err(err).
@@ -446,6 +446,29 @@ func (s *DigestService) GetDigest(ctx context.Context, userID int64, messengerRe
 		startDateToFinal = *startDateToInTZ
 	} else {
 		startDateToFinal = time.Now().In(location)
+	}
+
+	// Resolve messenger_related_user_id from messenger_user_id if needed.
+	if messengerRelatedUserID == nil && messengerUserID != nil && *messengerUserID != "" {
+		ids, err := s.messengerRepo.GetMessengerRelatedUserIDsByMessengerUserID(ctx, &userID, *messengerUserID)
+		if err != nil {
+			log.Debug().
+				Err(err).
+				Str("filter.messenger_user_id", *messengerUserID).
+				Msg("failed to get messenger-related user ids for messenger_user_id filter")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, errors.WithStack(err)
+		}
+		if len(ids) == 1 {
+			messengerRelatedUserID = &ids[0]
+		} else if len(ids) > 1 {
+			err = errors.Wrap(errs.ErrUnprocessableEntity, "multiple messenger-related users found for provided messenger_user_id")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, errors.WithStack(err)
+		}
+		// len(ids) == 0 => keep messengerRelatedUserID nil (chat_id will remain nil as well)
 	}
 
 	// Get chat_id if messengerRelatedUserID is provided
@@ -498,7 +521,7 @@ func (s *DigestService) GetDigest(ctx context.Context, userID int64, messengerRe
 }
 
 // GetAllDigestSettings implements BL of retrieving all digest settings with pagination
-func (s *DigestService) GetAllDigestSettings(ctx context.Context, page, pageSize int, orderBy string, userID *int64) ([]*models.DigestSettings, int, error) {
+func (s *DigestService) GetAllDigestSettings(ctx context.Context, page, pageSize int, orderBy string, userID *int64, messengerUserID *string) ([]*models.DigestSettings, int, error) {
 	ctx, span := s.tracer.Start(ctx, "digest_service.GetAllDigestSettings",
 		trace.WithAttributes(
 			attribute.Int("page", page),
@@ -524,7 +547,25 @@ func (s *DigestService) GetAllDigestSettings(ctx context.Context, page, pageSize
 		orderBy = "created_at DESC"
 	}
 
-	settings, totalCount, err := s.digestSettingsRepo.GetAllDigestSettings(ctx, page, pageSize, orderBy, userID)
+	var messengerRelatedUserIDs *[]int
+	if messengerUserID != nil && *messengerUserID != "" {
+		ids, err := s.messengerRepo.GetMessengerRelatedUserIDsByMessengerUserID(ctx, userID, *messengerUserID)
+		if err != nil {
+			log.Debug().
+				Err(err).
+				Str("filter.messenger_user_id", *messengerUserID).
+				Msg("failed to get messenger-related user ids for messenger_user_id filter")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, 0, errors.WithStack(err)
+		}
+		if len(ids) == 0 {
+			return []*models.DigestSettings{}, 0, nil
+		}
+		messengerRelatedUserIDs = &ids
+	}
+
+	settings, totalCount, err := s.digestSettingsRepo.GetAllDigestSettings(ctx, page, pageSize, orderBy, userID, messengerRelatedUserIDs)
 	if err != nil {
 		log.Debug().
 			Err(err).

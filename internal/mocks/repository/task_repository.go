@@ -199,9 +199,9 @@ func (mr *MockTaskRepositoryMockRecorder) GetTasksByUserID(ctx, userID interface
 }
 
 // GetTasksByUserIDWithPagination mocks base method.
-func (m *MockTaskRepository) GetTasksByUserIDWithPagination(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status, statusNot, cronExpression *string, cronExpressionIsNull, excludeCronWithConfirmation *bool) ([]*models.Task, int, error) {
+func (m *MockTaskRepository) GetTasksByUserIDWithPagination(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status, statusNot, cronExpression *string, cronExpressionIsNull, excludeCronWithConfirmation *bool, messengerRelatedUserIDs *[]int) ([]*models.Task, int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTasksByUserIDWithPagination", ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation)
+	ret := m.ctrl.Call(m, "GetTasksByUserIDWithPagination", ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserIDs)
 	ret0, _ := ret[0].([]*models.Task)
 	ret1, _ := ret[1].(int)
 	ret2, _ := ret[2].(error)
@@ -209,9 +209,9 @@ func (m *MockTaskRepository) GetTasksByUserIDWithPagination(ctx context.Context,
 }
 
 // GetTasksByUserIDWithPagination indicates an expected call of GetTasksByUserIDWithPagination.
-func (mr *MockTaskRepositoryMockRecorder) GetTasksByUserIDWithPagination(ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation interface{}) *gomock.Call {
+func (mr *MockTaskRepositoryMockRecorder) GetTasksByUserIDWithPagination(ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserIDs interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTasksByUserIDWithPagination", reflect.TypeOf((*MockTaskRepository)(nil).GetTasksByUserIDWithPagination), ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTasksByUserIDWithPagination", reflect.TypeOf((*MockTaskRepository)(nil).GetTasksByUserIDWithPagination), ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserIDs)
 }
 
 // GetTasksNeedingRescheduling mocks base method.

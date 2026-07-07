@@ -22,7 +22,7 @@ import (
 type BacklogRepository interface {
 	CreateBacklog(ctx context.Context, backlog *models.Backlog) (int64, error)
 	GetBacklogByID(ctx context.Context, id int64) (*models.Backlog, error)
-	GetAllBacklogs(ctx context.Context, page, pageSize int, orderBy string, userID *int64, completed *bool) ([]*models.Backlog, int, error)
+	GetAllBacklogs(ctx context.Context, page, pageSize int, orderBy string, userID *int64, completed *bool, messengerRelatedUserIDs *[]int) ([]*models.Backlog, int, error)
 	UpdateBacklog(ctx context.Context, backlog *models.Backlog) error
 	DeleteBacklog(ctx context.Context, id int64) error
 	GetCompletedBacklogsCount(ctx context.Context, userID int64, startDate, endDate time.Time) (int, error)
@@ -140,7 +140,7 @@ func (r *backlogRepository) GetBacklogByID(ctx context.Context, id int64) (*mode
 }
 
 // GetAllBacklogs retrieves all backlog items with pagination, ordering, and filtering
-func (r *backlogRepository) GetAllBacklogs(ctx context.Context, page, pageSize int, orderBy string, userID *int64, completed *bool) ([]*models.Backlog, int, error) {
+func (r *backlogRepository) GetAllBacklogs(ctx context.Context, page, pageSize int, orderBy string, userID *int64, completed *bool, messengerRelatedUserIDs *[]int) ([]*models.Backlog, int, error) {
 	ctx, span := r.tracer.Start(ctx, "backlog_repository.GetAllBacklogs",
 		trace.WithAttributes(
 			attribute.Int("page", page),
@@ -178,6 +178,11 @@ func (r *backlogRepository) GetAllBacklogs(ctx context.Context, page, pageSize i
 		span.SetAttributes(attribute.Int64("user.id", *userID))
 	}
 
+	if messengerRelatedUserIDs != nil && len(*messengerRelatedUserIDs) > 0 {
+		countBuilder = countBuilder.Where(squirrel.Eq{"messenger_related_user_id": *messengerRelatedUserIDs})
+		span.SetAttributes(attribute.Int("filter.messenger_related_user_ids.count", len(*messengerRelatedUserIDs)))
+	}
+
 	if completed != nil {
 		if *completed {
 			countBuilder = countBuilder.Where(squirrel.NotEq{"completed_at": nil})
@@ -212,6 +217,10 @@ func (r *backlogRepository) GetAllBacklogs(ctx context.Context, page, pageSize i
 
 	if userID != nil {
 		dataBuilder = dataBuilder.Where(squirrel.Eq{"user_id": *userID})
+	}
+
+	if messengerRelatedUserIDs != nil && len(*messengerRelatedUserIDs) > 0 {
+		dataBuilder = dataBuilder.Where(squirrel.Eq{"messenger_related_user_id": *messengerRelatedUserIDs})
 	}
 
 	if completed != nil {

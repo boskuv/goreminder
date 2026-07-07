@@ -24,7 +24,7 @@ type TaskRepository interface {
 	GetTaskByID(ctx context.Context, id int64) (*models.Task, error)
 	GetTaskByIDWithoutStatusFilter(ctx context.Context, id int64) (*models.Task, error)
 	GetTasksByUserID(ctx context.Context, userID int64) ([]*models.Task, error)
-	GetTasksByUserIDWithPagination(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool) ([]*models.Task, int, error)
+	GetTasksByUserIDWithPagination(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool, messengerRelatedUserIDs *[]int) ([]*models.Task, int, error)
 	GetChildTasksByParentID(ctx context.Context, parentID int64) ([]*models.Task, error)
 	UpdateTask(ctx context.Context, task *models.Task) error
 	UpdateTaskWithTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) error
@@ -269,7 +269,7 @@ func (r *taskRepository) GetTasksByUserID(ctx context.Context, userID int64) ([]
 
 // GetTasksByUserIDWithPagination retrieves tasks by user ID with pagination and ordering
 // Returns task entities, total count, and an error if occurred
-func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool) ([]*models.Task, int, error) {
+func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool, messengerRelatedUserIDs *[]int) ([]*models.Task, int, error) {
 	ctx, span := r.tracer.Start(ctx, "task_repository.GetTasksByUserIDWithPagination",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
@@ -347,6 +347,10 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 		countBuilder = countBuilder.Where(squirrel.Eq{"requires_confirmation": *requiresConfirmation})
 		span.SetAttributes(attribute.Bool("filter.requires_confirmation", *requiresConfirmation))
 	}
+	if messengerRelatedUserIDs != nil && len(*messengerRelatedUserIDs) > 0 {
+		countBuilder = countBuilder.Where(squirrel.Eq{"messenger_related_user_id": *messengerRelatedUserIDs})
+		span.SetAttributes(attribute.Int("filter.messenger_related_user_ids.count", len(*messengerRelatedUserIDs)))
+	}
 	// Exclude tasks where (cron_expression OR rrule) IS NOT NULL AND requires_confirmation == True
 	// Using: (cron_expression IS NULL AND rrule IS NULL) OR requires_confirmation = false
 	if excludeCronWithConfirmation != nil && *excludeCronWithConfirmation {
@@ -407,6 +411,9 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 	}
 	if requiresConfirmation != nil {
 		dataBuilder = dataBuilder.Where(squirrel.Eq{"requires_confirmation": *requiresConfirmation})
+	}
+	if messengerRelatedUserIDs != nil && len(*messengerRelatedUserIDs) > 0 {
+		dataBuilder = dataBuilder.Where(squirrel.Eq{"messenger_related_user_id": *messengerRelatedUserIDs})
 	}
 	// Exclude tasks where (cron_expression OR rrule) IS NOT NULL AND requires_confirmation == True
 	if excludeCronWithConfirmation != nil && *excludeCronWithConfirmation {

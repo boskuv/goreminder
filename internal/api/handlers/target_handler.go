@@ -161,6 +161,7 @@ func (h *TargetHandler) GetTarget(c *gin.Context) {
 // @Param page_size query int false "Page size" default(50)
 // @Param order_by query string false "Order by" default(created_at DESC)
 // @Param user_id query int false "Filter by user ID"
+// @Param messenger_user_id query string false "Messenger User ID"
 // @Success 200 {object} dto.PaginatedTargetsResponse "Paginated targets"
 // @Failure 400 {object} dto.ErrorResponse "Bad request"
 // @Failure 500 {object} dto.ErrorResponse "Internal server error"
@@ -207,13 +208,24 @@ func (h *TargetHandler) GetAllTargets(c *gin.Context) {
 		userID = &uid
 	}
 
+	messengerUserID, err := validation.ValidateOptionalStringQuery(c, "messenger_user_id")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid messenger_user_id query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	var messengerUserIDPtr *string
+	if messengerUserID != "" {
+		messengerUserIDPtr = &messengerUserID
+	}
+
 	log.Info().
 		Int64("page", page).
 		Int64("page_size", pageSize).
 		Str("order_by", orderBy).
 		Msg("getting all targets")
 
-	targets, totalCount, err := h.targetService.GetAllTargets(ctx, int(page), int(pageSize), orderBy, userID)
+	targets, totalCount, err := h.targetService.GetAllTargets(ctx, int(page), int(pageSize), orderBy, userID, messengerUserIDPtr)
 	if err != nil {
 		log.Error().
 			Stack().

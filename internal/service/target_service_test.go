@@ -175,9 +175,9 @@ func TestTargetService_GetAllTargets_Success(t *testing.T) {
 	}
 	totalCount := 2
 
-	targetRepo.EXPECT().GetAllTargets(gomock.Any(), page, pageSize, orderBy, &userID).Return(expectedTargets, totalCount, nil)
+	targetRepo.EXPECT().GetAllTargets(gomock.Any(), page, pageSize, orderBy, &userID, nil).Return(expectedTargets, totalCount, nil)
 
-	targets, count, err := service.GetAllTargets(ctx, page, pageSize, orderBy, &userID)
+	targets, count, err := service.GetAllTargets(ctx, page, pageSize, orderBy, &userID, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTargets, targets)
 	assert.Equal(t, totalCount, count)
@@ -195,9 +195,9 @@ func TestTargetService_GetAllTargets_WithoutUserID(t *testing.T) {
 	}
 	totalCount := 2
 
-	targetRepo.EXPECT().GetAllTargets(gomock.Any(), page, pageSize, orderBy, nil).Return(expectedTargets, totalCount, nil)
+	targetRepo.EXPECT().GetAllTargets(gomock.Any(), page, pageSize, orderBy, nil, nil).Return(expectedTargets, totalCount, nil)
 
-	targets, count, err := service.GetAllTargets(ctx, page, pageSize, orderBy, nil)
+	targets, count, err := service.GetAllTargets(ctx, page, pageSize, orderBy, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTargets, targets)
 	assert.Equal(t, totalCount, count)
@@ -212,9 +212,9 @@ func TestTargetService_GetAllTargets_EmptyList(t *testing.T) {
 	userID := int64(1)
 	totalCount := 0
 
-	targetRepo.EXPECT().GetAllTargets(gomock.Any(), page, pageSize, orderBy, &userID).Return([]*models.Target{}, totalCount, nil)
+	targetRepo.EXPECT().GetAllTargets(gomock.Any(), page, pageSize, orderBy, &userID, nil).Return([]*models.Target{}, totalCount, nil)
 
-	targets, count, err := service.GetAllTargets(ctx, page, pageSize, orderBy, &userID)
+	targets, count, err := service.GetAllTargets(ctx, page, pageSize, orderBy, &userID, nil)
 	assert.NoError(t, err)
 	assert.Empty(t, targets)
 	assert.Equal(t, totalCount, count)
@@ -225,9 +225,9 @@ func TestTargetService_GetAllTargets_RepositoryError(t *testing.T) {
 	ctx := context.Background()
 	expectedErr := errors.New("database error")
 
-	targetRepo.EXPECT().GetAllTargets(gomock.Any(), 1, 50, "created_at DESC", nil).Return(nil, 0, expectedErr)
+	targetRepo.EXPECT().GetAllTargets(gomock.Any(), 1, 50, "created_at DESC", nil, nil).Return(nil, 0, expectedErr)
 
-	targets, count, err := service.GetAllTargets(ctx, 1, 50, "created_at DESC", nil)
+	targets, count, err := service.GetAllTargets(ctx, 1, 50, "created_at DESC", nil, nil)
 	assert.Error(t, err)
 	assert.Nil(t, targets)
 	assert.Equal(t, 0, count)

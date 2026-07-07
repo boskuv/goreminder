@@ -137,7 +137,7 @@ func (s *TargetService) GetTargetByID(ctx context.Context, id int64) (*models.Ta
 }
 
 // GetAllTargets implements BL of retrieving all target items with pagination, ordering, and filtering
-func (s *TargetService) GetAllTargets(ctx context.Context, page, pageSize int, orderBy string, userID *int64) ([]*models.Target, int, error) {
+func (s *TargetService) GetAllTargets(ctx context.Context, page, pageSize int, orderBy string, userID *int64, messengerUserID *string) ([]*models.Target, int, error) {
 	ctx, span := s.tracer.Start(ctx, "target_service.GetAllTargets",
 		trace.WithAttributes(
 			attribute.Int("page", page),
@@ -163,7 +163,25 @@ func (s *TargetService) GetAllTargets(ctx context.Context, page, pageSize int, o
 		orderBy = "created_at DESC"
 	}
 
-	targets, totalCount, err := s.targetRepo.GetAllTargets(ctx, page, pageSize, orderBy, userID)
+	var messengerRelatedUserIDs *[]int
+	if messengerUserID != nil && *messengerUserID != "" {
+		ids, err := s.messengerRepo.GetMessengerRelatedUserIDsByMessengerUserID(ctx, userID, *messengerUserID)
+		if err != nil {
+			log.Debug().
+				Err(err).
+				Str("filter.messenger_user_id", *messengerUserID).
+				Msg("failed to get messenger-related user ids for messenger_user_id filter")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, 0, errors.WithStack(err)
+		}
+		if len(ids) == 0 {
+			return []*models.Target{}, 0, nil
+		}
+		messengerRelatedUserIDs = &ids
+	}
+
+	targets, totalCount, err := s.targetRepo.GetAllTargets(ctx, page, pageSize, orderBy, userID, messengerRelatedUserIDs)
 	if err != nil {
 		log.Debug().
 			Err(err).

@@ -245,7 +245,7 @@ func (s *BacklogService) GetBacklogByID(ctx context.Context, id int64) (*models.
 }
 
 // GetAllBacklogs implements BL of retrieving all backlog items with pagination, ordering, and filtering
-func (s *BacklogService) GetAllBacklogs(ctx context.Context, page, pageSize int, orderBy string, userID *int64, completed *bool) ([]*models.Backlog, int, error) {
+func (s *BacklogService) GetAllBacklogs(ctx context.Context, page, pageSize int, orderBy string, userID *int64, completed *bool, messengerUserID *string) ([]*models.Backlog, int, error) {
 	ctx, span := s.tracer.Start(ctx, "backlog_service.GetAllBacklogs",
 		trace.WithAttributes(
 			attribute.Int("page", page),
@@ -271,7 +271,25 @@ func (s *BacklogService) GetAllBacklogs(ctx context.Context, page, pageSize int,
 		orderBy = "created_at DESC"
 	}
 
-	backlogs, totalCount, err := s.backlogRepo.GetAllBacklogs(ctx, page, pageSize, orderBy, userID, completed)
+	var messengerRelatedUserIDs *[]int
+	if messengerUserID != nil && *messengerUserID != "" {
+		ids, err := s.messengerRepo.GetMessengerRelatedUserIDsByMessengerUserID(ctx, userID, *messengerUserID)
+		if err != nil {
+			log.Debug().
+				Err(err).
+				Str("filter.messenger_user_id", *messengerUserID).
+				Msg("failed to get messenger-related user ids for messenger_user_id filter")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, 0, errors.WithStack(err)
+		}
+		if len(ids) == 0 {
+			return []*models.Backlog{}, 0, nil
+		}
+		messengerRelatedUserIDs = &ids
+	}
+
+	backlogs, totalCount, err := s.backlogRepo.GetAllBacklogs(ctx, page, pageSize, orderBy, userID, completed, messengerRelatedUserIDs)
 	if err != nil {
 		log.Debug().
 			Err(err).

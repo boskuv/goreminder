@@ -25,7 +25,7 @@ type DigestSettingsRepository interface {
 	GetDigestSettingsByID(ctx context.Context, id int64) (*models.DigestSettings, error)
 	UpdateDigestSettings(ctx context.Context, settings *models.DigestSettings) error
 	DeleteDigestSettings(ctx context.Context, userID int64, messengerRelatedUserID *int) error
-	GetAllDigestSettings(ctx context.Context, page, pageSize int, orderBy string, userID *int64) ([]*models.DigestSettings, int, error)
+	GetAllDigestSettings(ctx context.Context, page, pageSize int, orderBy string, userID *int64, messengerRelatedUserIDs *[]int) ([]*models.DigestSettings, int, error)
 }
 
 type digestSettingsRepository struct {
@@ -244,7 +244,7 @@ func (r *digestSettingsRepository) UpdateDigestSettings(ctx context.Context, set
 }
 
 // GetAllDigestSettings retrieves all digest settings with pagination, ordering, and filtering
-func (r *digestSettingsRepository) GetAllDigestSettings(ctx context.Context, page, pageSize int, orderBy string, userID *int64) ([]*models.DigestSettings, int, error) {
+func (r *digestSettingsRepository) GetAllDigestSettings(ctx context.Context, page, pageSize int, orderBy string, userID *int64, messengerRelatedUserIDs *[]int) ([]*models.DigestSettings, int, error) {
 	ctx, span := r.tracer.Start(ctx, "digest_settings_repository.GetAllDigestSettings",
 		trace.WithAttributes(
 			attribute.Int("page", page),
@@ -281,6 +281,11 @@ func (r *digestSettingsRepository) GetAllDigestSettings(ctx context.Context, pag
 		span.SetAttributes(attribute.Int64("user.id", *userID))
 	}
 
+	if messengerRelatedUserIDs != nil && len(*messengerRelatedUserIDs) > 0 {
+		countBuilder = countBuilder.Where(squirrel.Eq{"messenger_related_user_id": *messengerRelatedUserIDs})
+		span.SetAttributes(attribute.Int("filter.messenger_related_user_ids.count", len(*messengerRelatedUserIDs)))
+	}
+
 	countQuery, countArgs, err := countBuilder.ToSql()
 	if err != nil {
 		span.RecordError(err)
@@ -305,6 +310,10 @@ func (r *digestSettingsRepository) GetAllDigestSettings(ctx context.Context, pag
 
 	if userID != nil {
 		dataBuilder = dataBuilder.Where(squirrel.Eq{"user_id": *userID})
+	}
+
+	if messengerRelatedUserIDs != nil && len(*messengerRelatedUserIDs) > 0 {
+		dataBuilder = dataBuilder.Where(squirrel.Eq{"messenger_related_user_id": *messengerRelatedUserIDs})
 	}
 
 	query, args, err := dataBuilder.

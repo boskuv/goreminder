@@ -177,6 +177,21 @@ func (mr *MockMessengerRepositoryMockRecorder) GetMessengerRelatedUserByID(ctx, 
         return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMessengerRelatedUserByID", reflect.TypeOf((*MockMessengerRepository)(nil).GetMessengerRelatedUserByID), ctx, messengerUserID)
 }
 
+// GetMessengerRelatedUserIDsByMessengerUserID mocks base method.
+func (m *MockMessengerRepository) GetMessengerRelatedUserIDsByMessengerUserID(ctx context.Context, userID *int64, messengerUserID string) ([]int, error) {
+        m.ctrl.T.Helper()
+        ret := m.ctrl.Call(m, "GetMessengerRelatedUserIDsByMessengerUserID", ctx, userID, messengerUserID)
+        ret0, _ := ret[0].([]int)
+        ret1, _ := ret[1].(error)
+        return ret0, ret1
+}
+
+// GetMessengerRelatedUserIDsByMessengerUserID indicates an expected call of GetMessengerRelatedUserIDsByMessengerUserID.
+func (mr *MockMessengerRepositoryMockRecorder) GetMessengerRelatedUserIDsByMessengerUserID(ctx, userID, messengerUserID any) *gomock.Call {
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMessengerRelatedUserIDsByMessengerUserID", reflect.TypeOf((*MockMessengerRepository)(nil).GetMessengerRelatedUserIDsByMessengerUserID), ctx, userID, messengerUserID)
+}
+
 // GetUserID mocks base method.
 func (m *MockMessengerRepository) GetUserID(ctx context.Context, messengerUserID string) (int64, error) {
         m.ctrl.T.Helper()

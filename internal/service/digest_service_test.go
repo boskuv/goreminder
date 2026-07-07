@@ -334,10 +334,10 @@ func TestDigestService_GetDigest_Success(t *testing.T) {
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(user, nil)
 	backlogRepo.EXPECT().GetCompletedBacklogsCount(gomock.Any(), userID, startDateFrom, startDateTo).Return(completedCount, nil)
-	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, 1, 1000, "start_date ASC", &startDateFrom, &startDateTo, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, 2, nil)
-	targetRepo.EXPECT().GetAllTargets(gomock.Any(), 1, 1000, "created_at DESC", &userID).Return(expectedTargets, 0, nil)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, 1, 1000, "start_date ASC", &startDateFrom, &startDateTo, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, 2, nil)
+	targetRepo.EXPECT().GetAllTargets(gomock.Any(), 1, 1000, "created_at DESC", &userID, nil).Return(expectedTargets, 0, nil)
 
-	digest, err := service.GetDigest(ctx, userID, nil, &startDateFrom, &startDateTo)
+	digest, err := service.GetDigest(ctx, userID, nil, nil, &startDateFrom, &startDateTo)
 	assert.NoError(t, err)
 	assert.NotNil(t, digest)
 	assert.Equal(t, userID, digest.UserID)
@@ -357,10 +357,10 @@ func TestDigestService_GetDigest_WithDefaultDates(t *testing.T) {
 	expectedTargets := []*models.Target{}
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(user, nil)
-	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, 1, 1000, "start_date ASC", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, 0, nil)
-	targetRepo.EXPECT().GetAllTargets(gomock.Any(), 1, 1000, "created_at DESC", &userID).Return(expectedTargets, 0, nil)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, 1, 1000, "start_date ASC", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, 0, nil)
+	targetRepo.EXPECT().GetAllTargets(gomock.Any(), 1, 1000, "created_at DESC", &userID, nil).Return(expectedTargets, 0, nil)
 
-	digest, err := service.GetDigest(ctx, userID, nil, nil, nil)
+	digest, err := service.GetDigest(ctx, userID, nil, nil, nil, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, digest)
 	assert.Equal(t, userID, digest.UserID)
@@ -380,11 +380,11 @@ func TestDigestService_GetDigest_WithMessengerRelatedUser(t *testing.T) {
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(user, nil)
 	backlogRepo.EXPECT().GetCompletedBacklogsCount(gomock.Any(), userID, startDateFrom, startDateTo).Return(0, nil)
-	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, 1, 1000, "start_date ASC", &startDateFrom, &startDateTo, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, 0, nil)
-	targetRepo.EXPECT().GetAllTargets(gomock.Any(), 1, 1000, "created_at DESC", &userID).Return(expectedTargets, 0, nil)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, 1, 1000, "start_date ASC", &startDateFrom, &startDateTo, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, 0, nil)
+	targetRepo.EXPECT().GetAllTargets(gomock.Any(), 1, 1000, "created_at DESC", &userID, nil).Return(expectedTargets, 0, nil)
 	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), messengerUserID).Return(messengerUser, nil)
 
-	digest, err := service.GetDigest(ctx, userID, &messengerUserID, &startDateFrom, &startDateTo)
+	digest, err := service.GetDigest(ctx, userID, &messengerUserID, nil, &startDateFrom, &startDateTo)
 	assert.NoError(t, err)
 	assert.NotNil(t, digest)
 	assert.Equal(t, &messengerUserID, digest.MessengerRelatedUserID)
@@ -398,7 +398,7 @@ func TestDigestService_GetDigest_UserNotFound(t *testing.T) {
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(nil, errs.ErrNotFound)
 
-	digest, err := service.GetDigest(ctx, userID, nil, nil, nil)
+	digest, err := service.GetDigest(ctx, userID, nil, nil, nil, nil)
 	assert.Error(t, err)
 	assert.Nil(t, digest)
 	assert.Contains(t, err.Error(), "unprocessable entity")
@@ -417,9 +417,9 @@ func TestDigestService_GetAllDigestSettings_Success(t *testing.T) {
 	}
 	totalCount := 2
 
-	digestSettingsRepo.EXPECT().GetAllDigestSettings(gomock.Any(), page, pageSize, orderBy, nil).Return(expectedSettings, totalCount, nil)
+	digestSettingsRepo.EXPECT().GetAllDigestSettings(gomock.Any(), page, pageSize, orderBy, nil, nil).Return(expectedSettings, totalCount, nil)
 
-	settings, count, err := service.GetAllDigestSettings(ctx, page, pageSize, orderBy, nil)
+	settings, count, err := service.GetAllDigestSettings(ctx, page, pageSize, orderBy, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedSettings, settings)
 	assert.Equal(t, totalCount, count)
@@ -437,9 +437,9 @@ func TestDigestService_GetAllDigestSettings_WithUserID(t *testing.T) {
 	}
 	totalCount := 1
 
-	digestSettingsRepo.EXPECT().GetAllDigestSettings(gomock.Any(), page, pageSize, orderBy, &userID).Return(expectedSettings, totalCount, nil)
+	digestSettingsRepo.EXPECT().GetAllDigestSettings(gomock.Any(), page, pageSize, orderBy, &userID, nil).Return(expectedSettings, totalCount, nil)
 
-	settings, count, err := service.GetAllDigestSettings(ctx, page, pageSize, orderBy, &userID)
+	settings, count, err := service.GetAllDigestSettings(ctx, page, pageSize, orderBy, &userID, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedSettings, settings)
 	assert.Equal(t, totalCount, count)
@@ -453,9 +453,9 @@ func TestDigestService_GetAllDigestSettings_EmptyList(t *testing.T) {
 	orderBy := "created_at DESC"
 	totalCount := 0
 
-	digestSettingsRepo.EXPECT().GetAllDigestSettings(gomock.Any(), page, pageSize, orderBy, nil).Return([]*models.DigestSettings{}, totalCount, nil)
+	digestSettingsRepo.EXPECT().GetAllDigestSettings(gomock.Any(), page, pageSize, orderBy, nil, nil).Return([]*models.DigestSettings{}, totalCount, nil)
 
-	settings, count, err := service.GetAllDigestSettings(ctx, page, pageSize, orderBy, nil)
+	settings, count, err := service.GetAllDigestSettings(ctx, page, pageSize, orderBy, nil, nil)
 	assert.NoError(t, err)
 	assert.Empty(t, settings)
 	assert.Equal(t, totalCount, count)
@@ -466,9 +466,9 @@ func TestDigestService_GetAllDigestSettings_RepositoryError(t *testing.T) {
 	ctx := context.Background()
 	expectedErr := errors.New("database error")
 
-	digestSettingsRepo.EXPECT().GetAllDigestSettings(gomock.Any(), 1, 50, "created_at DESC", nil).Return(nil, 0, expectedErr)
+	digestSettingsRepo.EXPECT().GetAllDigestSettings(gomock.Any(), 1, 50, "created_at DESC", nil, nil).Return(nil, 0, expectedErr)
 
-	settings, count, err := service.GetAllDigestSettings(ctx, 1, 50, "created_at DESC", nil)
+	settings, count, err := service.GetAllDigestSettings(ctx, 1, 50, "created_at DESC", nil, nil)
 	assert.Error(t, err)
 	assert.Nil(t, settings)
 	assert.Equal(t, 0, count)
