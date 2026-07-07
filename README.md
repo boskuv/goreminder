@@ -711,7 +711,7 @@ Access Swagger UI at: `http://localhost:8080/swagger/index.html`
 | `/api/v1/tasks/:id/attachments/:attachment_id/content` | GET | Download file via API (proxy; requires `proxyDownloadEnabled`) | - |
 | `/api/v1/tasks/:id/attachments/:attachment_id` | DELETE | Delete attachment | - |
 | `/api/v1/tasks/queue` | POST | Queue task for processing | - |
-| `/api/v1/users/:user_id/tasks` | GET | Get all tasks for user | - |
+| `/api/v1/users/:user_id/tasks` | GET | Get all tasks for user | `page`, `page_size`, `order_by`, `status`, `start_date_from`, `start_date_to`, `messenger_user_id` |
 | `/api/v1/users/:user_id/tasks/history` | GET | Get user task history | `limit`, `offset` |
 
 ### Users
@@ -741,7 +741,7 @@ Access Swagger UI at: `http://localhost:8080/swagger/index.html`
 
 | Endpoint | Method | Description | Query Parameters |
 |----------|--------|-------------|------------------|
-| `/api/v1/backlogs` | GET | Get all backlogs with pagination | `page`, `page_size`, `order_by`, `user_id` |
+| `/api/v1/backlogs` | GET | Get all backlogs with pagination | `page`, `page_size`, `order_by`, `user_id`, `completed`, `messenger_user_id` |
 | `/api/v1/backlogs` | POST | Create a new backlog | - |
 | `/api/v1/backlogs/batch` | POST | Create multiple backlogs at once | - |
 | `/api/v1/backlogs/:id` | GET | Get backlog by ID | - |
@@ -752,7 +752,7 @@ Access Swagger UI at: `http://localhost:8080/swagger/index.html`
 
 | Endpoint | Method | Description | Query Parameters |
 |----------|--------|-------------|------------------|
-| `/api/v1/targets` | GET | Get all targets with pagination | `page`, `page_size`, `order_by`, `user_id` |
+| `/api/v1/targets` | GET | Get all targets with pagination | `page`, `page_size`, `order_by`, `user_id`, `messenger_user_id` |
 | `/api/v1/targets` | POST | Create a new target | - |
 | `/api/v1/targets/:id` | GET | Get target by ID | - |
 | `/api/v1/targets/:id` | PUT | Update target by ID | - |
@@ -762,12 +762,12 @@ Access Swagger UI at: `http://localhost:8080/swagger/index.html`
 
 | Endpoint | Method | Description | Query Parameters |
 |----------|--------|-------------|------------------|
-| `/api/v1/digests` | GET | Get digest for user | `user_id`, `date` |
+| `/api/v1/digests` | GET | Get digest for user | `user_id`, `messenger_related_user_id`, `messenger_user_id`, `start_date_from`, `start_date_to` |
 | `/api/v1/digests/settings` | POST | Create digest settings | - |
 | `/api/v1/digests/settings` | GET | Get digest settings | `user_id` |
 | `/api/v1/digests/settings` | PUT | Update digest settings | - |
 | `/api/v1/digests/settings` | DELETE | Delete digest settings | `user_id` |
-| `/api/v1/digests/settings/all` | GET | Get all digest settings | `page`, `page_size`, `order_by` |
+| `/api/v1/digests/settings/all` | GET | Get all digest settings | `page`, `page_size`, `order_by`, `user_id`, `messenger_user_id` |
 
 ## Task muting (`muted`)
 
@@ -889,6 +889,24 @@ The `/api/v1/tasks` endpoint supports advanced filtering:
 GET /api/v1/tasks?page=1&page_size=20&status=pending&start_date_from=2024-01-01T00:00:00Z&start_date_to=2024-12-31T23:59:59Z&user_id=1&order_by=created_at DESC
 ```
 
+`GET /api/v1/users/:user_id/tasks` supports the same task filters (including `status`, date ranges, and cron/recurrence flags) plus:
+
+- **`messenger_user_id`** (string, optional): Filter by the external messenger user identifier (resolved to `messenger_related_user_id` via `user_messengers`). Returns an empty list when no matching link exists for that user.
+
+### Messenger user filtering
+
+Several list and digest endpoints accept optional **`messenger_user_id`** (external ID from Telegram or another messenger). The API resolves it to internal `messenger_related_user_id` row(s) in `user_messengers`:
+
+| Endpoint | Scoped by `user_id` | Notes |
+|----------|---------------------|-------|
+| `GET /api/v1/users/:user_id/tasks` | path `user_id` | empty list if no link |
+| `GET /api/v1/backlogs` | optional query `user_id` | empty list if no link |
+| `GET /api/v1/targets` | optional query `user_id` | empty list if no link |
+| `GET /api/v1/digests` | required query `user_id` | may set `chat_id` in digest; `422` if multiple links match |
+| `GET /api/v1/digests/settings/all` | optional query `user_id` | empty list if no link |
+
+Prefer **`messenger_related_user_id`** when you already know the internal link ID; use **`messenger_user_id`** when the client only has the messenger’s external user ID.
+
 ### Ordering
 
 All list endpoints support custom ordering via `order_by` parameter:
@@ -999,7 +1017,7 @@ curl -X PUT http://localhost:8080/api/v1/tasks/1 \
 
 **Note**: Updated `start_date` must be in the future (UTC).
 
-**Recurring update behavior**: updating task fields like `title`/`description` without passing `start_date` does not auto-shift the task date. Child `start_date` recalculation is triggered only when schedule-related fields (`start_date`, `cron_expression`, `rrule`) are explicitly changed.
+**Recurring update behavior**: updating task fields like `title`/`description` without passing `start_date` does not auto-shift the task date in the request body. Child `start_date` recalculation is triggered only when schedule-related fields (`start_date`, `cron_expression`, `rrule`) are explicitly changed. For executable recurring tasks (`cron_expression` or `rrule`, `requires_confirmation=false`), metadata updates still enqueue `worker.schedule_task` when needed; if `start_date` is already overdue, it is advanced to the next occurrence before publish (same rules as unmute). One-time tasks with a past `start_date` do not get a new schedule message on metadata-only updates.
 
 **Clearing recurrence fields**: on `PUT /api/v1/tasks/:id`, omitted fields are not changed. To explicitly clear recurrence, pass an empty string for `cron_expression` or `rrule`; the service normalizes empty strings to `NULL` in the database. If a recurring parent is converted to single by clearing recurrence, active child tasks are removed while `done/deleted` children are preserved.
 
