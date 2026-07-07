@@ -114,8 +114,9 @@ func shouldRepublishScheduleAfterUnmute(task *models.Task) bool {
 	return !task.StartDate.Before(now)
 }
 
-// publishScheduleForTaskAfterUnmute republishes worker.schedule_task after unmute when applicable.
-// Past start_date values are advanced using the task's recurrence rule or the parent's rule (for children).
+// publishScheduleForTaskAfterUnmute republishes worker.schedule_task after unmute or metadata/schedule
+// updates when applicable. Past start_date values are advanced using the task's recurrence rule or the
+// parent's rule (for children).
 func (s *TaskService) publishScheduleForTaskAfterUnmute(ctx context.Context, task *models.Task) error {
 	if !shouldRepublishScheduleAfterUnmute(task) {
 		return nil
@@ -369,7 +370,7 @@ func (s *TaskService) GetTask(ctx context.Context, taskID int64) (*models.Task, 
 }
 
 // GetUserTasks implements BL of retrieving existing tasks by user id with pagination and ordering
-func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool) ([]*models.Task, int, error) {
+func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool, messengerUserID *string) ([]*models.Task, int, error) {
 	ctx, span := s.tracer.Start(ctx, "task_service.GetUserTasks",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
@@ -423,7 +424,26 @@ func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, page
 		log = log.With().Bool("filter.exclude_cron_with_confirmation", *excludeCronWithConfirmation).Logger()
 	}
 
-	tasks, totalCount, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation)
+	var messengerRelatedUserIDs *[]int
+	if messengerUserID != nil && *messengerUserID != "" {
+		ids, err := s.messengerRepo.GetMessengerRelatedUserIDsByMessengerUserID(ctx, &userID, *messengerUserID)
+		if err != nil {
+			log.Debug().
+				Err(err).
+				Int64("user.id", userID).
+				Str("filter.messenger_user_id", *messengerUserID).
+				Msg("failed to get messenger related user ids for messenger_user_id filter")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, 0, errors.WithStack(err)
+		}
+		if len(ids) == 0 {
+			return []*models.Task{}, 0, nil
+		}
+		messengerRelatedUserIDs = &ids
+	}
+
+	tasks, totalCount, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserIDs)
 	if err != nil {
 		log.Debug().
 			Err(err).
@@ -685,60 +705,21 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				}
 			}
 		} else if statusChangedToScheduled || titleChanged || descriptionChanged || startDateChanged || recurrenceScheduleChanged {
-			// Publish schedule_task if status changed to scheduled or relevant fields changed
-			// But only if startDate is not in the past (if startDate is in the past, only update DB, don't publish to queue)
-			now := time.Now().UTC()
-			shouldPublishToQueue := oldTask.StartDate.After(now) || oldTask.StartDate.Equal(now)
-
-			if shouldPublishToQueue {
-				if oldTask.MessengerRelatedUserID != nil {
-					messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *oldTask.MessengerRelatedUserID)
-					if err != nil {
-						log.Error().
-							Stack().
-							Err(err).
-							Int64("task.id", taskID).
-							Msg("failed to get messenger related user for task queue update")
-						// Don't fail the operation, just log the error
-					} else {
-						messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
-						if err != nil {
-							log.Error().
-								Stack().
-								Err(err).
-								Int64("task.id", taskID).
-								Msg("failed to get messenger name for task queue update")
-							// Don't fail the operation, just log the error
-						} else {
-							event := queue.TaskEvent{
-								Type:                 queue.TaskEventSchedule,
-								TaskID:               oldTask.ID,
-								UserID:               oldTask.UserID,
-								MessengerName:        messengerName,
-								ChatID:               messengerRelatedUser.ChatID,
-								Title:                oldTask.Title,
-								Description:          oldTask.Description,
-								StartDate:            &oldTask.StartDate,
-								CronExpression:       oldTask.CronExpression,
-								RequiresConfirmation: oldTask.RequiresConfirmation,
-							}
-
-							err = s.publishTaskEvent(ctx, oldTask, event)
-							if err != nil {
-								log.Error().
-									Stack().
-									Err(err).
-									Int64("task.id", taskID).
-									Msg("failed to queue schedule_task message for updated task")
-								// Don't fail the operation, just log the error
-								// The database update was successful, queue update failure is non-critical
-							} else {
-								log.Debug().
-									Int64("task.id", taskID).
-									Msg("schedule_task message queued successfully for updated task")
-							}
-						}
-					}
+			// Publish schedule_task when applicable. One-time tasks with a past start_date are skipped;
+			// recurring tasks advance start_date to the next occurrence before publish (same as unmute).
+			if shouldRepublishScheduleAfterUnmute(oldTask) {
+				if pubErr := s.publishScheduleForTaskAfterUnmute(ctx, oldTask); pubErr != nil {
+					log.Error().
+						Stack().
+						Err(pubErr).
+						Int64("task.id", taskID).
+						Msg("failed to queue schedule_task message for updated task")
+					// Don't fail the operation, just log the error
+					// The database update was successful, queue update failure is non-critical
+				} else {
+					log.Debug().
+						Int64("task.id", taskID).
+						Msg("schedule_task message queued successfully for updated task")
 				}
 			} else {
 				log.Debug().
@@ -881,61 +862,20 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					Msg("child tasks deleted and queued successfully")
 			}
 
-			// Publish parent task to queue with updated requires_confirmation (false)
-			// But only if startDate is not in the past (if startDate is in the past, only update DB, don't publish to queue)
-			now := time.Now().UTC()
-			shouldPublishToQueue := oldTask.StartDate.After(now) || oldTask.StartDate.Equal(now)
-
-			if shouldPublishToQueue {
-				if oldTask.MessengerRelatedUserID != nil {
-					messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *oldTask.MessengerRelatedUserID)
-					if err != nil {
-						log.Error().
-							Stack().
-							Err(err).
-							Int64("task.id", taskID).
-							Msg("failed to get messenger related user for parent task queue update")
-						// Don't fail the operation, just log the error
-						// The database update was successful, queue update failure is non-critical
-					} else {
-						messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
-						if err != nil {
-							log.Error().
-								Stack().
-								Err(err).
-								Int64("task.id", taskID).
-								Msg("failed to get messenger name for parent task queue update")
-							// Don't fail the operation, just log the error
-						} else {
-							event := queue.TaskEvent{
-								Type:                 queue.TaskEventSchedule,
-								TaskID:               oldTask.ID,
-								UserID:               oldTask.UserID,
-								MessengerName:        messengerName,
-								ChatID:               messengerRelatedUser.ChatID,
-								Title:                oldTask.Title,
-								Description:          oldTask.Description,
-								StartDate:            &oldTask.StartDate,
-								CronExpression:       oldTask.CronExpression,
-								RequiresConfirmation: oldTask.RequiresConfirmation,
-							}
-
-							err = s.publishTaskEvent(ctx, oldTask, event)
-							if err != nil {
-								log.Error().
-									Stack().
-									Err(err).
-									Int64("task.id", taskID).
-									Msg("failed to queue schedule_task message for parent task without confirmation")
-								// Don't fail the operation, just log the error
-								// The database update was successful, queue update failure is non-critical
-							} else {
-								log.Debug().
-									Int64("task.id", taskID).
-									Msg("parent task schedule_task message queued successfully without confirmation")
-							}
-						}
-					}
+			// Publish parent task to queue now that it executes directly (requires_confirmation removed).
+			if shouldRepublishScheduleAfterUnmute(oldTask) {
+				if pubErr := s.publishScheduleForTaskAfterUnmute(ctx, oldTask); pubErr != nil {
+					log.Error().
+						Stack().
+						Err(pubErr).
+						Int64("task.id", taskID).
+						Msg("failed to queue schedule_task message for parent task without confirmation")
+					// Don't fail the operation, just log the error
+					// The database update was successful, queue update failure is non-critical
+				} else {
+					log.Debug().
+						Int64("task.id", taskID).
+						Msg("parent task schedule_task message queued successfully without confirmation")
 				}
 			} else {
 				log.Debug().
@@ -1130,66 +1070,23 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 						return nil, errors.WithStack(err)
 					}
 
-					// Publish update to queue if start_date, title, description changed
-					// This is needed to update the task in scheduler
-					// But only if startDate is not in the past (if startDate is in the past, only update DB, don't publish to queue)
+					// Publish update to queue if start_date, title, or description changed.
 					if startDateUpdated || titleChanged || descriptionChanged {
-						now := time.Now().UTC()
-						shouldPublishToQueue := childTask.StartDate.After(now) || childTask.StartDate.Equal(now)
-
-						if shouldPublishToQueue {
-							if childTask.MessengerRelatedUserID != nil {
-								messengerRelatedUser, err := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *childTask.MessengerRelatedUserID)
-								if err != nil {
-									log.Error().
-										Stack().
-										Err(err).
-										Int64("task.id", taskID).
-										Int64("child_task.id", childTask.ID).
-										Msg("failed to get messenger related user for child task queue update")
-									// Don't fail the operation, just log the error
-								} else {
-									messengerName, err := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
-									if err != nil {
-										log.Error().
-											Stack().
-											Err(err).
-											Int64("task.id", taskID).
-											Int64("child_task.id", childTask.ID).
-											Msg("failed to get messenger name for child task queue update")
-										// Don't fail the operation, just log the error
-									} else {
-										event := queue.TaskEvent{
-											Type:                 queue.TaskEventSchedule,
-											TaskID:               childTask.ID,
-											UserID:               childTask.UserID,
-											MessengerName:        messengerName,
-											ChatID:               messengerRelatedUser.ChatID,
-											Title:                childTask.Title,
-											Description:          childTask.Description,
-											StartDate:            &childTask.StartDate,
-											CronExpression:       childTask.CronExpression,
-											RequiresConfirmation: childTask.RequiresConfirmation,
-										}
-
-										err = s.publishTaskEvent(ctx, childTask, event)
-										if err != nil {
-											log.Error().
-												Stack().
-												Err(err).
-												Int64("task.id", taskID).
-												Int64("child_task.id", childTask.ID).
-												Msg("failed to queue schedule_task message for updated child task")
-											// Don't fail the operation, just log the error
-											// The database update was successful, queue update failure is non-critical
-										} else {
-											log.Debug().
-												Int64("task.id", taskID).
-												Int64("child_task.id", childTask.ID).
-												Msg("child task update queued successfully")
-										}
-									}
-								}
+						if shouldRepublishScheduleAfterUnmute(childTask) {
+							if pubErr := s.publishScheduleForTaskAfterUnmute(ctx, childTask); pubErr != nil {
+								log.Error().
+									Stack().
+									Err(pubErr).
+									Int64("task.id", taskID).
+									Int64("child_task.id", childTask.ID).
+									Msg("failed to queue schedule_task message for updated child task")
+								// Don't fail the operation, just log the error
+								// The database update was successful, queue update failure is non-critical
+							} else {
+								log.Debug().
+									Int64("task.id", taskID).
+									Int64("child_task.id", childTask.ID).
+									Msg("child task update queued successfully")
 							}
 						} else {
 							log.Debug().

@@ -340,9 +340,9 @@ func TestTaskService_GetUserTasks_Success(t *testing.T) {
 	totalCount := 2
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
-	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, totalCount, nil)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, totalCount, nil)
 
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTasks, tasks)
 	assert.Equal(t, totalCount, count)
@@ -358,9 +358,9 @@ func TestTaskService_GetUserTasks_EmptyList(t *testing.T) {
 	totalCount := 0
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
-	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return([]*models.Task{}, totalCount, nil)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return([]*models.Task{}, totalCount, nil)
 
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.NoError(t, err)
 	assert.Empty(t, tasks)
 	assert.Equal(t, totalCount, count)
@@ -376,7 +376,7 @@ func TestTaskService_GetUserTasks_UserNotFound(t *testing.T) {
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(nil, errs.ErrNotFound)
 
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.Error(t, err)
 	assert.Nil(t, tasks)
 	assert.Equal(t, 0, count)
@@ -394,7 +394,7 @@ func TestTaskService_GetUserTasks_UserRepositoryError(t *testing.T) {
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(nil, expectedErr)
 
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.Error(t, err)
 	assert.Nil(t, tasks)
 	assert.Equal(t, 0, count)
@@ -411,9 +411,9 @@ func TestTaskService_GetUserTasks_TaskRepositoryError(t *testing.T) {
 	expectedErr := errors.New("task database error")
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
-	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(nil, 0, expectedErr)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(nil, 0, expectedErr)
 
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.Error(t, err)
 	assert.Nil(t, tasks)
 	assert.Equal(t, 0, count)
@@ -1081,6 +1081,94 @@ func TestTaskService_UpdateTask_MutedSkipsSchedulePublish(t *testing.T) {
 	_, err := service.UpdateTask(ctx, taskID, updateReq)
 	assert.NoError(t, err)
 	assert.Len(t, pub.published, 0, "muted task must not publish schedule_task on title change")
+}
+
+func TestTaskService_UpdateTask_RecurringPastStartDate_PublishesScheduleOnTitleChange(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	taskRepo := mock_repositories.NewMockTaskRepository(ctrl)
+	userRepo := mock_repositories.NewMockUserRepository(ctrl)
+	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
+	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
+	pub := &stubPublisher{}
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), false, testLogger)
+
+	ctx := context.Background()
+	taskID := int64(1)
+	mu := 5
+	cron := "0 9 * * *"
+	pastStart := time.Now().UTC().Add(-72 * time.Hour)
+	originalTask := &models.Task{
+		ID:                     taskID,
+		UserID:                 1,
+		Title:                  "Old",
+		Description:            "d",
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              pastStart,
+		CronExpression:         &cron,
+		MessengerRelatedUserID: &mu,
+		RequiresConfirmation:   false,
+	}
+	updateReq := &models.TaskUpdateRequest{Title: ptrString("New Title")}
+
+	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(originalTask, nil)
+	taskRepo.EXPECT().UpdateTask(gomock.Any(), gomock.Any()).Return(nil).Times(2)
+	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), mu).Return(&models.MessengerRelatedUser{
+		ID: int64(mu), MessengerID: ptrInt64(1), ChatID: "c1",
+	}, nil)
+	messengerRepo.EXPECT().GetMessengerByID(gomock.Any(), int64(1)).Return(&models.Messenger{ID: 1, Name: "telegram"}, nil)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	out, err := service.UpdateTask(ctx, taskID, updateReq)
+	assert.NoError(t, err)
+	assert.Equal(t, "New Title", out.Title)
+	assert.True(t, out.StartDate.After(time.Now().UTC()))
+	require.Len(t, pub.published, 1)
+	msg := pub.published[0].(queue.TaskMessage)
+	assert.Equal(t, "worker.schedule_task", msg.Task)
+	assert.Equal(t, "New Title", msg.Args[3])
+	startArg, ok := msg.Args[5].(*time.Time)
+	require.True(t, ok)
+	require.NotNil(t, startArg)
+	assert.True(t, startArg.After(time.Now().UTC()))
+}
+
+func TestTaskService_UpdateTask_OneTimePastStartDate_SkipsScheduleOnTitleChange(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	taskRepo := mock_repositories.NewMockTaskRepository(ctrl)
+	userRepo := mock_repositories.NewMockUserRepository(ctrl)
+	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
+	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
+	pub := &stubPublisher{}
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), false, testLogger)
+
+	ctx := context.Background()
+	taskID := int64(2)
+	mu := 5
+	pastStart := time.Now().UTC().Add(-24 * time.Hour)
+	originalTask := &models.Task{
+		ID:                     taskID,
+		UserID:                 1,
+		Title:                  "Old",
+		Description:            "d",
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              pastStart,
+		MessengerRelatedUserID: &mu,
+		RequiresConfirmation:   true,
+	}
+	updateReq := &models.TaskUpdateRequest{Title: ptrString("New Title")}
+
+	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(originalTask, nil)
+	taskRepo.EXPECT().UpdateTask(gomock.Any(), gomock.Any()).Return(nil)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	out, err := service.UpdateTask(ctx, taskID, updateReq)
+	assert.NoError(t, err)
+	assert.Equal(t, "New Title", out.Title)
+	assert.Len(t, pub.published, 0, "one-time task with past start_date must not publish on title change")
 }
 
 func TestTaskService_RescheduleTask_MutedSkipsQueueButUpdatesDB(t *testing.T) {
