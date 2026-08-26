@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
@@ -169,7 +170,7 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 }
 
 // @Summary Get all user's tasks by userID
-// @Description Retrieves all tasks by userID with pagination, ordering, and filtering (by status, status_not, start_date_from, start_date_to, created_at_from, created_at_to, cron_expression, cron_expression_is_null, requires_confirmation, exclude_cron_with_confirmation)
+// @Description Retrieves all tasks by userID with pagination, ordering, and filtering (by status, status_not, start_date_from, start_date_to, created_at_from, created_at_to, cron_expression, cron_expression_is_null, requires_confirmation, exclude_cron_with_confirmation, messenger_related_user_id, messenger_user_id)
 // @Tags Tasks
 // @Produce json
 // @Param user_id path int true "User ID"
@@ -186,6 +187,7 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 // @Param cron_expression_is_null query bool false "Filter by cron_expression IS NULL (true) or IS NOT NULL (false)"
 // @Param requires_confirmation query bool false "Filter by requires_confirmation (true/false)"
 // @Param exclude_cron_with_confirmation query bool false "Exclude tasks where cron_expression IS NOT NULL AND requires_confirmation == True (implements: NOT (cron_expression IS NOT NULL AND requires_confirmation == True))"
+// @Param messenger_related_user_id query int false "Filter by messenger_related_user_id (internal link ID; preferred when known)"
 // @Param messenger_user_id query string false "Filter by messenger_user_id"
 // @Success 200 {object} dto.PaginatedTasksResponse "Paginated list of tasks"
 // @Failure 400 {object} dto.ErrorResponse "Bad request"
@@ -313,6 +315,20 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		return
 	}
 
+	var messengerRelatedUserID *int
+	mruIDStr := c.Query("messenger_related_user_id")
+	if mruIDStr != "" {
+		mruID, err := strconv.Atoi(mruIDStr)
+		if err != nil {
+			log.Info().Err(err).Msg("invalid messenger_related_user_id query parameter")
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "invalid messenger_related_user_id parameter",
+			})
+			return
+		}
+		messengerRelatedUserID = &mruID
+	}
+
 	messengerUserID, err := validation.ValidateOptionalStringQuery(c, "messenger_user_id")
 	if err != nil {
 		log.Info().Err(err).Msg("invalid messenger_user_id query parameter")
@@ -331,7 +347,7 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		Str("order_by", orderBy).
 		Msg("getting user tasks")
 
-	tasks, totalCount, err := h.taskService.GetUserTasks(ctx, userID, int(page), int(pageSize), orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, statusPtr, statusNotPtr, cronExpressionPtr, cronExpressionIsNull, excludeCronWithConfirmation, messengerUserIDPtr)
+	tasks, totalCount, err := h.taskService.GetUserTasks(ctx, userID, int(page), int(pageSize), orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, statusPtr, statusNotPtr, cronExpressionPtr, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserID, messengerUserIDPtr)
 	if err != nil {
 		log.Error().
 			Stack().

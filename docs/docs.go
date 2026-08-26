@@ -54,6 +54,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Messenger User ID",
+                        "name": "messenger_user_id",
+                        "in": "query"
+                    },
+                    {
                         "type": "boolean",
                         "description": "Filter by completion status (true - only completed, false - only not completed)",
                         "name": "completed",
@@ -346,6 +352,12 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Messenger Related User ID",
                         "name": "messenger_related_user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Messenger User ID",
+                        "name": "messenger_user_id",
                         "in": "query"
                     },
                     {
@@ -645,6 +657,12 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Filter by user ID",
                         "name": "user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Messenger User ID",
+                        "name": "messenger_user_id",
                         "in": "query"
                     }
                 ],
@@ -1123,6 +1141,12 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Filter by user ID",
                         "name": "user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Messenger User ID",
+                        "name": "messenger_user_id",
                         "in": "query"
                     }
                 ],
@@ -2424,7 +2448,7 @@ const docTemplate = `{
         },
         "/api/v1/users/{user_id}/tasks": {
             "get": {
-                "description": "Retrieves all tasks by userID with pagination, ordering, and filtering (by status, status_not, start_date_from, start_date_to, created_at_from, created_at_to, cron_expression, cron_expression_is_null, requires_confirmation, exclude_cron_with_confirmation)",
+                "description": "Retrieves all tasks by userID with pagination, ordering, and filtering (by status, status_not, start_date_from, start_date_to, created_at_from, created_at_to, cron_expression, cron_expression_is_null, requires_confirmation, exclude_cron_with_confirmation, messenger_related_user_id, messenger_user_id)",
                 "produces": [
                     "application/json"
                 ],
@@ -2519,6 +2543,18 @@ const docTemplate = `{
                         "type": "boolean",
                         "description": "Exclude tasks where cron_expression IS NOT NULL AND requires_confirmation == True (implements: NOT (cron_expression IS NOT NULL AND requires_confirmation == True))",
                         "name": "exclude_cron_with_confirmation",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by messenger_related_user_id (internal link ID; preferred when known)",
+                        "name": "messenger_related_user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by messenger_user_id",
+                        "name": "messenger_user_id",
                         "in": "query"
                     }
                 ],

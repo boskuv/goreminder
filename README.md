@@ -891,6 +891,7 @@ GET /api/v1/tasks?page=1&page_size=20&status=pending&start_date_from=2024-01-01T
 
 `GET /api/v1/users/:user_id/tasks` supports the same task filters (including `status`, date ranges, and cron/recurrence flags) plus:
 
+- **`messenger_related_user_id`** (int, optional): Filter by the internal `user_messengers` link ID. Preferred when the client already knows it. If both this and `messenger_user_id` are set, `messenger_related_user_id` wins.
 - **`messenger_user_id`** (string, optional): Filter by the external messenger user identifier (resolved to `messenger_related_user_id` via `user_messengers`). Returns an empty list when no matching link exists for that user.
 
 ### Messenger user filtering
@@ -899,7 +900,7 @@ Several list and digest endpoints accept optional **`messenger_user_id`** (exter
 
 | Endpoint | Scoped by `user_id` | Notes |
 |----------|---------------------|-------|
-| `GET /api/v1/users/:user_id/tasks` | path `user_id` | empty list if no link |
+| `GET /api/v1/users/:user_id/tasks` | path `user_id` | also accepts optional `messenger_related_user_id`; empty list if no link for `messenger_user_id` |
 | `GET /api/v1/backlogs` | optional query `user_id` | empty list if no link |
 | `GET /api/v1/targets` | optional query `user_id` | empty list if no link |
 | `GET /api/v1/digests` | required query `user_id` | may set `chat_id` in digest; `422` if multiple links match |

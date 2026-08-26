@@ -940,6 +940,10 @@ paths:
         in: query
         name: user_id
         type: integer
+      - description: Messenger User ID
+        in: query
+        name: messenger_user_id
+        type: string
       - description: Filter by completion status (true - only completed, false - only
           not completed)
         in: query
@@ -1137,6 +1141,10 @@ paths:
         in: query
         name: messenger_related_user_id
         type: integer
+      - description: Messenger User ID
+        in: query
+        name: messenger_user_id
+        type: string
       - description: Filter by start_date from (RFC3339 format, inclusive)
         in: query
         name: start_date_from
@@ -1336,6 +1344,10 @@ paths:
         in: query
         name: user_id
         type: integer
+      - description: Messenger User ID
+        in: query
+        name: messenger_user_id
+        type: string
       produces:
       - application/json
       responses:
@@ -1655,6 +1667,10 @@ paths:
         in: query
         name: user_id
         type: integer
+      - description: Messenger User ID
+        in: query
+        name: messenger_user_id
+        type: string
       produces:
       - application/json
       responses:
@@ -2539,7 +2555,8 @@ paths:
     get:
       description: Retrieves all tasks by userID with pagination, ordering, and filtering
         (by status, status_not, start_date_from, start_date_to, created_at_from, created_at_to,
-        cron_expression, cron_expression_is_null, requires_confirmation, exclude_cron_with_confirmation)
+        cron_expression, cron_expression_is_null, requires_confirmation, exclude_cron_with_confirmation,
+        messenger_related_user_id, messenger_user_id)
       parameters:
       - description: User ID
         in: path
@@ -2605,6 +2622,15 @@ paths:
         in: query
         name: exclude_cron_with_confirmation
         type: boolean
+      - description: Filter by messenger_related_user_id (internal link ID; preferred
+          when known)
+        in: query
+        name: messenger_related_user_id
+        type: integer
+      - description: Filter by messenger_user_id
+        in: query
+        name: messenger_user_id
+        type: string
       produces:
       - application/json
       responses:

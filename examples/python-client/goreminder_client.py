@@ -210,7 +210,9 @@ class GoReminderClient:
         start_date_to: Optional[datetime] = None,
         created_at_from: Optional[datetime] = None,
         created_at_to: Optional[datetime] = None,
-        requires_confirmation: Optional[bool] = None
+        requires_confirmation: Optional[bool] = None,
+        messenger_related_user_id: Optional[int] = None,
+        messenger_user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Get all tasks for a specific user"""
         params = {
@@ -230,6 +232,10 @@ class GoReminderClient:
             params["created_at_to"] = created_at_to.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
         if requires_confirmation is not None:
             params["requires_confirmation"] = requires_confirmation
+        if messenger_related_user_id is not None:
+            params["messenger_related_user_id"] = messenger_related_user_id
+        if messenger_user_id:
+            params["messenger_user_id"] = messenger_user_id
 
         return self._make_request("GET", f"/users/{user_id}/tasks", params=params)
 

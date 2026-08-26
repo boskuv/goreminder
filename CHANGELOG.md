@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - **Autoreschedule**: for `muted` recurring child tasks (`parent_id != null`, `requires_confirmation=true`), daily autoreschedule now advances `start_date` directly to the parent's next `cron_expression`/`rrule` occurrence (instead of shifting by `+24h`).
 
 ### Added
+- **GET /api/v1/users/{user_id}/tasks**: optional query parameter `messenger_related_user_id` to filter by the internal `user_messengers` link ID. When both `messenger_related_user_id` and `messenger_user_id` are provided, `messenger_related_user_id` takes precedence (same as digests). Existing clients that omit the parameter are unchanged.
 - **Task attachments** (S3-compatible object storage; **attachment service** is a separate deployable, **core** is REST BFF):
   - **REST** (GoReminder API): `GET/POST /api/v1/tasks/{id}/attachments`, `POST .../attachments/{attachment_id}/complete`, `GET .../attachments/{attachment_id}/download`, `GET .../attachments/{attachment_id}/content`, `DELETE .../attachments/{attachment_id}`.
   - **Presigned upload**: `POST` with JSON (`original_name`, `content_type`, `size_bytes`) → `upload_url`, `status: pending` → client `PUT` to object storage → `POST .../complete` → `ready`.

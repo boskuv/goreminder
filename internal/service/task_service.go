@@ -370,7 +370,7 @@ func (s *TaskService) GetTask(ctx context.Context, taskID int64) (*models.Task, 
 }
 
 // GetUserTasks implements BL of retrieving existing tasks by user id with pagination and ordering
-func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool, messengerUserID *string) ([]*models.Task, int, error) {
+func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool, messengerRelatedUserID *int, messengerUserID *string) ([]*models.Task, int, error) {
 	ctx, span := s.tracer.Start(ctx, "task_service.GetUserTasks",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
@@ -425,7 +425,12 @@ func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, page
 	}
 
 	var messengerRelatedUserIDs *[]int
-	if messengerUserID != nil && *messengerUserID != "" {
+	if messengerRelatedUserID != nil {
+		span.SetAttributes(attribute.Int("filter.messenger_related_user_id", *messengerRelatedUserID))
+		log = log.With().Int("filter.messenger_related_user_id", *messengerRelatedUserID).Logger()
+		ids := []int{*messengerRelatedUserID}
+		messengerRelatedUserIDs = &ids
+	} else if messengerUserID != nil && *messengerUserID != "" {
 		ids, err := s.messengerRepo.GetMessengerRelatedUserIDsByMessengerUserID(ctx, &userID, *messengerUserID)
 		if err != nil {
 			log.Debug().
