@@ -1481,7 +1481,8 @@ paths:
       - Messengers
   /api/v1/messengerRelatedUsers/all:
     get:
-      description: Retrieves all messenger-related users with pagination and ordering
+      description: Retrieves all messenger-related users with pagination, ordering,
+        and optional filters by user_id and chat_id
       parameters:
       - default: 1
         description: 'Page number (default: 1)'
@@ -1497,6 +1498,14 @@ paths:
         description: 'Order by field (default: created_at DESC)'
         in: query
         name: order_by
+        type: string
+      - description: Filter by user_id
+        in: query
+        name: user_id
+        type: integer
+      - description: Filter by chat_id
+        in: query
+        name: chat_id
         type: string
       produces:
       - application/json

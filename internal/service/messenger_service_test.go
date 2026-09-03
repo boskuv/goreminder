@@ -377,6 +377,56 @@ func TestMessengerService_GetUserID(t *testing.T) {
 	})
 }
 
+func TestMessengerService_GetAllMessengerRelatedUsers(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
+	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
+	ctx := context.Background()
+
+	userID := int64(1)
+	chatID := "-100123"
+	expected := []*models.MessengerRelatedUser{
+		{ID: 10, UserID: &userID, ChatID: chatID, MessengerUserID: "tg_1"},
+	}
+
+	t.Run("no filters", func(t *testing.T) {
+		mockMessengerRepo.EXPECT().
+			GetAllMessengerRelatedUsers(gomock.Any(), 1, 50, "created_at DESC", nil, nil).
+			Return(expected, 1, nil)
+
+		result, count, err := svc.GetAllMessengerRelatedUsers(ctx, 1, 50, "created_at DESC", nil, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, expected, result)
+		assert.Equal(t, 1, count)
+	})
+
+	t.Run("filter by user_id and chat_id", func(t *testing.T) {
+		mockMessengerRepo.EXPECT().
+			GetAllMessengerRelatedUsers(gomock.Any(), 1, 50, "created_at DESC", &userID, &chatID).
+			Return(expected, 1, nil)
+
+		result, count, err := svc.GetAllMessengerRelatedUsers(ctx, 1, 50, "created_at DESC", &userID, &chatID)
+		assert.NoError(t, err)
+		assert.Equal(t, expected, result)
+		assert.Equal(t, 1, count)
+	})
+
+	t.Run("repo error", func(t *testing.T) {
+		mockMessengerRepo.EXPECT().
+			GetAllMessengerRelatedUsers(gomock.Any(), 1, 50, "created_at DESC", &userID, nil).
+			Return(nil, 0, errors.New("db error"))
+
+		result, count, err := svc.GetAllMessengerRelatedUsers(ctx, 1, 50, "created_at DESC", &userID, nil)
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.Equal(t, 0, count)
+	})
+}
+
 func TestMessengerService_NewMessengerService(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

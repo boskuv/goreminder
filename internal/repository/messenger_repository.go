@@ -32,7 +32,7 @@ type MessengerRepository interface {
 	GetMessengerRelatedUserByID(ctx context.Context, messengerUserID int) (*models.MessengerRelatedUser, error)
 	DeleteMessengerRelatedUserByUserID(ctx context.Context, userID int64) error
 	GetAllMessengers(ctx context.Context, page, pageSize int, orderBy string) ([]*models.Messenger, int, error)
-	GetAllMessengerRelatedUsers(ctx context.Context, page, pageSize int, orderBy string) ([]*models.MessengerRelatedUser, int, error)
+	GetAllMessengerRelatedUsers(ctx context.Context, page, pageSize int, orderBy string, userID *int64, chatID *string) ([]*models.MessengerRelatedUser, int, error)
 }
 
 type messengerRepository struct {
@@ -637,8 +637,8 @@ func (r *messengerRepository) GetAllMessengers(ctx context.Context, page, pageSi
 	return messengers, totalCount, nil
 }
 
-// GetAllMessengerRelatedUsers retrieves all messenger-related users with pagination and ordering
-func (r *messengerRepository) GetAllMessengerRelatedUsers(ctx context.Context, page, pageSize int, orderBy string) ([]*models.MessengerRelatedUser, int, error) {
+// GetAllMessengerRelatedUsers retrieves all messenger-related users with pagination, ordering, and optional filters
+func (r *messengerRepository) GetAllMessengerRelatedUsers(ctx context.Context, page, pageSize int, orderBy string, userID *int64, chatID *string) ([]*models.MessengerRelatedUser, int, error) {
 	ctx, span := r.tracer.Start(ctx, "messenger_repository.GetAllMessengerRelatedUsers",
 		trace.WithAttributes(
 			attribute.Int("page", page),
@@ -666,11 +666,22 @@ func (r *messengerRepository) GetAllMessengerRelatedUsers(ctx context.Context, p
 
 	offset := (page - 1) * pageSize
 
-	// Get total count
-	countQuery, countArgs, err := r.sb.Select("COUNT(*)").
+	countBuilder := r.sb.Select("COUNT(*)").
 		From("user_messengers").
-		Where(squirrel.Eq{"deleted_at": nil}).
-		ToSql()
+		Where(squirrel.Eq{"deleted_at": nil})
+
+	if userID != nil {
+		countBuilder = countBuilder.Where(squirrel.Eq{"user_id": *userID})
+		span.SetAttributes(attribute.Int64("filter.user_id", *userID))
+		log = log.With().Int64("filter.user_id", *userID).Logger()
+	}
+	if chatID != nil && *chatID != "" {
+		countBuilder = countBuilder.Where(squirrel.Eq{"chat_id": *chatID})
+		span.SetAttributes(attribute.String("filter.chat_id", *chatID))
+		log = log.With().Str("filter.chat_id", *chatID).Logger()
+	}
+
+	countQuery, countArgs, err := countBuilder.ToSql()
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -686,10 +697,18 @@ func (r *messengerRepository) GetAllMessengerRelatedUsers(ctx context.Context, p
 		return nil, 0, errors.Wrap(err, "failed to get total count")
 	}
 
-	// Get paginated data
-	query, args, err := r.sb.Select("id", "user_id", "messenger_id", "messenger_user_id", "chat_id", "created_at", "updated_at").
+	dataBuilder := r.sb.Select("id", "user_id", "messenger_id", "messenger_user_id", "chat_id", "created_at", "updated_at").
 		From("user_messengers").
-		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"deleted_at": nil})
+
+	if userID != nil {
+		dataBuilder = dataBuilder.Where(squirrel.Eq{"user_id": *userID})
+	}
+	if chatID != nil && *chatID != "" {
+		dataBuilder = dataBuilder.Where(squirrel.Eq{"chat_id": *chatID})
+	}
+
+	query, args, err := dataBuilder.
 		OrderBy(orderBy).
 		Limit(uint64(pageSize)).
 		Offset(uint64(offset)).

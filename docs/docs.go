@@ -812,7 +812,7 @@ const docTemplate = `{
         },
         "/api/v1/messengerRelatedUsers/all": {
             "get": {
-                "description": "Retrieves all messenger-related users with pagination and ordering",
+                "description": "Retrieves all messenger-related users with pagination, ordering, and optional filters by user_id and chat_id",
                 "produces": [
                     "application/json"
                 ],
@@ -840,6 +840,18 @@ const docTemplate = `{
                         "default": "created_at DESC",
                         "description": "Order by field (default: created_at DESC)",
                         "name": "order_by",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by user_id",
+                        "name": "user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by chat_id",
+                        "name": "chat_id",
                         "in": "query"
                     }
                 ],

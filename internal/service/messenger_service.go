@@ -362,8 +362,8 @@ func (s *MessengerService) GetAllMessengers(ctx context.Context, page, pageSize 
 	return messengers, totalCount, nil
 }
 
-// GetAllMessengerRelatedUsers implements BL of retrieving all messenger-related users with pagination and ordering
-func (s *MessengerService) GetAllMessengerRelatedUsers(ctx context.Context, page, pageSize int, orderBy string) ([]*models.MessengerRelatedUser, int, error) {
+// GetAllMessengerRelatedUsers implements BL of retrieving all messenger-related users with pagination, ordering, and optional filters
+func (s *MessengerService) GetAllMessengerRelatedUsers(ctx context.Context, page, pageSize int, orderBy string, userID *int64, chatID *string) ([]*models.MessengerRelatedUser, int, error) {
 	ctx, span := s.tracer.Start(ctx, "messenger_service.GetAllMessengerRelatedUsers",
 		trace.WithAttributes(
 			attribute.Int("page", page),
@@ -379,7 +379,16 @@ func (s *MessengerService) GetAllMessengerRelatedUsers(ctx context.Context, page
 		Str("order_by", orderBy).
 		Msg("getting all messenger-related users")
 
-	messengerRelatedUsers, totalCount, err := s.messengerRepo.GetAllMessengerRelatedUsers(ctx, page, pageSize, orderBy)
+	if userID != nil {
+		span.SetAttributes(attribute.Int64("filter.user_id", *userID))
+		log = log.With().Int64("filter.user_id", *userID).Logger()
+	}
+	if chatID != nil && *chatID != "" {
+		span.SetAttributes(attribute.String("filter.chat_id", *chatID))
+		log = log.With().Str("filter.chat_id", *chatID).Logger()
+	}
+
+	messengerRelatedUsers, totalCount, err := s.messengerRepo.GetAllMessengerRelatedUsers(ctx, page, pageSize, orderBy, userID, chatID)
 	if err != nil {
 		log.Debug().
 			Err(err).

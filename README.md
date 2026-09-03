@@ -734,7 +734,7 @@ Access Swagger UI at: `http://localhost:8080/swagger/index.html`
 | `/api/v1/messengers/by-name/:messenger_name` | GET | Get messenger ID by name | - |
 | `/api/v1/messengerRelatedUsers` | GET | Get messenger-related user | `chat_id`, `messenger_user_id`, `user_id`, `messenger_id` |
 | `/api/v1/messengerRelatedUsers` | POST | Create messenger user relation | - |
-| `/api/v1/messengerRelatedUsers/all` | GET | Get all messenger-related users with pagination | `page`, `page_size`, `order_by` |
+| `/api/v1/messengerRelatedUsers/all` | GET | Get all messenger-related users with pagination | `page`, `page_size`, `order_by`, `user_id`, `chat_id` |
 | `/api/v1/messengerRelatedUsers/:messenger_user_id/user` | GET | Get user ID by messenger user ID | - |
 
 ### Backlogs

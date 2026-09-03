@@ -430,7 +430,9 @@ class GoReminderClient:
         self,
         page: int = 1,
         page_size: int = 50,
-        order_by: Optional[str] = None
+        order_by: Optional[str] = None,
+        user_id: Optional[int] = None,
+        chat_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Get all messenger-related users with pagination"""
         params = {
@@ -440,6 +442,10 @@ class GoReminderClient:
 
         if order_by:
             params["order_by"] = order_by
+        if user_id is not None:
+            params["user_id"] = user_id
+        if chat_id:
+            params["chat_id"] = chat_id
 
         return self._make_request("GET", "/messengerRelatedUsers/all", params=params)
 

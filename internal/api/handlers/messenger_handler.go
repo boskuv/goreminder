@@ -361,12 +361,14 @@ func (h *MessengerHandler) GetAllMessengers(c *gin.Context) {
 }
 
 // @Summary Get all messenger-related users
-// @Description Retrieves all messenger-related users with pagination and ordering
+// @Description Retrieves all messenger-related users with pagination, ordering, and optional filters by user_id and chat_id
 // @Tags Messengers
 // @Produce json
 // @Param page query int false "Page number (default: 1)" default(1)
 // @Param page_size query int false "Page size (default: 50)" default(50)
 // @Param order_by query string false "Order by field (default: created_at DESC)" default(created_at DESC)
+// @Param user_id query int false "Filter by user_id"
+// @Param chat_id query string false "Filter by chat_id"
 // @Success 200 {object} dto.PaginatedMessengerRelatedUsersResponse "Paginated list of messenger-related users"
 // @Failure 400 {object} dto.ErrorResponse "Bad request"
 // @Failure 500 {object} dto.ErrorResponse "Internal server error"
@@ -399,13 +401,31 @@ func (h *MessengerHandler) GetAllMessengerRelatedUsers(c *gin.Context) {
 		orderBy = "created_at DESC"
 	}
 
+	userID, err := validation.ValidateOptionalInt64Query(c, "user_id", 1)
+	if err != nil {
+		log.Info().Err(err).Msg("invalid user_id query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
+	chatID, err := validation.ValidateOptionalStringQuery(c, "chat_id")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid chat_id query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	var chatIDPtr *string
+	if chatID != "" {
+		chatIDPtr = &chatID
+	}
+
 	log.Info().
 		Int64("page", page).
 		Int64("page_size", pageSize).
 		Str("order_by", orderBy).
 		Msg("getting all messenger-related users")
 
-	messengerRelatedUsers, totalCount, err := h.messengerService.GetAllMessengerRelatedUsers(ctx, int(page), int(pageSize), orderBy)
+	messengerRelatedUsers, totalCount, err := h.messengerService.GetAllMessengerRelatedUsers(ctx, int(page), int(pageSize), orderBy, userID, chatIDPtr)
 	if err != nil {
 		h.logger.Error().Stack().Err(err).Msg("error while getting all messenger-related users")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
