@@ -1,191 +1,162 @@
 """
-Example usage of GoReminder Python Client
+Example usage of GoReminder Python Client against a running API.
 
-This script demonstrates how to use the GoReminder API client.
+Requires: GoReminder API at GOREMINDER_URL (default http://localhost:8080).
+Creates: user → telegram messenger → MRU → task → backlog → target → digest.
 """
 
-from datetime import datetime, timedelta, timezone
-from goreminder_client import GoReminderClient
+from __future__ import annotations
+
 import json
+import os
+import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+# Allow running from examples/python-client without installing the package.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from requests import HTTPError
+
+from goreminder_client import GoReminderClient
 
 
 def print_json(data):
-    """Pretty print JSON data"""
     print(json.dumps(data, indent=2, default=str))
 
 
 def main():
-    # Initialize client
-    client = GoReminderClient(base_url="http://localhost:8080")
+    base_url = os.environ.get("GOREMINDER_URL", "http://localhost:8080")
+    client = GoReminderClient(base_url=base_url)
 
     print("=" * 60)
-    print("GoReminder API Client Examples")
+    print(f"GoReminder API examples → {base_url}")
     print("=" * 60)
 
-    # Example 1: Create a user
+    try:
+        print("\n0. Healthcheck...")
+        print_json(client.healthcheck())
+    except Exception as e:
+        print(f"API unreachable: {e}")
+        return 1
+
     print("\n1. Creating a user...")
-    try:
-        user = client.create_user(
-            name="John Doe",
-            email="john.doe@example.com",
-            timezone="UTC",
-            language_code="en",
-            role="user"
-        )
-        print("User created:")
-        print_json(user)
-        user_id = user["id"]
-    except Exception as e:
-        print(f"Error creating user: {e}")
-        return
+    user = client.create_user(
+        name="Example User",
+        email="example@goreminder.local",
+        timezone="UTC",
+        language_code="en",
+        role="user",
+    )
+    print_json(user)
+    user_id = user["id"]
 
-    # Example 2: Create a one-time task
-    print("\n2. Creating a one-time task...")
+    print("\n2. Ensuring messenger type 'telegram'...")
     try:
-        future_date = datetime.now(timezone.utc) + timedelta(days=1)
-        task = client.create_task(
-            title="Complete project documentation",
+        messenger = client.get_messenger_id_by_name("telegram")
+        messenger_id = messenger["id"]
+        print(f"existing messenger id={messenger_id}")
+    except HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            created = client.create_messenger("telegram")
+            messenger_id = created["id"]
+            print(f"created messenger id={messenger_id}")
+        else:
+            raise
+
+    print("\n3. Linking messenger-related user (MRU)...")
+    mru = client.create_messenger_related_user(
+        user_id=user_id,
+        messenger_id=messenger_id,
+        messenger_user_id="tg-example-1001",
+        chat_id="chat-example-1001",
+    )
+    print_json(mru)
+    mru_id = mru["id"]
+
+    print("\n4. Creating a one-time task (with MRU for done/queue)...")
+    future = datetime.now(timezone.utc) + timedelta(days=1)
+    created_task = client.create_task(
+        title="Complete project documentation",
+        user_id=user_id,
+        start_date=future,
+        description="Write API docs",
+        messenger_related_user_id=mru_id,
+        requires_confirmation=True,
+    )
+    print_json(created_task)
+    task_id = created_task["id"]
+
+    print("\n5. Creating a recurring (cron) parent task...")
+    recurring = client.create_task(
+        title="Daily standup",
+        user_id=user_id,
+        start_date=future,
+        cron_expression="0 9 * * *",
+        requires_confirmation=True,
+        messenger_related_user_id=mru_id,
+    )
+    print_json(recurring)
+
+    print("\n6. Listing user tasks...")
+    print_json(client.get_user_tasks(user_id=user_id, page=1, page_size=10))
+
+    print("\n7. Updating task...")
+    print_json(
+        client.update_task(
+            task_id,
+            description="Updated description",
+            start_date=datetime.now(timezone.utc) + timedelta(days=2),
+        )
+    )
+
+    print("\n8. Queue schedule (needs MRU on task)...")
+    print_json(client.queue_task(task_id, action="schedule", queue_name="celery"))
+
+    print("\n9. Mute / unmute...")
+    print_json(client.mute_task(task_id))
+    print_json(client.unmute_task(task_id))
+
+    print("\n10. Mark done...")
+    print_json(client.mark_task_as_done(task_id))
+
+    print("\n11. Task history...")
+    print_json(client.get_task_history(task_id))
+
+    print("\n12. Backlog + batch...")
+    print_json(client.create_backlog(title="Implement auth", user_id=user_id, messenger_related_user_id=mru_id))
+    print_json(
+        client.create_backlogs_batch(
+            items="Item A\nItem B\nItem C",
             user_id=user_id,
-            start_date=future_date,
-            description="Write comprehensive documentation for the API",
-            requires_confirmation=True
+            separator="\n",
+            messenger_related_user_id=mru_id,
         )
-        print("Task created:")
-        print_json(task)
-        task_id = task["id"]
-    except Exception as e:
-        print(f"Error creating task: {e}")
-        return
+    )
 
-    # Example 3: Create a recurring task (parent task)
-    print("\n3. Creating a recurring task (parent)...")
+    print("\n13. Target...")
+    print_json(client.create_target(title="Learn Go", user_id=user_id, messenger_related_user_id=mru_id))
+
+    print("\n14. Digest settings + digest...")
     try:
-        future_date = datetime.now(timezone.utc) + timedelta(days=1)
-        recurring_task = client.create_task(
-            title="Daily standup reminder",
-            user_id=user_id,
-            start_date=future_date,
-            description="Reminder for daily standup meeting",
-            cron_expression="0 9 * * *",  # Daily at 9 AM
-            requires_confirmation=True
+        print_json(
+            client.create_digest_settings(
+                user_id=user_id,
+                weekday_time="07:00",
+                weekend_time="10:00",
+                enabled=True,
+                messenger_related_user_id=mru_id,
+            )
         )
-        print("Recurring task created:")
-        print_json(recurring_task)
-        #recurring_task_id = recurring_task["id"]
-    except Exception as e:
-        print(f"Error creating recurring task: {e}")
-
-    # Example 4: Get all tasks for user
-    print("\n4. Getting all tasks for user...")
-    try:
-        tasks_response = client.get_user_tasks(
-            user_id=user_id,
-            page=1,
-            page_size=10
-        )
-        print("User tasks:")
-        print_json(tasks_response)
-    except Exception as e:
-        print(f"Error getting user tasks: {e}")
-
-    # Example 5: Update a task
-    print("\n5. Updating a task...")
-    try:
-        new_future_date = datetime.now(timezone.utc) + timedelta(days=2)
-        updated_task = client.update_task(
-            task_id=task_id,
-            description="Updated: Write comprehensive documentation for the API",
-            start_date=new_future_date
-        )
-        print("Task updated:")
-        print_json(updated_task)
-    except Exception as e:
-        print(f"Error updating task: {e}")
-
-    # Example 6: Mark task as done
-    # TODO: task with ID 349 has no MessengerRelatedUserID value: unprocessable entity
-    # print("\n6. Marking task as done...")
-    # try:
-    #     done_task = client.mark_task_as_done(task_id)
-    #     print("Task marked as done:")
-    #     print_json(done_task)
-    # except Exception as e:
-    #     print(f"Error marking task as done: {e}")
-
-    # Example 7: Get task history
-    print("\n7. Getting task history...")
-    try:
-        history = client.get_task_history(task_id)
-        print("Task history:")
-        print_json(history)
-    except Exception as e:
-        print(f"Error getting task history: {e}")
-
-    # Example 8: Create a backlog item
-    print("\n8. Creating a backlog item...")
-    try:
-        backlog = client.create_backlog(
-            title="Implement new feature",
-            user_id=user_id,
-            description="Add user authentication"
-        )
-        print("Backlog created:")
-        print_json(backlog)
-        # backlog_id = backlog["id"]
-    except Exception as e:
-        print(f"Error creating backlog: {e}")
-
-    # Example 9: Create multiple backlog items
-    print("\n9. Creating multiple backlog items...")
-    try:
-        items = "Item 1\nItem 2\nItem 3"
-        backlogs = client.create_backlogs_batch(
-            items=items,
-            user_id=user_id,
-            separator="\n"
-        )
-        print("Backlogs created:")
-        print_json(backlogs)
-    except Exception as e:
-        print(f"Error creating backlogs: {e}")
-
-    # Example 10: Create digest settings
-    print("\n10. Creating digest settings...")
-    try:
-        digest_settings = client.create_digest_settings(
-            user_id=user_id,
-            weekday_time="07:00",
-            weekend_time="10:00",
-            enabled=True
-        )
-        print("Digest settings created:")
-        print_json(digest_settings)
-    except Exception as e:
-        print(f"Error creating digest settings: {e}")
-
-    # Example 11: Get digest
-    print("\n11. Getting digest...")
-    try:
-        digest = client.get_digest(user_id=user_id)
-        print("Digest:")
-        print_json(digest)
-    except Exception as e:
-        print(f"Error getting digest: {e}")
-
-    # Example 12: Get all users
-    print("\n12. Getting all users...")
-    try:
-        users_response = client.get_all_users(page=1, page_size=10)
-        print("Users:")
-        print_json(users_response)
-    except Exception as e:
-        print(f"Error getting users: {e}")
+    except HTTPError as e:
+        print(f"(settings may already exist) {e}")
+    print_json(client.get_digest(user_id=user_id, messenger_related_user_id=mru_id))
 
     print("\n" + "=" * 60)
-    print("Examples completed!")
+    print("Done.")
     print("=" * 60)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
-
+    raise SystemExit(main())

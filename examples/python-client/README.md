@@ -1,425 +1,96 @@
 # GoReminder Python Client
 
-A simple Python client library for interacting with the GoReminder API.
+Thin `requests`-based client for the GoReminder REST API (`/api/v1`).
+Aligned with the OpenAPI/Swagger surface of this repository (`/swagger/index.html`).
 
-## Installation
-
-1. Install Python 3.7 or higher
-2. Install dependencies:
+## Setup
 
 ```bash
+cd examples/python-client
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Quick Start
+API must be reachable (default `http://localhost:8080`):
+
+```bash
+export GOREMINDER_URL=http://localhost:8080
+python example_usage.py
+```
+
+## Quick start
 
 ```python
 from datetime import datetime, timedelta, timezone
 from goreminder_client import GoReminderClient
 
-# Initialize client
 client = GoReminderClient(base_url="http://localhost:8080")
 
-# Create a user
-user = client.create_user(
-    name="John Doe",
-    email="john.doe@example.com",
-    timezone="UTC"
+user = client.create_user(name="Ada", email="ada@example.com", timezone="UTC")
+user_id = user["id"]  # create endpoints return {"id": ...}
+
+# Link Telegram (or another messenger) before queue/done flows that need a chat
+messenger_id = client.get_messenger_id_by_name("telegram")["id"]
+mru = client.create_messenger_related_user(
+    user_id=user_id,
+    messenger_id=messenger_id,
+    messenger_user_id="123456789",
+    chat_id="123456789",
 )
 
-# Create a task
-future_date = datetime.now(timezone.utc) + timedelta(days=1)
 task = client.create_task(
-    title="Complete project documentation",
-    user_id=user["id"],
-    start_date=future_date,
-    description="Write comprehensive documentation",
-    requires_confirmation=True
+    title="Ship docs",
+    user_id=user_id,
+    start_date=datetime.now(timezone.utc) + timedelta(days=1),
+    messenger_related_user_id=mru["id"],
+    requires_confirmation=True,
 )
-
-# Mark task as done
-client.mark_task_as_done(task["id"])
+# {"id": <parent_or_task>, "child_id": <child_or_0>}
 ```
 
-## Running Examples
+## Contract notes (easy to get wrong)
 
-Run the example script to see various API operations:
+| Topic | Behavior |
+|-------|----------|
+| **Creates** | Usually `{"id": int}`. Tasks return `{"id", "child_id"}`. |
+| **DELETE** | HTTP **204** empty body → client methods return `None`. |
+| **Dates** | UTC RFC3339 with `Z` (no fractional seconds in this client). `start_date` on create/update uses `future_date` validation when set. |
+| **MRU** | Create requires `user_id`, `messenger_id`, `messenger_user_id`, `chat_id`. Get requires query `chat_id` + `messenger_user_id`. |
+| **Queue / done** | Task usually needs `messenger_related_user_id` or queue/done return 422. |
+| **Queue body** | `action`, `queue_name`, `task_id` are all required. |
+| **Digest** | `GET /digests` uses `user_id` + optional `start_date_from` / `start_date_to` (not a single `date`). |
+| **Attachments** | Routes exist always; if `attachments.enabled=false` API returns **503**. |
+| **Errors** | `{"error": "..."}`; client raises `requests.HTTPError`. |
 
-```bash
-python example_usage.py
-```
+Canonical reference: **Swagger UI** on the running server, not this README.
 
-Make sure the GoReminder API server is running at `http://localhost:8080` before running the examples.
-
-## Architecture
-
-The GoReminder system consists of several components that interact through an AMQP queue and HTTP API.
-
-### Example System Architecture Diagram
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           GoReminder Backend (Go)                       │
-│                                                                         │
-│  ┌──────────────┐         ┌──────────────┐         ┌──────────────┐     │
-│  │   REST API   │         │   Services   │         │   Database   │     │
-│  │   (Gin)      │◄────────┤  (Business   │◄────────┤  (PostgreSQL)│     │
-│  │              │         │   Logic)     │         │              │     │
-│  └──────────────┘         └──────┬───────┘         └──────────────┘     │
-│                                  │                                      │
-│                                  │ Publish                              │
-│                                  ▼                                      │
-│                        ┌──────────────────┐                             │
-│                        │  Queue Producer  │                             │
-│                        │   (AMQP/RabbitMQ)│                             │
-│                        └────────┬─────────┘                             │
-└─────────────────────────────────┼───────────────────────────────────────┘
-                                  │
-                                  │ AMQP Messages
-                                  │ (Tasks, Digest Settings)
-                                  ▼
-                         ┌─────────────────────┐
-                         │   RabbitMQ / AMQP   │
-                         │      Message Queue  │
-                         └────────┬────────────┘
-                                  │
-                                  │ Consume
-                                  ▼
-                         ┌─────────────────────┐
-                         │   Worker (Celery)   │
-                         │                     │
-                         │  ┌───────────────┐  │
-                         │  │  Scheduler    │  │
-                         │  │  (Celery Beat)│  │
-                         │  └───────┬───────┘  │
-                         │          │          │
-                         │          │ Schedule │
-                         │          ▼          │
-                         │  ┌───────────────┐  │
-                         │  │ Task Executor │  │
-                         │  └────────┬──────┘  │
-                         └───────────┼─────────┘
-                                     │
-                                     │ HTTP GET (for digests)
-                                     │ Webhook POST (for sending messages)
-                                     │
-                                     ▼
-                         ┌──────────────────────────┐
-                         │  Telegram Client         │
-                         │                          │
-                         │  ┌───────────────┐       │
-                         │  │  Webhook      │       │◄─── Messages from Worker
-                         │  │  Endpoint     │       │
-                         │  └───────────────┘       │
-                         │                          │
-                         │  ┌───────────────┐       │
-                         │  │  Telegram Bot │       │◄─── Messages from API
-                         │  │  (python-telegram-bot)│
-                         │  └───────┬───────┘       │
-                         └──────────┼───────────────┘
-                                    │
-                                    │ Telegram API
-                                    ▼
-                         ┌─────────────────────┐
-                         │   Telegram Users    │
-                         └─────────────────────┘
-
-```
-
-### Data Flow
-
-#### 1. Task Creation
-
-```
-User/Client → Backend API → Database
-                    ↓
-              Queue Producer → AMQP → Worker
-                                        ↓
-                                   Scheduler (adds to scheduler)
-```
-
-#### 2. Task Execution
-
-```
-Scheduler (at scheduled time) → Task Executor
-                                    ↓
-                              HTTP GET /api/v1/digests (if digest)
-                                    ↓
-                              Webhook POST → Telegram Client
-                                    ↓
-                              Telegram API → User
-```
-
-#### 3. Digest Settings Configuration
-
-```
-User/Client → Backend API → Database
-                    ↓
-              Queue Producer → AMQP → Worker
-                                        ↓
-                                   Scheduler (adds schedule)
-```
-
-#### 4. Digest Delivery
-
-```
-Scheduler (on schedule) → Task Executor
-                                    ↓
-                              HTTP GET /api/v1/digests?user_id=X
-                                    ↓
-                              Backend API → Database (fetch current data)
-                                    ↓
-                              Task Executor (form message)
-                                    ↓
-                              Webhook POST → Telegram Client
-                                    ↓
-                              Telegram API → User
-```
-
-#### 5. Telegram Bot API Interaction
-
-```
-Telegram User → Telegram Bot
-                    ↓
-              HTTP GET/POST → Backend API
-                    ↓
-              Database (read/write)
-                    ↓
-              Response → Telegram Bot → User
-```
-
-### System Components
-
-1. **GoReminder Backend (Go)**
-   - REST API on Gin
-   - Business logic in services
-   - Publishes tasks and digest settings to AMQP
-   - Data storage in PostgreSQL
-
-2. **RabbitMQ / AMQP**
-   - Message queue for asynchronous processing
-   - Message types:
-     - `worker.schedule_task` - schedule a task
-     - `worker.delete_task` - delete a task
-     - `worker.create_digest_settings` - create digest settings
-     - `worker.update_digest_settings` - update digest settings
-     - `worker.delete_digest_settings` - delete digest settings
-
-3. **Worker (Celery)**
-   - Consumes messages from AMQP
-   - Scheduler (Celery Beat) for periodic tasks
-   - Task Executor for task execution
-   - Sends messages via webhook to Telegram Client
-
-4. **Telegram Client**
-   - Webhook endpoint for receiving messages from worker
-   - Integration with Telegram Bot API
-   - Sends messages to users
-
-5. **Telegram Bot**
-   - Interacts with users through Telegram
-   - HTTP requests to Backend API for retrieving/updating data
-   - Handles commands and callbacks from users
-
-### Architecture Benefits
-
-- **Asynchrony**: tasks are processed asynchronously through a queue
-- **Scalability**: workers can be scaled independently
-- **Separation of concerns**: each component performs its own function
-- **Data freshness**: worker receives fresh data through API when sending digests
-- **Flexibility**: easy to add new messengers or task types
-
-## API Methods
+## Method map
 
 ### Tasks
+`create_task`, `get_task`, `get_all_tasks`, `update_task`, `delete_task`, `mark_task_as_done`, `mute_task`, `unmute_task`, `get_task_history`, `get_user_tasks`, `get_user_task_history`, `queue_task`
 
-- `create_task()` - Create a new task
-- `get_task(task_id)` - Get a task by ID
-- `get_all_tasks()` - Get all tasks with pagination and filtering
-- `update_task(task_id, ...)` - Update a task (partial update)
-- `delete_task(task_id)` - Delete a task (soft delete)
-- `mark_task_as_done(task_id)` - Mark a task as done
-- `get_task_history(task_id)` - Get task history
-- `get_user_tasks(user_id, ...)` - Get all tasks for a user
-- `get_user_task_history(user_id, ...)` - Get user task history
-- `queue_task(task_id, action, queue_name)` - Queue a task for processing
+### Attachments
+`init_attachment`, `upload_attachment_direct`, `complete_attachment`, `list_attachments`, `get_attachment_download_url`, `get_attachment_content`, `delete_attachment`
 
-### Users
+### Users / messengers
+`create_user`, `get_user`, `get_all_users`, `update_user`, `delete_user`  
+`create_messenger`, `get_messenger`, `get_messenger_id_by_name`, `get_all_messengers`  
+`create_messenger_related_user`, `get_messenger_related_user`, `get_all_messenger_related_users`, `get_user_id_by_messenger_user_id`
 
-- `create_user()` - Create a new user
-- `get_user(user_id)` - Get a user by ID
-- `get_all_users()` - Get all users with pagination
-- `update_user(user_id, ...)` - Update a user (partial update)
-- `delete_user(user_id)` - Delete a user (soft delete)
+### Backlogs / targets / digests
+Full CRUD helpers matching `/backlogs`, `/targets`, `/digests` and `/digests/settings`.
 
-### Messengers
+### System
+`healthcheck`, `version` (root paths, not under `/api/v1`)
 
-- `create_messenger(name)` - Create a messenger type
-- `get_messenger(messenger_id)` - Get a messenger by ID
-- `get_messenger_id_by_name(name)` - Get messenger ID by name
-- `get_all_messengers()` - Get all messengers with pagination
-- `create_messenger_related_user()` - Create a messenger user relation
-- `get_messenger_related_user()` - Get messenger-related user
-- `get_all_messenger_related_users()` - Get all messenger-related users
-- `get_user_id_by_messenger_user_id()` - Get user ID by messenger user ID
+## Recurrence
 
-### Backlogs
+- One-shot: no `cron_expression` / `rrule`
+- Cron parent: `cron_expression` + usually `requires_confirmation=true` → may create a child (`child_id`)
+- RRULE: pass `rrule` instead of `cron_expression` (API treats them as mutually exclusive at service layer)
 
-- `create_backlog()` - Create a new backlog item
-- `create_backlogs_batch()` - Create multiple backlog items at once
-- `get_backlog(backlog_id)` - Get a backlog by ID
-- `get_all_backlogs()` - Get all backlogs with pagination
-- `update_backlog(backlog_id, ...)` - Update a backlog item
-- `delete_backlog(backlog_id)` - Delete a backlog item
+See the main project README for mute/unmute and child-task behavior.
 
-### Digests
+## Related example
 
-- `get_digest(user_id, date)` - Get digest for a user
-- `create_digest_settings()` - Create digest settings
-- `get_digest_settings(user_id)` - Get digest settings for a user
-- `update_digest_settings(user_id, ...)` - Update digest settings
-- `delete_digest_settings(user_id)` - Delete digest settings
-- `get_all_digest_settings()` - Get all digest settings with pagination
-
-## Examples
-
-### Creating a One-time Task
-
-```python
-from datetime import datetime, timedelta, timezone
-
-future_date = datetime.now(timezone.utc) + timedelta(days=1)
-task = client.create_task(
-    title="Complete project documentation",
-    user_id=1,
-    start_date=future_date,
-    description="Write comprehensive documentation",
-    requires_confirmation=True
-)
-```
-
-### Creating a Recurring Task
-
-```python
-future_date = datetime.now(timezone.utc) + timedelta(days=1)
-recurring_task = client.create_task(
-    title="Daily standup reminder",
-    user_id=1,
-    start_date=future_date,
-    cron_expression="0 9 * * *",  # Daily at 9 AM
-    requires_confirmation=True
-)
-```
-
-### Filtering Tasks
-
-```python
-from datetime import datetime, timedelta, timezone
-
-start_from = datetime.now(timezone.utc)
-start_to = datetime.now(timezone.utc) + timedelta(days=7)
-
-tasks = client.get_all_tasks(
-    page=1,
-    page_size=20,
-    status="pending",
-    start_date_from=start_from,
-    start_date_to=start_to,
-    user_id=1,
-    order_by="start_date ASC"
-)
-```
-
-### Creating Backlogs in Batch
-
-```python
-items = "Implement feature A\nFix bug B\nWrite tests for C"
-backlogs = client.create_backlogs_batch(
-    items=items,
-    user_id=1,
-    separator="\n"
-)
-```
-
-### Setting Up Digest
-
-```python
-digest_settings = client.create_digest_settings(
-    user_id=1,
-    weekday_time="07:00",  # 7 AM on weekdays
-    weekend_time="10:00",  # 10 AM on weekends
-    enabled=True
-)
-```
-
-## Error Handling
-
-The client raises `requests.HTTPError` for HTTP errors. Handle them appropriately:
-
-```python
-from requests import HTTPError
-
-try:
-    task = client.create_task(
-        title="Test",
-        user_id=1,
-        start_date=datetime.now(timezone.utc) + timedelta(days=1)
-    )
-except HTTPError as e:
-    print(f"HTTP Error: {e}")
-    print(f"Response: {e.response.text}")
-except Exception as e:
-    print(f"Error: {e}")
-```
-
-## Date Handling
-
-All dates must be in UTC and in the future for `start_date`. Use `datetime` with `timezone.utc`:
-
-```python
-from datetime import datetime, timedelta, timezone
-
-# Correct: Future date in UTC
-future_date = datetime.now(timezone.utc) + timedelta(days=1)
-
-# Wrong: Past date
-past_date = datetime.now(timezone.utc) - timedelta(days=1)  # Will fail validation
-```
-
-## Task Types
-
-### One-time Task
-- No `cron_expression`
-- Executes once at `start_date`
-- Can have `requires_confirmation=true` for rescheduling
-
-### Recurring Task (Parent)
-- Has `cron_expression` (e.g., `"0 9 * * *"`)
-- Has `requires_confirmation=true`
-- Creates child tasks automatically
-- Does not execute directly
-
-### Recurring Task (Child)
-- Has `parent_id` pointing to parent
-- No `cron_expression`
-- Executes at calculated `start_date`
-- When marked as done, creates next child task
-
-See the main README for more details on task types and rescheduling behavior.
-
-## Configuration
-
-You can customize the base URL when initializing the client:
-
-```python
-# Default: http://localhost:8080
-client = GoReminderClient()
-
-# Custom URL
-client = GoReminderClient(base_url="https://api.example.com")
-```
-
-## License
-
-This client example is provided as-is for demonstration purposes.
-
+Telegram bot that uses this client: [`../telegram-bot/`](../telegram-bot/).
