@@ -171,3 +171,33 @@ func TestUserService_DeleteUser(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+func TestUserService_GetAllUsers(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	userRepo := mock_repository.NewMockUserRepository(ctrl)
+	taskRepo := mock_repository.NewMockTaskRepository(ctrl)
+	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
+	producer := &queue.Producer{}
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), testLogger)
+	ctx := context.Background()
+
+	t.Run("success", func(t *testing.T) {
+		expected := []*models.User{{ID: 1, Name: "John"}, {ID: 2, Name: "Jane"}}
+		userRepo.EXPECT().GetAllUsers(gomock.Any(), 1, 50, "id ASC").Return(expected, 2, nil)
+		users, total, err := svc.GetAllUsers(ctx, 1, 50, "id ASC")
+		assert.NoError(t, err)
+		assert.Equal(t, expected, users)
+		assert.Equal(t, 2, total)
+	})
+
+	t.Run("repo error", func(t *testing.T) {
+		userRepo.EXPECT().GetAllUsers(gomock.Any(), 1, 10, "created_at DESC").Return(nil, 0, errors.New("db error"))
+		users, total, err := svc.GetAllUsers(ctx, 1, 10, "created_at DESC")
+		assert.Error(t, err)
+		assert.Nil(t, users)
+		assert.Equal(t, 0, total)
+	})
+}

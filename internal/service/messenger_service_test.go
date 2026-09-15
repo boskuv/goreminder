@@ -440,3 +440,31 @@ func TestMessengerService_NewMessengerService(t *testing.T) {
 	assert.Equal(t, mockMessengerRepo, svc.messengerRepo)
 	assert.Equal(t, mockUserRepo, svc.userRepo)
 }
+
+func TestMessengerService_GetAllMessengers(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
+	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
+	ctx := context.Background()
+
+	t.Run("success", func(t *testing.T) {
+		expected := []*models.Messenger{{ID: 1, Name: "telegram"}, {ID: 2, Name: "slack"}}
+		mockMessengerRepo.EXPECT().GetAllMessengers(gomock.Any(), 1, 50, "name ASC").Return(expected, 2, nil)
+		result, total, err := svc.GetAllMessengers(ctx, 1, 50, "name ASC")
+		assert.NoError(t, err)
+		assert.Equal(t, expected, result)
+		assert.Equal(t, 2, total)
+	})
+
+	t.Run("repo error", func(t *testing.T) {
+		mockMessengerRepo.EXPECT().GetAllMessengers(gomock.Any(), 1, 10, "id DESC").Return(nil, 0, errors.New("db error"))
+		result, total, err := svc.GetAllMessengers(ctx, 1, 10, "id DESC")
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.Equal(t, 0, total)
+	})
+}

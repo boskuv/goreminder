@@ -8,7 +8,6 @@ BINARY=bin/$(APP_NAME)
 
 # Go variables
 GO=go
-GOFLAGS=-mod=vendor
 GOTEST_FLAGS=-cover -v
 MAIN=cmd/core/main.go
 
