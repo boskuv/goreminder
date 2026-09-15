@@ -9,12 +9,22 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/boskuv/goreminder" alt="License"></a>
   <a href="https://hub.docker.com/r/boris24kv/goreminder-api"><img src="https://img.shields.io/docker/v/boris24kv/goreminder-api?label=docker&sort=semver" alt="Docker"></a>
   <img src="https://img.shields.io/badge/service%20coverage-75%25-brightgreen" alt="Service coverage">
-  <a href="https://goreportcard.com/report/github.com/boskuv/goreminder"><img src="https://goreportcard.com/badge/github.com/boskuv/goreminder" alt="Go Report Card"></a>
 </p>
+
+## Contents
+
+| | |
+|---|---|
+| **Start here** | [Features](#business-features) · [Prerequisites](#prerequisites) · [Quick start](#setup-instructions) |
+| **Reference** | [Configuration](#configuration) · [API](#api-documentation) · [Filtering](#filtering-and-ordering) |
+| **Domain** | [Muting](#task-muting-muted) · [Task types](#task-types) · [Schema](#database-schema) |
+| **Dev** | [Testing](#testing) · [Development](#development) · [Architecture](#architecture) |
+
+> Long sections (schema, full config, middleware, curl examples, …) are folded behind **Expand** / summary toggles.
 
 ## Business Features
 - [x] **Auto-rescheduling**: Tasks are automatically rescheduled to the next day if confirmation is not received
-- [x] **Daily Task Digest**: Send daily task summaries at specified times
+- [x] **Daily Task Digest**: Configure digest settings and fetch digest payloads via API
 - [x] **Backlog Zone**: Tasks without fixed time and confirmation requirements
 - [x] **Targets/Goals Management**: Create and track targets (aims/goals) with completion tracking
 - [x] **Task Muting**: Per-task silence for the worker queue (see [Task muting (`muted`)](#task-muting-muted)).
@@ -38,10 +48,10 @@
   - **Tracing**: OpenTelemetry integration with Jaeger for distributed tracing
   - **Structured Logging**: Zerolog for structured, context-aware logging
 - **Message Queue**: RabbitMQ integration for asynchronous task processing with retry support (can be disabled for DB-only mode)
-- **Containerized Setup**: Complete Docker Compose configuration
+- **Containerized Setup**: Docker Compose for local dependencies (`docker-compose.dev.yml`)
 - **Database Migrations**: Goose-based migration system
 - **Task Attachments**: REST BFF in core + separate attachments gRPC service (hybrid presigned / direct multipart upload, optional proxy download; contract in `api/proto/attachments/v1/`)
-- **Comprehensive Testing**: Unit tests, integration tests, and E2E tests
+- **Testing**: Go unit tests (service layer + gomock; CI on PRs) and Python E2E tests
 
 ## Prerequisites
 - Docker and Docker Compose
@@ -49,55 +59,38 @@
 - `make` for build automation
 - `golangci-lint` for code linting
 - `goose` for database migrations
-- `swag` for generating swagger docs
-- `mockery` for generating mocks
+- `swag` for generating Swagger docs
+- `mockgen` (`go.uber.org/mock`) for repository mocks
+- `protoc` (optional, for `make proto-attachments`)
 - Python 3.x (for E2E tests)
 
 ## Project Structure
+
+<details>
+<summary>Expand tree</summary>
+
 ```
 .
-├── cmd/                    # Main applications of the project
-│   └── core/              # The API server application (REST BFF)
-│       ├── main.go        # Application entry point
-│       └── config.yaml    # Configuration file
-├── api/                   # gRPC contracts (see api/README.md)
-│   ├── proto/attachments/v1/attachments.proto
-│   └── gen/attachments/v1/   # protoc output (*.pb.go messages, *_grpc.pb.go RPC)
-├── docs/                  # Generated Swagger documentation
-├── internal/              # Private application and library code
-│   ├── api/               # API routes, handlers, and middleware
-│   │   ├── dto/           # Data Transfer Objects
-│   │   │   ├── mapper/    # DTO to Model mappers
-│   │   │   └── *.go       # Request/Response DTOs
-│   │   ├── handlers/      # HTTP request handlers
-│   │   ├── middleware/    # HTTP middleware
-│   │   │   ├── cors.go           # CORS middleware
-│   │   │   ├── logger.go         # Request logging middleware
-│   │   │   ├── metrics.go        # Prometheus metrics middleware
-│   │   │   ├── ratelimit.go      # Rate limiting middleware
-│   │   │   ├── request_id.go     # Request ID generation
-│   │   │   └── tracing.go       # OpenTelemetry tracing middleware
-│   │   ├── routes/        # Route definitions
-│   │   └── validation/    # Custom validators
-│   │       ├── custom_validators.go  # Custom validation rules
-│   │       └── validator.go          # Validation utilities
-│   ├── errors/            # Custom error definitions
-│   ├── models/            # Data structures and domain models
-│   ├── repository/        # Database interaction layer
-│   ├── service/           # Business logic layer
-│   └── mocks/             # Generated mock interfaces
-├── migrations/            # Database migrations
-├── pkg/                   # Public library code
-│   ├── args/              # Command-line argument parsing
-│   ├── config/            # Application configuration
-│   ├── database/          # Database connection and retry logic
-│   ├── logger/            # Structured logging
-│   ├── observability/     # Metrics and tracing setup
-│   ├── attachments/       # gRPC client to attachments service
-│   └── queue/             # Message queue integration with retries
-├── scripts/               # Database initialization scripts
-└── tests/                 # Test suites (E2E tests)
+├── cmd/core/              # API server (REST BFF) + config.yaml
+├── api/                   # attachments gRPC contract (proto + gen)
+├── docs/                  # Swagger + dbml
+├── internal/
+│   ├── api/               # handlers, routes, middleware, dto, validation
+│   ├── models/ repository/ service/ mocks/ errors/
+├── migrations/            # goose SQL
+├── pkg/                   # config, database, queue, attachments client, observability, …
+├── tests/                 # Python E2E
+├── docker-compose.dev.yml # Postgres, RabbitMQ, tracing (local deps)
+└── .github/workflows/     # CI (go test) + Docker image publish
 ```
+
+The attachments **service** (S3/MinIO + its DB) lives in a **separate repository**; this repo only hosts the REST BFF and gRPC client (`pkg/attachments`).
+
+</details>
+
+
+<details>
+<summary><strong>Queue Contracts</strong></summary>
 
 ## Queue Contracts
 
@@ -122,6 +115,11 @@ The API publishes messages to RabbitMQ using a simple, Celery-style JSON contrac
 This payload is represented in code by the low-level `queue.TaskMessage` struct and is sent via the `queue.Publisher` interface. At the domain level, task messages are modeled as `queue.TaskEvent` with a `TaskEventType` (`schedule_task`, `delete_task`, etc.), which are mapped to the Celery-style JSON. The seventh argument still reflects the task row’s `cron_expression` only; executable child tasks usually have both `cron_expression` and `rrule` unset, with the parent holding `rrule` in the database. Workers that need the RRULE string should resolve it via `task_id` (for example from the API or DB). For deployments that should not use RabbitMQ, set `producer.enabled: false` in the config – the application will then use a no-op publisher and work purely at the database level.
 
 `internal/models.ScheduledTask` uses explicit action values (`"schedule"`, `"delete"`) via `ScheduledTaskActionSchedule` and `ScheduledTaskActionDelete` constants, which are dispatched in `TaskService.QueueTask` and converted into `queue.TaskEvent` instances before publishing.
+
+</details>
+
+<details>
+<summary><strong>Database Schema</strong></summary>
 
 ## Database Schema
 
@@ -267,9 +265,11 @@ erDiagram
 
 For a more detailed interactive diagram, you can use the [dbdiagram.io](https://dbdiagram.io) file located at `docs/database_schema.dbml`. Simply copy the contents and paste them into dbdiagram.io for an interactive ER diagram.
 
+</details>
+
 ## Configuration
 
-The application supports configuration via YAML files and environment variables. Environment variables take precedence over YAML file values. See `cmd/core/config.yaml.example` for a complete example.
+The application supports configuration via YAML files and environment variables. Environment variables take precedence over YAML file values. See `cmd/core/config.yaml` / `cmd/core/config.yaml.example` (example may lag behind newer keys such as `attachments.*` and `autoreschedule`).
 
 ### Configuration Sources
 
@@ -309,6 +309,9 @@ export GOREMINDER_DATABASE_PORT=5432
 ```
 
 **Note:** When using environment variables only, you can pass an empty string as config path: `./goreminder -config=""`
+
+<details>
+<summary><strong>Full configuration reference (YAML)</strong></summary>
 
 ### Configuration Structure
 
@@ -420,6 +423,11 @@ GOREMINDER_AUTORESCHEDULE_ENABLED=true
 GOREMINDER_AUTORESCHEDULE_TIME=00:00
 ```
 
+</details>
+
+<details>
+<summary><strong>Docker / Kubernetes env examples</strong></summary>
+
 ### Docker/Kubernetes Example
 
 When deploying in containers, you can use environment variables instead of mounting config files:
@@ -472,6 +480,8 @@ spec:
               key: password
 ```
 
+</details>
+
 ## Setup Instructions
 
 ### 1. Clone the Repository
@@ -493,7 +503,7 @@ vim cmd/core/config.yaml
 ```bash
 make docker-up
 # or
-docker-compose up --build
+docker compose -f docker-compose.dev.yml up --build
 ```
 
 ### 4. Run Database Migrations
@@ -542,9 +552,12 @@ make run
 ### 6. Verify Services
 - **PostgreSQL**: `localhost:5432`
 - **API Server**: `localhost:8080`
-- **Swagger UI**: `http://localhost:8080/swagger/index.html`
+- **Swagger UI**: `http://localhost:8080/docs/index.html`
 - **Metrics**: `http://localhost:9191/metrics`
 - **Jaeger UI**: `http://localhost:16686`
+
+<details>
+<summary><strong>Middleware</strong></summary>
 
 ## Middleware
 
@@ -581,6 +594,11 @@ The application uses multiple middleware layers (applied in order):
    - Integrates with Jaeger for visualization
    - Can be enabled/disabled via configuration
 
+</details>
+
+<details>
+<summary><strong>Request Validation</strong></summary>
+
 ## Request Validation
 
 The application includes custom validators for request validation:
@@ -612,6 +630,11 @@ All validation errors return HTTP 400 (Bad Request) with descriptive error messa
   "error": "field 'start_date' must be a date in the future (UTC)"
 }
 ```
+
+</details>
+
+<details>
+<summary><strong>Observability</strong></summary>
 
 ## Observability
 
@@ -687,6 +710,8 @@ Files larger than the direct limit via multipart receive **413** — use the pre
 
 When `attachments.enabled: false`, attachment endpoints return **503** with `error: attachments_disabled`. Contract details: [api/README.md](api/README.md).
 
+</details>
+
 ## API Documentation
 
 ### Generate Swagger Docs
@@ -694,7 +719,7 @@ When `attachments.enabled: false`, attachment endpoints return **503** with `err
 make swagger
 ```
 
-Access Swagger UI at: `http://localhost:8080/swagger/index.html`
+Access Swagger UI at: `http://localhost:8080/docs/index.html`
 
 ## API Endpoints
 
@@ -776,6 +801,18 @@ Access Swagger UI at: `http://localhost:8080/swagger/index.html`
 | `/api/v1/digests/settings` | DELETE | Delete digest settings | `user_id` |
 | `/api/v1/digests/settings/all` | GET | Get all digest settings | `page`, `page_size`, `order_by`, `user_id`, `messenger_user_id` |
 
+### System
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/healthcheck` | GET | Liveness/health |
+| `/version` | GET | Build version info |
+| `/docs/*` | GET | Swagger UI |
+
+
+<details>
+<summary><strong>Task muting (`muted`)</strong></summary>
+
 ## Task muting (`muted`)
 
 Each task row has a boolean **`muted`** (PostgreSQL `tasks.muted`). It controls **whether the API enqueues `worker.schedule_task`** for that row; it does not remove the task from the database.
@@ -789,6 +826,11 @@ Each task row has a boolean **`muted`** (PostgreSQL `tasks.muted`). It controls 
 | **Autoreschedule** | May still move `start_date` forward in the DB for overdue rows; muted tasks **do not** get a new `schedule_task` from that path. For muted recurring child tasks (`parent_id != null`, `requires_confirmation=true`), `start_date` is advanced directly to the parent's next `cron_expression`/`rrule` occurrence. |
 
 For recurring **parents** with `requires_confirmation`, mute/unmute can propagate to active child tasks (see `MuteTask` / `UnmuteTask` in `internal/service/task_service.go`).
+
+</details>
+
+<details>
+<summary><strong>Task Types & reschedule / done behavior</strong></summary>
 
 ## Task Types
 
@@ -857,6 +899,8 @@ Rescheduling occurs when a task with `requires_confirmation=true` is not confirm
    - Synced with parent's title/description
    - Marked as `done`
    - `worker.delete_task` is queued for each child
+
+</details>
 
 ## Pagination
 
@@ -929,6 +973,9 @@ All list endpoints support custom ordering via `order_by` parameter:
 - **422 Unprocessable Entity**: Business logic validation errors
 - **429 Too Many Requests**: Rate limit exceeded
 - **500 Internal Server Error**: Unexpected server errors
+
+<details>
+<summary><strong>Example Requests (curl)</strong></summary>
 
 ## Example Requests
 
@@ -1071,6 +1118,8 @@ curl -X PUT http://localhost:8080/api/v1/targets/1 \
 curl -X DELETE http://localhost:8080/api/v1/targets/1
 ```
 
+</details>
+
 ## Testing
 
 ### Unit Tests
@@ -1085,37 +1134,25 @@ make coverage
 ```
 
 ### Mock Generation
-Generate mocks for testing:
+Repository mocks use **MockGen** (`go.uber.org/mock`):
 ```bash
-# Install mockery if not already installed
-go install github.com/vektra/mockery/v2@latest
-
-# Generate mocks
-mockery --dir internal/repository --output internal/mocks/repository
+go install go.uber.org/mock/mockgen@latest
+# regenerate from repository interfaces (see headers in internal/mocks/repository/)
 ```
 
 ### E2E Tests
-Run end-to-end tests (requires running application):
+Requires a running API. See also [`tests/README.md`](tests/README.md):
 
 ```bash
-# Install Python dependencies
 cd tests
 pip install -r requirements.txt
-
-# Run task E2E tests
-python test_tasks_e2e.py
-
-# Run user E2E tests
-python test_users_e2e.py
-
-# Run messenger E2E tests
-python run_messenger_tests.py
+pytest   # or the run_*_tests.py helpers in that directory
 ```
 
 ### Test Structure
-- **Unit Tests**: Test individual functions and methods
-- **Integration Tests**: Test service layer with mocked repositories
-- **E2E Tests**: Test complete API workflows using Python requests
+- **Unit tests**: `internal/service` (gomock), plus smaller packages (`pkg/config`, validation)
+- **CI**: `.github/workflows/ci.yml` runs `go test ./...` on PRs and `main`
+- **E2E**: Python tests against a live API (users / tasks / messengers; not full coverage of backlog/digest/attachments)
 
 ## Versioning
 
@@ -1195,7 +1232,7 @@ make docker-up
 make docker-down
 
 # Rebuild and start
-docker-compose up --build
+docker compose -f docker-compose.dev.yml up --build
 ```
 
 ### Attachments (optional)
@@ -1205,6 +1242,9 @@ docker-compose up --build
 3. Regenerate protobuf stubs after contract changes: `make proto-attachments` or `make proto-attachments-docker`.
 
 Sync `api/proto/attachments/v1/attachments.proto` with the attachments service repo before releasing.
+
+<details>
+<summary><strong>Architecture</strong></summary>
 
 ## Architecture
 
@@ -1233,6 +1273,8 @@ Sync `api/proto/attachments/v1/attachments.proto` with the attachments service r
 2. **Producer Retries**: Retry logic for RabbitMQ connection
    - Configured via `producer.connectionRetries` and `producer.connectionRetryDelay`
    - Default: 5 retries with 2 second delay
+
+</details>
 
 ## Contributing
 Feel free to open issues or pull requests to improve this project. Contributions are welcome!
