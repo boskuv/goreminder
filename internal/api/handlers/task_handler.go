@@ -13,7 +13,6 @@ import (
 	"github.com/boskuv/goreminder/internal/api/dto/mapper"
 	"github.com/boskuv/goreminder/internal/api/validation"
 	errs "github.com/boskuv/goreminder/internal/errors"
-	"github.com/boskuv/goreminder/internal/service"
 	"github.com/boskuv/goreminder/pkg/attachments"
 	"github.com/boskuv/goreminder/pkg/logger"
 )
@@ -21,14 +20,14 @@ import (
 // TaskHandler handles task-related HTTP requests
 type TaskHandler struct {
 	logger             zerolog.Logger
-	taskService        *service.TaskService
+	taskService        TaskService
 	attClient          attachments.Client
 	attachmentsEnabled bool
 }
 
 // NewTaskHandler creates a new TaskHandler
 func NewTaskHandler(
-	taskService *service.TaskService,
+	taskService TaskService,
 	attClient attachments.Client,
 	attachmentsEnabled bool,
 	logger zerolog.Logger,
