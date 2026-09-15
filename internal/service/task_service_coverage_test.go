@@ -348,3 +348,156 @@ func TestTaskService_AttachmentHistoryMetaFromModel(t *testing.T) {
 	assert.Equal(t, "text/plain", meta.ContentType)
 	assert.Equal(t, int64(12), meta.SizeBytes)
 }
+
+func TestTaskService_MarkTaskAsDone_ChildCreatesNextOccurrence(t *testing.T) {
+	service, taskRepo, _, messengerRepo, taskHistoryRepo, _ := setup(t)
+	ctx := context.Background()
+	parentID := int64(100)
+	taskID := int64(101)
+	mu := 5
+	messengerID := int64(1)
+	pub := &stubPublisher{}
+	service.producer = pub
+
+	db, mockDB, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+	mockDB.ExpectBegin()
+	mockDB.ExpectCommit()
+
+	child := &models.Task{
+		ID:                     taskID,
+		UserID:                 1,
+		Title:                  "child",
+		Description:            "d",
+		Status:                 string(models.TaskStatusScheduled),
+		ParentID:               &parentID,
+		MessengerRelatedUserID: &mu,
+		RequiresConfirmation:   true,
+	}
+	parent := &models.Task{
+		ID:                     parentID,
+		UserID:                 1,
+		Title:                  "parent",
+		Description:            "d",
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              time.Now().UTC().Add(-time.Hour),
+		CronExpression:         ptrString("0 9 * * *"),
+		RequiresConfirmation:   true,
+		MessengerRelatedUserID: &mu,
+	}
+
+	taskRepo.EXPECT().GetTaskByIDWithoutStatusFilter(gomock.Any(), taskID).Return(child, nil)
+	taskRepo.EXPECT().GetDB().Return(sqlxDB)
+	taskRepo.EXPECT().UpdateTaskWithTx(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), mu).Return(&models.MessengerRelatedUser{
+		ID: int64(mu), MessengerID: &messengerID, ChatID: "c1",
+	}, nil).AnyTimes()
+	messengerRepo.EXPECT().GetMessengerByID(gomock.Any(), messengerID).Return(&models.Messenger{ID: messengerID, Name: "telegram"}, nil).AnyTimes()
+	taskRepo.EXPECT().GetTaskByIDWithoutStatusFilter(gomock.Any(), parentID).Return(parent, nil)
+	taskRepo.EXPECT().CreateTask(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, next *models.Task) (int64, error) {
+		assert.Equal(t, parentID, *next.ParentID)
+		assert.Nil(t, next.CronExpression)
+		return int64(102), nil
+	})
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	out, err := service.MarkTaskAsDone(ctx, taskID)
+	require.NoError(t, err)
+	assert.Equal(t, string(models.TaskStatusDone), out.Status)
+	assert.GreaterOrEqual(t, len(pub.published), 1)
+	assert.NoError(t, mockDB.ExpectationsWereMet())
+}
+
+func TestTaskService_MarkTaskAsDone_ParentMarksActiveChildren(t *testing.T) {
+	service, taskRepo, _, messengerRepo, taskHistoryRepo, _ := setup(t)
+	ctx := context.Background()
+	taskID := int64(200)
+	mu := 5
+	messengerID := int64(1)
+	pub := &stubPublisher{}
+	service.producer = pub
+
+	db, mockDB, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+	mockDB.ExpectBegin()
+	mockDB.ExpectCommit()
+	mockDB.ExpectBegin()
+	mockDB.ExpectCommit()
+
+	parent := &models.Task{
+		ID:                     taskID,
+		UserID:                 1,
+		Title:                  "parent",
+		Description:            "d",
+		Status:                 string(models.TaskStatusScheduled),
+		CronExpression:         ptrString("0 9 * * *"),
+		RequiresConfirmation:   true,
+		MessengerRelatedUserID: &mu,
+	}
+	active := &models.Task{
+		ID: 201, Title: "parent", Description: "d", UserID: 1, ParentID: &taskID,
+		Status: string(models.TaskStatusScheduled), MessengerRelatedUserID: &mu,
+	}
+	done := &models.Task{ID: 202, Status: string(models.TaskStatusDone), ParentID: &taskID}
+
+	taskRepo.EXPECT().GetTaskByIDWithoutStatusFilter(gomock.Any(), taskID).Return(parent, nil)
+	taskRepo.EXPECT().GetDB().Return(sqlxDB).Times(2)
+	taskRepo.EXPECT().UpdateTaskWithTx(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).MinTimes(2)
+	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), mu).Return(&models.MessengerRelatedUser{
+		ID: int64(mu), MessengerID: &messengerID, ChatID: "c1",
+	}, nil).AnyTimes()
+	messengerRepo.EXPECT().GetMessengerByID(gomock.Any(), messengerID).Return(&models.Messenger{ID: messengerID, Name: "telegram"}, nil).AnyTimes()
+	taskRepo.EXPECT().GetChildTasksByParentID(gomock.Any(), taskID).Return([]*models.Task{active, done}, nil)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	out, err := service.MarkTaskAsDone(ctx, taskID)
+	require.NoError(t, err)
+	assert.Equal(t, string(models.TaskStatusDone), out.Status)
+	assert.GreaterOrEqual(t, len(pub.published), 2)
+	assert.NoError(t, mockDB.ExpectationsWereMet())
+}
+
+func TestTaskService_MarkTaskAsDone_PurgesAttachmentsWhenEnabled(t *testing.T) {
+	service, taskRepo, _, messengerRepo, taskHistoryRepo, _ := setup(t)
+	service.attachmentsPurgeOnTaskDone = true
+	ctx := context.Background()
+	taskID := int64(300)
+	mu := 5
+	messengerID := int64(1)
+	pub := &stubPublisher{}
+	service.producer = pub
+
+	db, mockDB, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+	mockDB.ExpectBegin()
+	mockDB.ExpectCommit()
+
+	task := &models.Task{
+		ID:                     taskID,
+		UserID:                 1,
+		Title:                  "t",
+		Status:                 string(models.TaskStatusScheduled),
+		MessengerRelatedUserID: &mu,
+	}
+
+	taskRepo.EXPECT().GetTaskByIDWithoutStatusFilter(gomock.Any(), taskID).Return(task, nil)
+	taskRepo.EXPECT().GetDB().Return(sqlxDB)
+	taskRepo.EXPECT().UpdateTaskWithTx(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), mu).Return(&models.MessengerRelatedUser{
+		ID: int64(mu), MessengerID: &messengerID, ChatID: "c1",
+	}, nil)
+	messengerRepo.EXPECT().GetMessengerByID(gomock.Any(), messengerID).Return(&models.Messenger{ID: messengerID, Name: "telegram"}, nil)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+	taskRepo.EXPECT().GetChildTasksByParentID(gomock.Any(), taskID).Return([]*models.Task{}, nil)
+
+	out, err := service.MarkTaskAsDone(ctx, taskID)
+	require.NoError(t, err)
+	assert.Equal(t, string(models.TaskStatusDone), out.Status)
+	assert.NoError(t, mockDB.ExpectationsWereMet())
+}

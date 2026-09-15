@@ -20,4 +20,13 @@ jobs:
           cache: true
 
       - name: Run unit tests
-        run: go test ./... -count=1
+        run: go test ./... -count=1 -coverprofile=coverage.out
+
+      - name: Service coverage summary
+        run: |
+          go test ./internal/service -count=1 -coverprofile=service-coverage.out
+          TOTAL=$(go tool cover -func=service-coverage.out | awk '/total:/ {print $NF}')
+          echo "### Coverage" >> "$GITHUB_STEP_SUMMARY"
+          echo "- module: \`$(go tool cover -func=coverage.out | awk '/total:/ {print $NF}')\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- internal/service: \`${TOTAL}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Service package coverage: ${TOTAL}"

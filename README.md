@@ -1,8 +1,15 @@
 <p align="center">
 <img src="https://github.com/user-attachments/assets/dd5747a5-1a14-440e-b443-a080d1b664a1" width="200" />
+</p>
 <h1 align="center">GoReminder</h1>
 <p align="center">A comprehensive task management API built with Go</p>
 <p align="center">
+  <a href="https://github.com/boskuv/goreminder/actions/workflows/ci.yml"><img src="https://github.com/boskuv/goreminder/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://go.dev/"><img src="https://img.shields.io/github/go-mod/go-version/boskuv/goreminder" alt="Go version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/boskuv/goreminder" alt="License"></a>
+  <a href="https://hub.docker.com/r/boris24kv/goreminder-api"><img src="https://img.shields.io/docker/v/boris24kv/goreminder-api?label=docker&sort=semver" alt="Docker"></a>
+  <img src="https://img.shields.io/badge/service%20coverage-75%25-brightgreen" alt="Service coverage">
+  <a href="https://goreportcard.com/report/github.com/boskuv/goreminder"><img src="https://goreportcard.com/badge/github.com/boskuv/goreminder" alt="Go Report Card"></a>
 </p>
 
 ## Business Features
@@ -38,7 +45,7 @@
 
 ## Prerequisites
 - Docker and Docker Compose
-- Go 1.24 or later
+- Go 1.25 or later
 - `make` for build automation
 - `golangci-lint` for code linting
 - `goose` for database migrations
