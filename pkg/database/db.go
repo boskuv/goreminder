@@ -82,7 +82,7 @@ func NewDB(cfg *DBConfig) (*sqlx.DB, error) {
 
 		log.Printf("database: ping failed: %v", err)
 		// If ping failed, close the connection and retry
-		db.Close()
+		_ = db.Close()
 		if attempt < maxRetries-1 {
 			log.Printf("database: waiting %v before retry", retryDelay)
 			time.Sleep(retryDelay)

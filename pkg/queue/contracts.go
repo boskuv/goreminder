@@ -14,7 +14,7 @@ type Publisher interface {
 // requiring a message queue.
 type NoopPublisher struct{}
 
-func (NoopPublisher) Publish(ctx context.Context, message interface{}) error {
+func (NoopPublisher) Publish(_ context.Context, _ interface{}) error {
 	return nil
 }
 

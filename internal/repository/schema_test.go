@@ -96,7 +96,7 @@ func TestTableSchemasMatchModels(t *testing.T) {
 
 	db, err := sqlx.Open("pgx", dsn)
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if err := db.Ping(); err != nil {
 		t.Skipf("postgres not available for schema integration test (TEST_DATABASE_DSN): %v", err)
@@ -114,7 +114,7 @@ func TestTableSchemasMatchModels(t *testing.T) {
                 WHERE table_schema = 'public' AND table_name = $1
             `, tc.tableName)
 			require.NoError(t, err)
-			defer rows.Close()
+			defer func() { _ = rows.Close() }()
 
 			var dbColumns []string
 			for rows.Next() {

@@ -249,7 +249,7 @@ func TestBacklogService_GetAllBacklogs_Success(t *testing.T) {
 	page := 1
 	pageSize := 50
 	orderBy := "created_at DESC"
-	var completed *bool = nil
+	var completed *bool
 	expectedBacklogs := []*models.Backlog{
 		{ID: 1, Title: "Backlog 1", UserID: 1},
 		{ID: 2, Title: "Backlog 2", UserID: 1},
@@ -271,7 +271,7 @@ func TestBacklogService_GetAllBacklogs_WithUserID(t *testing.T) {
 	pageSize := 50
 	orderBy := "created_at DESC"
 	userID := int64(1)
-	var completed *bool = nil
+	var completed *bool
 	expectedBacklogs := []*models.Backlog{
 		{ID: 1, Title: "Backlog 1", UserID: userID},
 	}
@@ -291,7 +291,7 @@ func TestBacklogService_GetAllBacklogs_EmptyList(t *testing.T) {
 	page := 1
 	pageSize := 50
 	orderBy := "created_at DESC"
-	var completed *bool = nil
+	var completed *bool
 	totalCount := 0
 
 	backlogRepo.EXPECT().GetAllBacklogs(gomock.Any(), page, pageSize, orderBy, nil, completed, nil).Return([]*models.Backlog{}, totalCount, nil)
@@ -306,7 +306,7 @@ func TestBacklogService_GetAllBacklogs_DefaultPagination(t *testing.T) {
 	service, backlogRepo, _, _ := setupBacklogService(t)
 	ctx := context.Background()
 	expectedBacklogs := []*models.Backlog{{ID: 1, Title: "Backlog 1"}}
-	var completed *bool = nil
+	var completed *bool
 	totalCount := 1
 
 	// Test default page (should be 1)
@@ -321,7 +321,7 @@ func TestBacklogService_GetAllBacklogs_RepositoryError(t *testing.T) {
 	service, backlogRepo, _, _ := setupBacklogService(t)
 	ctx := context.Background()
 	expectedErr := errors.New("database error")
-	var completed *bool = nil
+	var completed *bool
 
 	backlogRepo.EXPECT().GetAllBacklogs(gomock.Any(), 1, 50, "created_at DESC", nil, completed, nil).Return(nil, 0, expectedErr)
 

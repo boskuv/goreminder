@@ -17,9 +17,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 
 	"github.com/boskuv/goreminder/docs"
-	_ "github.com/boskuv/goreminder/docs" // Import generated Swagger docs
 	"github.com/boskuv/goreminder/internal/api/handlers"
-	_ "github.com/boskuv/goreminder/internal/api/handlers"
 	"github.com/boskuv/goreminder/internal/api/middleware"
 	"github.com/boskuv/goreminder/internal/api/routes"
 	"github.com/boskuv/goreminder/internal/api/validation"
@@ -104,7 +102,7 @@ func main() {
 	checkInterval := 30 * time.Second
 
 	// Create connection manager with automatic health checking and reconnection
-	dbManager, err := database.NewConnectionManager(ctx, dbConfig, checkInterval, func(db *sqlx.DB) {
+	dbManager, err := database.NewConnectionManager(ctx, dbConfig, checkInterval, func(_ *sqlx.DB) {
 		log.Info().Msg("database reconnected successfully - new connection pool created")
 	})
 	if err != nil {
@@ -177,7 +175,7 @@ func main() {
 		publisher = queue.NoopPublisher{}
 	}
 
-	var attClient attachments.Client = attachments.NewNoopClient()
+	attClient := attachments.NewNoopClient()
 	if cfg.Attachments.Enabled {
 		attTimeout, err := time.ParseDuration(cfg.Attachments.Timeout)
 		if err != nil {

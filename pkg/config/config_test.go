@@ -29,11 +29,11 @@ database:
 
 	tempFile, err := os.CreateTemp("", "testconfig*.yaml")
 	assert.NoError(t, err)
-	defer os.Remove(tempFile.Name())
+	defer func() { _ = os.Remove(tempFile.Name()) }()
 
 	_, err = tempFile.Write(content)
 	assert.NoError(t, err)
-	tempFile.Close()
+	_ = tempFile.Close()
 
 	// Call Setup with the test config file
 	err = config.Setup(tempFile.Name())
@@ -68,11 +68,11 @@ func TestSetup_InvalidFormat(t *testing.T) {
 	// Create a temporary file with invalid format
 	tempFile, err := os.CreateTemp("", "invalidconfig*.yaml")
 	assert.NoError(t, err)
-	defer os.Remove(tempFile.Name())
+	defer func() { _ = os.Remove(tempFile.Name()) }()
 
 	_, err = tempFile.Write([]byte("invalid yaml content"))
 	assert.NoError(t, err)
-	tempFile.Close()
+	_ = tempFile.Close()
 
 	// Call Setup with the invalid config file
 	err = config.Setup(tempFile.Name())
@@ -82,15 +82,15 @@ func TestSetup_InvalidFormat(t *testing.T) {
 
 func TestSetup_EnvironmentVariables(t *testing.T) {
 	// Set environment variables
-	os.Setenv("GOREMINDER_SERVER_PORT", "9090")
-	os.Setenv("GOREMINDER_SERVER_SECRET", "env-secret")
-	os.Setenv("GOREMINDER_DATABASE_HOST", "env-host")
-	os.Setenv("GOREMINDER_DATABASE_PORT", "5433")
+	_ = os.Setenv("GOREMINDER_SERVER_PORT", "9090")
+	_ = os.Setenv("GOREMINDER_SERVER_SECRET", "env-secret")
+	_ = os.Setenv("GOREMINDER_DATABASE_HOST", "env-host")
+	_ = os.Setenv("GOREMINDER_DATABASE_PORT", "5433")
 	defer func() {
-		os.Unsetenv("GOREMINDER_SERVER_PORT")
-		os.Unsetenv("GOREMINDER_SERVER_SECRET")
-		os.Unsetenv("GOREMINDER_DATABASE_HOST")
-		os.Unsetenv("GOREMINDER_DATABASE_PORT")
+		_ = os.Unsetenv("GOREMINDER_SERVER_PORT")
+		_ = os.Unsetenv("GOREMINDER_SERVER_SECRET")
+		_ = os.Unsetenv("GOREMINDER_DATABASE_HOST")
+		_ = os.Unsetenv("GOREMINDER_DATABASE_PORT")
 	}()
 
 	// Prepare a temporary config file with different values
@@ -112,11 +112,11 @@ database:
 
 	tempFile, err := os.CreateTemp("", "testconfig*.yaml")
 	assert.NoError(t, err)
-	defer os.Remove(tempFile.Name())
+	defer func() { _ = os.Remove(tempFile.Name()) }()
 
 	_, err = tempFile.Write(content)
 	assert.NoError(t, err)
-	tempFile.Close()
+	_ = tempFile.Close()
 
 	// Call Setup - env variables should override YAML values
 	err = config.Setup(tempFile.Name())
@@ -137,25 +137,25 @@ database:
 
 func TestSetup_EnvironmentVariablesOnly(t *testing.T) {
 	// Set all required environment variables
-	os.Setenv("GOREMINDER_SERVER_PORT", "8080")
-	os.Setenv("GOREMINDER_SERVER_SECRET", "env-secret")
-	os.Setenv("GOREMINDER_SERVER_MODE", "production")
-	os.Setenv("GOREMINDER_DATABASE_DRIVER", "postgres")
-	os.Setenv("GOREMINDER_DATABASE_DBNAME", "env-db")
-	os.Setenv("GOREMINDER_DATABASE_USERNAME", "env-user")
-	os.Setenv("GOREMINDER_DATABASE_PASSWORD", "env-pass")
-	os.Setenv("GOREMINDER_DATABASE_HOST", "env-host")
-	os.Setenv("GOREMINDER_DATABASE_PORT", "5432")
+	_ = os.Setenv("GOREMINDER_SERVER_PORT", "8080")
+	_ = os.Setenv("GOREMINDER_SERVER_SECRET", "env-secret")
+	_ = os.Setenv("GOREMINDER_SERVER_MODE", "production")
+	_ = os.Setenv("GOREMINDER_DATABASE_DRIVER", "postgres")
+	_ = os.Setenv("GOREMINDER_DATABASE_DBNAME", "env-db")
+	_ = os.Setenv("GOREMINDER_DATABASE_USERNAME", "env-user")
+	_ = os.Setenv("GOREMINDER_DATABASE_PASSWORD", "env-pass")
+	_ = os.Setenv("GOREMINDER_DATABASE_HOST", "env-host")
+	_ = os.Setenv("GOREMINDER_DATABASE_PORT", "5432")
 	defer func() {
-		os.Unsetenv("GOREMINDER_SERVER_PORT")
-		os.Unsetenv("GOREMINDER_SERVER_SECRET")
-		os.Unsetenv("GOREMINDER_SERVER_MODE")
-		os.Unsetenv("GOREMINDER_DATABASE_DRIVER")
-		os.Unsetenv("GOREMINDER_DATABASE_DBNAME")
-		os.Unsetenv("GOREMINDER_DATABASE_USERNAME")
-		os.Unsetenv("GOREMINDER_DATABASE_PASSWORD")
-		os.Unsetenv("GOREMINDER_DATABASE_HOST")
-		os.Unsetenv("GOREMINDER_DATABASE_PORT")
+		_ = os.Unsetenv("GOREMINDER_SERVER_PORT")
+		_ = os.Unsetenv("GOREMINDER_SERVER_SECRET")
+		_ = os.Unsetenv("GOREMINDER_SERVER_MODE")
+		_ = os.Unsetenv("GOREMINDER_DATABASE_DRIVER")
+		_ = os.Unsetenv("GOREMINDER_DATABASE_DBNAME")
+		_ = os.Unsetenv("GOREMINDER_DATABASE_USERNAME")
+		_ = os.Unsetenv("GOREMINDER_DATABASE_PASSWORD")
+		_ = os.Unsetenv("GOREMINDER_DATABASE_HOST")
+		_ = os.Unsetenv("GOREMINDER_DATABASE_PORT")
 	}()
 
 	// Call Setup with empty config path - should work with env only

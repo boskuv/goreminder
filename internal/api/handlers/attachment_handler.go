@@ -132,7 +132,7 @@ func (h *AttachmentHandler) uploadDirect(c *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		limited := io.LimitReader(f, h.directUploadMaxBytes+1)
 		data, err := io.ReadAll(limited)

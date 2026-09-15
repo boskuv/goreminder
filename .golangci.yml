@@ -1,17 +1,56 @@
 version: "2"
 
 linters:
+  default: none
   enable:
-    - revive
     - errcheck
+    - govet
+    - ineffassign
     - staticcheck
+    - unused
+    - revive
+  settings:
+    revive:
+      # Keep revive for real issues; skip comment-only noise (45+ of previous findings).
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: if-return
+        - name: increment-decrement
+        - name: var-declaration
+        - name: package-comments
+          disabled: true
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: unreachable-code
+        - name: redefines-builtin-id
+        - name: exported
+          disabled: true
+        - name: var-naming
+          disabled: true
+          # Package internal/errors conflicts with stdlib name; renaming is a large churn.
 
 run:
   tests: true
-  bless: false
-  timeout: 2m
+  timeout: 3m
 
 issues:
+  exclude-dirs:
+    - api/gen
+    - docs
+    - internal/mocks
   exclude-rules:
     - path: docs\.go
       text: "don't check swagger docs"

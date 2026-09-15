@@ -190,7 +190,7 @@ func TestTaskService_MarkTaskAsDone_Success(t *testing.T) {
 
 	db, mockDB, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 
 	mockDB.ExpectBegin()
@@ -236,7 +236,7 @@ func TestTaskService_MarkTaskAsDone_RollbackOnPublishError(t *testing.T) {
 
 	db, mockDB, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 
 	mockDB.ExpectBegin()
@@ -361,7 +361,7 @@ func TestTaskService_MarkTaskAsDone_ChildCreatesNextOccurrence(t *testing.T) {
 
 	db, mockDB, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 	mockDB.ExpectBegin()
 	mockDB.ExpectCommit()
@@ -421,7 +421,7 @@ func TestTaskService_MarkTaskAsDone_ParentMarksActiveChildren(t *testing.T) {
 
 	db, mockDB, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 	mockDB.ExpectBegin()
 	mockDB.ExpectCommit()
@@ -473,7 +473,7 @@ func TestTaskService_MarkTaskAsDone_PurgesAttachmentsWhenEnabled(t *testing.T) {
 
 	db, mockDB, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 	mockDB.ExpectBegin()
 	mockDB.ExpectCommit()

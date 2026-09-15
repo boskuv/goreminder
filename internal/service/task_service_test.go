@@ -39,7 +39,6 @@ func setup(t *testing.T) (*TaskService, *mock_repositories.MockTaskRepository, *
 // Helper functions
 func ptrString(s string) *string     { return &s }
 func ptrTime(t time.Time) *time.Time { return &t }
-func ptrInt(i int) *int              { return &i }
 func ptrInt64(i int64) *int64        { return &i }
 
 type stubPublisher struct {
@@ -47,7 +46,7 @@ type stubPublisher struct {
 	published []interface{}
 }
 
-func (p *stubPublisher) Publish(ctx context.Context, message interface{}) error {
+func (p *stubPublisher) Publish(_ context.Context, message interface{}) error {
 	if p.err != nil {
 		return p.err
 	}
@@ -614,7 +613,7 @@ func TestTaskService_UpdateTask_RecurringToSingle_DeletesOnlyActiveChildren(t *t
 
 	db, mockDB, err := sqlmock.New()
 	assert.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 
 	activeChild := &models.Task{ID: 101, Status: string(models.TaskStatusPending)}
@@ -676,7 +675,7 @@ func TestTaskService_UpdateTask_RecurringToSingle_RollbackOnQueuePublishError(t 
 
 	db, mockDB, err := sqlmock.New()
 	assert.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 
 	activeChild := &models.Task{ID: 201, Status: string(models.TaskStatusPending)}

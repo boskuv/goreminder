@@ -162,7 +162,7 @@ func TestTaskService_UpdateTask_RequiresConfirmationRemoved_DeletesChildren(t *t
 
 	db, mockDB, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 	mockDB.ExpectBegin()
 	mockDB.ExpectCommit()
@@ -211,7 +211,7 @@ func TestTaskService_UpdateTask_RequiresConfirmationRemoved_RollbackOnPublishErr
 
 	db, mockDB, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 	mockDB.ExpectBegin()
 	mockDB.ExpectRollback()
@@ -272,7 +272,7 @@ func TestTaskService_UpdateTask_RequiresConfirmationAdded_CreatesChild(t *testin
 	// becomes parent after update → needs tx
 	db, mockDB, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 	mockDB.ExpectBegin()
 	mockDB.ExpectCommit()
@@ -313,7 +313,7 @@ func TestTaskService_UpdateTask_ParentTitleChange_SyncsActiveChildren(t *testing
 
 	db, mockDB, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 	mockDB.ExpectBegin()
 	mockDB.ExpectCommit()
@@ -366,7 +366,7 @@ func TestTaskService_UpdateTask_ParentMute_PublishesDeletes(t *testing.T) {
 
 	db, mockDB, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 	mockDB.ExpectBegin()
 	mockDB.ExpectCommit()
@@ -418,7 +418,7 @@ func TestTaskService_DeleteTask_Transactional_Success(t *testing.T) {
 
 	db, mockDB, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 	mockDB.ExpectBegin()
 	mockDB.ExpectCommit()
@@ -457,7 +457,7 @@ func TestTaskService_DeleteTask_ParentWithChildren_Success(t *testing.T) {
 
 	db, mockDB, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 	mockDB.ExpectBegin()
 	mockDB.ExpectCommit()
@@ -504,7 +504,7 @@ func TestTaskService_DeleteTask_Parent_RollbackOnChildPublishError(t *testing.T)
 
 	db, mockDB, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 	mockDB.ExpectBegin()
 	mockDB.ExpectRollback()
@@ -545,7 +545,7 @@ func TestTaskService_DeleteTask_Transactional_RollbackOnPublishError(t *testing.
 
 	db, mockDB, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 	mockDB.ExpectBegin()
 	mockDB.ExpectRollback()
