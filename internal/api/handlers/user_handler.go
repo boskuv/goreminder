@@ -12,18 +12,17 @@ import (
 	"github.com/boskuv/goreminder/internal/api/dto/mapper"
 	"github.com/boskuv/goreminder/internal/api/validation"
 	errs "github.com/boskuv/goreminder/internal/errors"
-	"github.com/boskuv/goreminder/internal/service"
 	"github.com/boskuv/goreminder/pkg/logger"
 )
 
 // UserHandler handles user-related HTTP requests
 type UserHandler struct {
 	logger      zerolog.Logger
-	userService *service.UserService
+	userService UserService
 }
 
 // NewUserHandler creates a new UserHandler
-func NewUserHandler(userService *service.UserService, logger zerolog.Logger) *UserHandler {
+func NewUserHandler(userService UserService, logger zerolog.Logger) *UserHandler {
 	return &UserHandler{
 		logger:      logger,
 		userService: userService,

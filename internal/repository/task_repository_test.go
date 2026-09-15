@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errs "github.com/boskuv/goreminder/internal/errors"
+	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/pkg/logger"
 )
 
@@ -122,4 +123,100 @@ func TestTaskRepository_GetTaskByID_QueryShape(t *testing.T) {
 	assert.Contains(t, query, "deleted_at IS NULL")
 	assert.Contains(t, query, "status <>")
 	assert.Equal(t, []interface{}{int64(1), "done"}, args)
+}
+
+func TestTaskRepository_GetTaskByIDWithoutStatusFilter_AllowsDone(t *testing.T) {
+	repo, mock, cleanup := newTaskRepoWithMock(t)
+	defer cleanup()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted FROM tasks WHERE deleted_at IS NULL AND id = $1`,
+	)).WithArgs(int64(2)).WillReturnRows(sqlmock.NewRows([]string{
+		"id", "title", "description", "user_id", "messenger_related_user_id", "parent_id",
+		"start_date", "finish_date", "cron_expression", "rrule", "status", "created_at",
+		"requires_confirmation", "muted",
+	}).AddRow(
+		int64(2), "done-task", "d", int64(1), nil, nil,
+		now, &now, nil, nil, "done", now,
+		false, false,
+	))
+
+	task, err := repo.GetTaskByIDWithoutStatusFilter(context.Background(), 2)
+	require.NoError(t, err)
+	assert.Equal(t, "done", task.Status)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestTaskRepository_CreateTask_ReturnsID(t *testing.T) {
+	repo, mock, cleanup := newTaskRepoWithMock(t)
+	defer cleanup()
+
+	start := time.Now().UTC().Truncate(time.Second)
+	task := &models.Task{
+		Title:                "created",
+		Description:          "desc",
+		UserID:               1,
+		Status:               "scheduled",
+		StartDate:            start,
+		RequiresConfirmation: false,
+		Muted:                false,
+	}
+
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`INSERT INTO tasks (title,description,user_id,messenger_related_user_id,status,parent_id,start_date,finish_date,cron_expression,rrule,requires_confirmation,muted) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+	)).WithArgs(
+		task.Title, task.Description, task.UserID, nil, task.Status, nil,
+		task.StartDate, nil, nil, nil, false, false,
+	).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(77)))
+
+	id, err := repo.CreateTask(context.Background(), task)
+	require.NoError(t, err)
+	assert.Equal(t, int64(77), id)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestTaskRepository_DeleteTask_SoftDeletes(t *testing.T) {
+	repo, mock, cleanup := newTaskRepoWithMock(t)
+	defer cleanup()
+
+	mock.ExpectExec(regexp.QuoteMeta(
+		`UPDATE tasks SET deleted_at = $1, status = $2 WHERE deleted_at IS NULL AND id = $3`,
+	)).WithArgs(sqlmock.AnyArg(), "deleted", int64(15)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	err := repo.DeleteTask(context.Background(), 15)
+	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestTaskRepository_GetAllTasks_UserAndDateFilters(t *testing.T) {
+	repo, mock, cleanup := newTaskRepoWithMock(t)
+	defer cleanup()
+
+	userID := int64(5)
+	from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 12, 31, 23, 59, 59, 0, time.UTC)
+
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT COUNT(*) FROM tasks WHERE deleted_at IS NULL AND start_date >= $1 AND start_date <= $2 AND user_id = $3`,
+	)).WithArgs(from, to, userID).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted FROM tasks WHERE deleted_at IS NULL AND start_date >= $1 AND start_date <= $2 AND user_id = $3 ORDER BY created_at DESC LIMIT 50 OFFSET 0`,
+	)).WithArgs(from, to, userID).WillReturnRows(sqlmock.NewRows([]string{
+		"id", "title", "description", "user_id", "messenger_related_user_id", "parent_id",
+		"start_date", "finish_date", "cron_expression", "rrule", "status", "created_at",
+		"requires_confirmation", "muted",
+	}))
+
+	tasks, total, err := repo.GetAllTasks(
+		context.Background(),
+		1, 50, "",
+		nil, nil, &from, &to, &userID, nil, nil, nil, nil,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 0, total)
+	assert.Empty(t, tasks)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
