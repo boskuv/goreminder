@@ -13,18 +13,17 @@ import (
 	"github.com/boskuv/goreminder/internal/api/dto/mapper"
 	"github.com/boskuv/goreminder/internal/api/validation"
 	errs "github.com/boskuv/goreminder/internal/errors"
-	"github.com/boskuv/goreminder/internal/service"
 	"github.com/boskuv/goreminder/pkg/logger"
 )
 
 // BacklogHandler handles backlog-related HTTP requests
 type BacklogHandler struct {
 	logger         zerolog.Logger
-	backlogService *service.BacklogService
+	backlogService BacklogService
 }
 
 // NewBacklogHandler creates a new BacklogHandler
-func NewBacklogHandler(backlogService *service.BacklogService, logger zerolog.Logger) *BacklogHandler {
+func NewBacklogHandler(backlogService BacklogService, logger zerolog.Logger) *BacklogHandler {
 	return &BacklogHandler{
 		logger:         logger,
 		backlogService: backlogService,

@@ -13,18 +13,17 @@ import (
 	"github.com/boskuv/goreminder/internal/api/dto/mapper"
 	"github.com/boskuv/goreminder/internal/api/validation"
 	errs "github.com/boskuv/goreminder/internal/errors"
-	"github.com/boskuv/goreminder/internal/service"
 	"github.com/boskuv/goreminder/pkg/logger"
 )
 
 // TargetHandler handles target-related HTTP requests
 type TargetHandler struct {
 	logger        zerolog.Logger
-	targetService *service.TargetService
+	targetService TargetService
 }
 
 // NewTargetHandler creates a new TargetHandler
-func NewTargetHandler(targetService *service.TargetService, logger zerolog.Logger) *TargetHandler {
+func NewTargetHandler(targetService TargetService, logger zerolog.Logger) *TargetHandler {
 	return &TargetHandler{
 		logger:        logger,
 		targetService: targetService,

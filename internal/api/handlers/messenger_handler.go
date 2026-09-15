@@ -12,18 +12,17 @@ import (
 	"github.com/boskuv/goreminder/internal/api/dto/mapper"
 	"github.com/boskuv/goreminder/internal/api/validation"
 	errs "github.com/boskuv/goreminder/internal/errors"
-	"github.com/boskuv/goreminder/internal/service"
 	"github.com/boskuv/goreminder/pkg/logger"
 )
 
 // MessengerHandler handles user-related HTTP requests
 type MessengerHandler struct {
 	logger           zerolog.Logger
-	messengerService *service.MessengerService
+	messengerService MessengerService
 }
 
 // NewMessengerHandler creates a new MessengerHandler
-func NewMessengerHandler(messengerService *service.MessengerService, logger zerolog.Logger) *MessengerHandler {
+func NewMessengerHandler(messengerService MessengerService, logger zerolog.Logger) *MessengerHandler {
 	return &MessengerHandler{
 		logger:           logger,
 		messengerService: messengerService,
