@@ -1,7 +1,8 @@
 # GoReminder Telegram bot example
 
 Small [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) bot that uses
-[`../python-client`](../python-client/) against a running GoReminder API.
+[`../python-client`](../python-client/) against a running GoReminder API, and exposes
+**`POST /send_message`** so [`../worker`](../worker/) can deliver reminders.
 
 This is a **sample integration**, not a production bot (no auth beyond Telegram identity, no retries, in-memory session).
 
@@ -9,11 +10,11 @@ This is a **sample integration**, not a production bot (no auth beyond Telegram 
 
 ```
 Telegram user
-    → this bot (commands)
+    → this bot (commands + callbacks)
         → GoReminderClient (HTTP /api/v1)
             → GoReminder core
                 → PostgreSQL
-                → RabbitMQ (optional) → Celery worker → webhook / notifications
+                → RabbitMQ → examples/worker (Redis ZSET) → POST /send_message (this process)
 ```
 
 Linking model (required for queue/done/digest with chat context):
@@ -27,6 +28,7 @@ Linking model (required for queue/done/digest with chat context):
 - Running GoReminder API (`GOREMINDER_URL`)
 - Bot token from [@BotFather](https://t.me/BotFather)
 - Python 3.10+
+- For end-to-end reminders: RabbitMQ + Redis + [`../worker`](../worker/)
 
 ```bash
 cd examples/telegram-bot
@@ -40,6 +42,7 @@ pip install -r requirements.txt
 export TELEGRAM_BOT_TOKEN=123456:ABC...
 export GOREMINDER_URL=http://localhost:8080   # optional
 export GOREMINDER_MESSENGER=telegram          # optional messenger type name
+export WEBHOOK_PORT=8001                      # optional; worker default
 
 python bot.py
 ```
@@ -58,12 +61,30 @@ Open the bot in Telegram and send `/start`.
 | `/backlog <title>` | `POST /backlogs` |
 | `/digest` | `GET /digests` |
 
+## Worker webhook
+
+| Item | Value |
+|------|--------|
+| Endpoint | `POST /send_message` on `WEBHOOK_HOST:WEBHOOK_PORT` (default `0.0.0.0:8001`) |
+| Required JSON | `chat_id`, `text` |
+| Optional | `task_id`, `reply_markup` (Telegram inline keyboard) |
+
+Same contract as production bot webhook. Worker default: `WEBHOOK_URL=http://localhost:8001/send_message`.
+
+Inline callbacks:
+
+| `callback_data` | Behavior |
+|-----------------|----------|
+| `done:<task_id>` | `POST /tasks/{id}/done` |
+| `later:<task_id>` | `PUT` start_date +1h, then `POST /tasks/queue` schedule |
+
 ## Notes aligned with Swagger
 
 - Creates return `{"id"}` (tasks also `child_id`); deletes are 204.
 - Tasks intended for delivery need `messenger_related_user_id` or done/queue may return **422**.
 - Prefer Swagger (`/swagger/index.html`) when fields change; keep this bot thin and push logic into the shared client.
 
-## Worker / webhook
+## Related
 
-Scheduling and message delivery still go through RabbitMQ + Celery worker (see main README). This bot only demonstrates **user-driven HTTP** against the API — it does not replace the worker webhook receiver.
+- API client: [`../python-client`](../python-client/)
+- Sample scheduler worker: [`../worker`](../worker/)

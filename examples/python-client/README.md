@@ -91,6 +91,7 @@ Full CRUD helpers matching `/backlogs`, `/targets`, `/digests` and `/digests/set
 
 See the main project README for mute/unmute and child-task behavior.
 
-## Related example
+## Related examples
 
-Telegram bot that uses this client: [`../telegram-bot/`](../telegram-bot/).
+- Telegram bot (commands + `POST /send_message` webhook): [`../telegram-bot/`](../telegram-bot/)
+- Queue worker (RabbitMQ → Redis ZSET → webhook): [`../worker/`](../worker/)

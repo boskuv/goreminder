@@ -79,7 +79,7 @@
 │   ├── models/ repository/ service/ mocks/ errors/
 ├── migrations/            # goose SQL
 ├── pkg/                   # config, database, queue, attachments client, observability, …
-├── examples/              # Python API client + sample Telegram bot
+├── examples/              # Python API client, sample Telegram bot, sample queue worker
 ├── tests/                 # Python E2E
 ├── docker-compose.dev.yml # Postgres, RabbitMQ, tracing (local deps)
 └── .github/workflows/     # CI (go test) + Docker image publish

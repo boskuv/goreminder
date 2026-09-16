@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Examples — sample worker**: `examples/worker` consumes Celery-style `{task, args}` from RabbitMQ (`worker.schedule_task` / `worker.delete_task`), stores due times in a Redis ZSET, and POSTs the production-compatible `/send_message` webhook payload.
+- **Examples — telegram-bot webhook**: `examples/telegram-bot` listens on `POST /send_message` (default `:8001`) and handles `done:` / `later:` inline callbacks so the sample worker can deliver end-to-end.
+
 ## [v0.2.0] - 2026-09-15
 
 ### Added
