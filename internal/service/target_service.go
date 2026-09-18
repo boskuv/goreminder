@@ -21,16 +21,21 @@ type TargetService struct {
 	targetRepo    repository.TargetRepository
 	userRepo      repository.UserRepository
 	messengerRepo repository.MessengerRepository
+	activity      ActivityTracker
 	tracer        trace.Tracer
 	logger        zerolog.Logger
 }
 
 // NewTargetService creates a new TargetService
-func NewTargetService(targetRepo repository.TargetRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, logger zerolog.Logger) *TargetService {
+func NewTargetService(targetRepo repository.TargetRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, activity ActivityTracker, logger zerolog.Logger) *TargetService {
+	if activity == nil {
+		activity = NoopActivityTracker{}
+	}
 	return &TargetService{
 		targetRepo:    targetRepo,
 		userRepo:      userRepo,
 		messengerRepo: messengerRepo,
+		activity:      activity,
 		tracer:        otel.Tracer("target-service"),
 		logger:        logger,
 	}
@@ -101,6 +106,7 @@ func (s *TargetService) CreateTarget(ctx context.Context, target *models.Target)
 		Int64("user.id", target.UserID).
 		Msg("target created successfully")
 
+	touchUserActivity(ctx, s.activity, s.logger, target.UserID)
 	span.SetStatus(codes.Ok, "target created successfully")
 	return targetID, nil
 }
@@ -269,6 +275,7 @@ func (s *TargetService) UpdateTarget(ctx context.Context, id int64, updateReques
 	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "updated", "target", id, changedFieldsFromMaps(beforeMap, afterMap))).
 		Int64("user.id", oldTarget.UserID).
 		Msg("target updated successfully")
+	touchUserActivity(ctx, s.activity, s.logger, oldTarget.UserID)
 	span.SetStatus(codes.Ok, "target updated successfully")
 	return oldTarget, nil
 }
@@ -311,6 +318,7 @@ func (s *TargetService) DeleteTarget(ctx context.Context, id int64) error {
 	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "deleted", "target", id, mapKeysForAudit(targetToAuditMap(existingTarget)))).
 		Int64("user.id", existingTarget.UserID).
 		Msg("target deleted successfully")
+	touchUserActivity(ctx, s.activity, s.logger, existingTarget.UserID)
 	span.SetStatus(codes.Ok, "target deleted successfully")
 	return nil
 }

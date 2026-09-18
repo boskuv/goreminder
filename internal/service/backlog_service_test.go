@@ -24,7 +24,7 @@ func setupBacklogService(t *testing.T) (*BacklogService, *mock_repository.MockBa
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
 
-	service := NewBacklogService(backlogRepo, userRepo, messengerRepo, testLogger)
+	service := NewBacklogService(backlogRepo, userRepo, messengerRepo, NoopActivityTracker{}, testLogger)
 	return service, backlogRepo, userRepo, messengerRepo
 }
 

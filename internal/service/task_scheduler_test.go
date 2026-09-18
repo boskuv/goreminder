@@ -25,7 +25,7 @@ func newSchedulerForTest(t *testing.T) (*TaskScheduler, *mock_repositories.MockT
 	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
 	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	taskSvc := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, &stubPublisher{}, attachments.NewNoopClient(), false, testLogger)
+	taskSvc := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, &stubPublisher{}, attachments.NewNoopClient(), NoopActivityTracker{}, false, testLogger)
 	scheduler := NewTaskScheduler(taskRepo, taskSvc, testLogger)
 	return scheduler, taskRepo, taskSvc
 }
@@ -67,7 +67,7 @@ func TestTaskScheduler_RunScheduledRescheduling_ReschedulesTasks(t *testing.T) {
 	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
 	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	taskSvc := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, &stubPublisher{}, attachments.NewNoopClient(), false, testLogger)
+	taskSvc := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, &stubPublisher{}, attachments.NewNoopClient(), NoopActivityTracker{}, false, testLogger)
 	scheduler := NewTaskScheduler(taskRepo, taskSvc, testLogger)
 
 	ctx := context.Background()
@@ -120,7 +120,7 @@ func TestTaskScheduler_RunScheduledRescheduling_CronFetchError(t *testing.T) {
 	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
 	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	taskSvc := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, &stubPublisher{}, attachments.NewNoopClient(), false, testLogger)
+	taskSvc := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, &stubPublisher{}, attachments.NewNoopClient(), NoopActivityTracker{}, false, testLogger)
 	scheduler := NewTaskScheduler(taskRepo, taskSvc, testLogger)
 
 	ctx := context.Background()

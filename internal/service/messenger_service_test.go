@@ -21,7 +21,7 @@ func TestMessengerService_CreateMessenger(t *testing.T) {
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, NoopActivityTracker{}, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -56,7 +56,7 @@ func TestMessengerService_GetMessenger(t *testing.T) {
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, NoopActivityTracker{}, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -82,7 +82,7 @@ func TestMessengerService_GetMessengerIDByName(t *testing.T) {
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, NoopActivityTracker{}, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -109,7 +109,7 @@ func TestMessengerService_CreateMessengerRelatedUser(t *testing.T) {
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, NoopActivityTracker{}, testLogger)
 	ctx := context.Background()
 
 	t.Run("success - with all fields", func(t *testing.T) {
@@ -264,7 +264,7 @@ func TestMessengerService_GetMessengerRelatedUser(t *testing.T) {
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, NoopActivityTracker{}, testLogger)
 	ctx := context.Background()
 
 	t.Run("success with all parameters", func(t *testing.T) {
@@ -357,7 +357,7 @@ func TestMessengerService_GetUserID(t *testing.T) {
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, NoopActivityTracker{}, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -384,7 +384,7 @@ func TestMessengerService_GetAllMessengerRelatedUsers(t *testing.T) {
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, NoopActivityTracker{}, testLogger)
 	ctx := context.Background()
 
 	userID := int64(1)
@@ -434,7 +434,7 @@ func TestMessengerService_NewMessengerService(t *testing.T) {
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, NoopActivityTracker{}, testLogger)
 
 	assert.NotNil(t, svc)
 	assert.Equal(t, mockMessengerRepo, svc.messengerRepo)
@@ -448,7 +448,7 @@ func TestMessengerService_GetAllMessengers(t *testing.T) {
 	mockMessengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	mockUserRepo := mock_repository.NewMockUserRepository(ctrl)
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, testLogger)
+	svc := NewMessengerService(mockMessengerRepo, mockUserRepo, NoopActivityTracker{}, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {

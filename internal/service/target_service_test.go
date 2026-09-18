@@ -24,7 +24,7 @@ func setupTargetService(t *testing.T) (*TargetService, *mock_repository.MockTarg
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
 
-	service := NewTargetService(targetRepo, userRepo, messengerRepo, testLogger)
+	service := NewTargetService(targetRepo, userRepo, messengerRepo, NoopActivityTracker{}, testLogger)
 	return service, targetRepo, userRepo, messengerRepo
 }
 
