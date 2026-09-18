@@ -26,18 +26,23 @@ type UserService struct {
 	messengerRepo repository.MessengerRepository
 	producer      queue.Publisher
 	attachments   attachments.Client
+	activity      ActivityTracker
 	tracer        trace.Tracer
 	logger        zerolog.Logger
 }
 
 // NewUserService creates a new instance of UserService
-func NewUserService(userRepo repository.UserRepository, taskRepo repository.TaskRepository, messengerRepo repository.MessengerRepository, producer queue.Publisher, attClient attachments.Client, logger zerolog.Logger) *UserService {
+func NewUserService(userRepo repository.UserRepository, taskRepo repository.TaskRepository, messengerRepo repository.MessengerRepository, producer queue.Publisher, attClient attachments.Client, activity ActivityTracker, logger zerolog.Logger) *UserService {
+	if activity == nil {
+		activity = NoopActivityTracker{}
+	}
 	return &UserService{
 		userRepo:      userRepo,
 		taskRepo:      taskRepo,
 		messengerRepo: messengerRepo,
 		producer:      producer,
 		attachments:   attClient,
+		activity:      activity,
 		tracer:        otel.Tracer("user-service"),
 		logger:        logger,
 	}
@@ -109,6 +114,7 @@ func (s *UserService) CreateUser(ctx context.Context, user *models.User) (int64,
 	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "created", "user", userID, mapKeysForAudit(userToAuditMap(user)))).
 		Str("user.name", user.Name).
 		Msg("user created successfully")
+	touchUserActivity(ctx, s.activity, s.logger, userID)
 	span.SetStatus(codes.Ok, "user created successfully")
 	return userID, nil
 }
@@ -218,6 +224,7 @@ func (s *UserService) UpdateUser(ctx context.Context, userID int64, updateReques
 	afterMap := userToAuditMap(user)
 	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "updated", "user", userID, changedFieldsFromMaps(beforeMap, afterMap))).
 		Msg("user updated successfully")
+	touchUserActivity(ctx, s.activity, s.logger, userID)
 	span.SetStatus(codes.Ok, "user updated successfully")
 	return user, nil
 }
@@ -380,6 +387,41 @@ func (s *UserService) GetAllUsers(ctx context.Context, page, pageSize int, order
 	)
 	span.SetStatus(codes.Ok, "users retrieved successfully")
 	return users, totalCount, nil
+}
+
+// GetRecentUserActivity returns recently active users (non-null last_activity_at), most recent first.
+func (s *UserService) GetRecentUserActivity(ctx context.Context, limit int) ([]models.UserActivity, error) {
+	ctx, span := s.tracer.Start(ctx, "user_service.GetRecentUserActivity",
+		trace.WithAttributes(
+			attribute.Int("limit", limit),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, s.logger)
+	if limit < 1 {
+		limit = 100
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	log.Debug().
+		Int("limit", limit).
+		Msg("getting recent user activity")
+
+	activities, err := s.activity.ListRecent(ctx, limit)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Msg("failed to get recent user activity")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.WithStack(err)
+	}
+
+	span.SetAttributes(attribute.Int("activity.count", len(activities)))
+	span.SetStatus(codes.Ok, "recent user activity retrieved")
+	return activities, nil
 }
 
 func userToAuditMap(user *models.User) map[string]interface{} {

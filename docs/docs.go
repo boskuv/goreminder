@@ -2297,6 +2297,50 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/users/activity": {
+            "get": {
+                "description": "Returns users with non-null last_activity_at, most recent first (default/max limit 100). Activity is recorded on user-driven mutations only (not GET, not autoreschedule).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Users"
+                ],
+                "summary": "List recently active users",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 100,
+                        "description": "Max number of users to return (default: 100, max: 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Recently active users",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/dto.UserActivityResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users/{user_id}": {
             "get": {
                 "description": "Retrieves user by userID",
@@ -3909,6 +3953,23 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.UserActivityResponse": {
+            "type": "object",
+            "properties": {
+                "last_activity_at": {
+                    "type": "string",
+                    "example": "2024-01-15T12:00:00Z"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
         "dto.UserIDResponse": {
             "type": "object",
             "properties": {
@@ -3937,6 +3998,10 @@ const docTemplate = `{
                 "language_code": {
                     "type": "string",
                     "example": "en"
+                },
+                "last_activity_at": {
+                    "type": "string",
+                    "example": "2024-01-15T12:00:00Z"
                 },
                 "name": {
                     "type": "string",

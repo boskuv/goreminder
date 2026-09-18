@@ -12,6 +12,7 @@ package mock_repository
 import (
         context "context"
         reflect "reflect"
+        time "time"
 
         models "github.com/boskuv/goreminder/internal/models"
         gomock "go.uber.org/mock/gomock"
@@ -113,4 +114,33 @@ func (m *MockUserRepository) UpdateUser(ctx context.Context, user *models.User) 
 func (mr *MockUserRepositoryMockRecorder) UpdateUser(ctx, user any) *gomock.Call {
         mr.mock.ctrl.T.Helper()
         return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUser", reflect.TypeOf((*MockUserRepository)(nil).UpdateUser), ctx, user)
+}
+
+// ListRecentActivity mocks base method.
+func (m *MockUserRepository) ListRecentActivity(ctx context.Context, limit int) ([]models.UserActivity, error) {
+        m.ctrl.T.Helper()
+        ret := m.ctrl.Call(m, "ListRecentActivity", ctx, limit)
+        ret0, _ := ret[0].([]models.UserActivity)
+        ret1, _ := ret[1].(error)
+        return ret0, ret1
+}
+
+// ListRecentActivity indicates an expected call of ListRecentActivity.
+func (mr *MockUserRepositoryMockRecorder) ListRecentActivity(ctx, limit any) *gomock.Call {
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRecentActivity", reflect.TypeOf((*MockUserRepository)(nil).ListRecentActivity), ctx, limit)
+}
+
+// TouchLastActivity mocks base method.
+func (m *MockUserRepository) TouchLastActivity(ctx context.Context, userID int64, at time.Time) error {
+        m.ctrl.T.Helper()
+        ret := m.ctrl.Call(m, "TouchLastActivity", ctx, userID, at)
+        ret0, _ := ret[0].(error)
+        return ret0
+}
+
+// TouchLastActivity indicates an expected call of TouchLastActivity.
+func (mr *MockUserRepositoryMockRecorder) TouchLastActivity(ctx, userID, at any) *gomock.Call {
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TouchLastActivity", reflect.TypeOf((*MockUserRepository)(nil).TouchLastActivity), ctx, userID, at)
 }

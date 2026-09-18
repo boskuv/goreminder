@@ -203,13 +203,14 @@ func main() {
 	}
 
 	// setup services
+	activityTracker := service.NewPostgresActivityTracker(userRepo, log)
 	purgeAttachmentsOnDone := cfg.Attachments.Enabled && cfg.Attachments.PurgeOnTaskDone
-	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, publisher, attClient, purgeAttachmentsOnDone, log)
-	userService := service.NewUserService(userRepo, taskRepo, messengerRepo, publisher, attClient, log)
-	messengerService := service.NewMessengerService(messengerRepo, userRepo, log)
-	backlogService := service.NewBacklogService(backlogRepo, userRepo, messengerRepo, log)
-	targetService := service.NewTargetService(targetRepo, userRepo, messengerRepo, log)
-	digestService := service.NewDigestService(digestSettingsRepo, backlogRepo, targetRepo, taskRepo, userRepo, messengerRepo, publisher, log)
+	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, publisher, attClient, activityTracker, purgeAttachmentsOnDone, log)
+	userService := service.NewUserService(userRepo, taskRepo, messengerRepo, publisher, attClient, activityTracker, log)
+	messengerService := service.NewMessengerService(messengerRepo, userRepo, activityTracker, log)
+	backlogService := service.NewBacklogService(backlogRepo, userRepo, messengerRepo, activityTracker, log)
+	targetService := service.NewTargetService(targetRepo, userRepo, messengerRepo, activityTracker, log)
+	digestService := service.NewDigestService(digestSettingsRepo, backlogRepo, targetRepo, taskRepo, userRepo, messengerRepo, publisher, activityTracker, log)
 
 	// setup scheduler
 	taskScheduler := service.NewTaskScheduler(taskRepo, taskService, log)

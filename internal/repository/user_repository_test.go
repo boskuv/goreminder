@@ -58,10 +58,10 @@ func TestUserRepository_GetUserByID_Success(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, email, password_hash, created_at, timezone, language_code, role FROM users WHERE deleted_at IS NULL AND id = $1`,
+		`SELECT id, name, email, password_hash, created_at, timezone, language_code, role, last_activity_at FROM users WHERE deleted_at IS NULL AND id = $1`,
 	)).WithArgs(int64(1)).WillReturnRows(sqlmock.NewRows([]string{
-		"id", "name", "email", "password_hash", "created_at", "timezone", "language_code", "role",
-	}).AddRow(int64(1), "Alice", "a@x", "hash", now, nil, nil, nil))
+		"id", "name", "email", "password_hash", "created_at", "timezone", "language_code", "role", "last_activity_at",
+	}).AddRow(int64(1), "Alice", "a@x", "hash", now, nil, nil, nil, nil))
 
 	user, err := repo.GetUserByID(context.Background(), 1)
 	require.NoError(t, err)
@@ -108,15 +108,48 @@ func TestUserRepository_GetAllUsers_Pagination(t *testing.T) {
 	)).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, email, password_hash, created_at, timezone, language_code, role FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 10 OFFSET 10`,
+		`SELECT id, name, email, password_hash, created_at, timezone, language_code, role, last_activity_at FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 10 OFFSET 10`,
 	)).WillReturnRows(sqlmock.NewRows([]string{
-		"id", "name", "email", "password_hash", "created_at", "timezone", "language_code", "role",
-	}).AddRow(int64(11), "Bob", "b@x", "h", now, nil, nil, nil))
+		"id", "name", "email", "password_hash", "created_at", "timezone", "language_code", "role", "last_activity_at",
+	}).AddRow(int64(11), "Bob", "b@x", "h", now, nil, nil, nil, nil))
 
 	users, total, err := repo.GetAllUsers(context.Background(), 2, 10, "created_at DESC")
 	require.NoError(t, err)
 	assert.Equal(t, 1, total)
 	require.Len(t, users, 1)
 	assert.Equal(t, int64(11), users[0].ID)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+
+func TestUserRepository_TouchLastActivity(t *testing.T) {
+	repo, mock, cleanup := newUserRepoWithMock(t)
+	defer cleanup()
+
+	at := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
+	mock.ExpectExec(regexp.QuoteMeta(
+		`UPDATE users SET last_activity_at = GREATEST(COALESCE(last_activity_at, '-infinity'::timestamptz), $1::timestamptz) WHERE id = $2 AND deleted_at IS NULL`,
+	)).WithArgs(at, int64(7)).WillReturnResult(sqlmock.NewResult(0, 1))
+
+	err := repo.TouchLastActivity(context.Background(), 7, at)
+	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUserRepository_ListRecentActivity(t *testing.T) {
+	repo, mock, cleanup := newUserRepoWithMock(t)
+	defer cleanup()
+
+	at := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, name, last_activity_at FROM users WHERE deleted_at IS NULL AND last_activity_at IS NOT NULL ORDER BY last_activity_at DESC LIMIT 2`,
+	)).WillReturnRows(sqlmock.NewRows([]string{"id", "name", "last_activity_at"}).
+		AddRow(int64(1), "Alice", at))
+
+	activities, err := repo.ListRecentActivity(context.Background(), 2)
+	require.NoError(t, err)
+	require.Len(t, activities, 1)
+	assert.Equal(t, int64(1), activities[0].UserID)
+	assert.Equal(t, "Alice", activities[0].Name)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

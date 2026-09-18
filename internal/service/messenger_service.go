@@ -20,15 +20,20 @@ import (
 type MessengerService struct {
 	messengerRepo repository.MessengerRepository
 	userRepo      repository.UserRepository
+	activity      ActivityTracker
 	tracer        trace.Tracer
 	logger        zerolog.Logger
 }
 
 // NewMessengerService creates a new instance of MessengerService
-func NewMessengerService(messengerRepo repository.MessengerRepository, userRepo repository.UserRepository, logger zerolog.Logger) *MessengerService {
+func NewMessengerService(messengerRepo repository.MessengerRepository, userRepo repository.UserRepository, activity ActivityTracker, logger zerolog.Logger) *MessengerService {
+	if activity == nil {
+		activity = NoopActivityTracker{}
+	}
 	return &MessengerService{
 		messengerRepo: messengerRepo,
 		userRepo:      userRepo,
+		activity:      activity,
 		tracer:        otel.Tracer("messenger-service"),
 		logger:        logger,
 	}
@@ -212,6 +217,7 @@ func (s *MessengerService) CreateMessengerRelatedUser(ctx context.Context, messe
 		Str("messenger_user.id", messengerRelatedUser.MessengerUserID).
 		Msg("messenger-related user created successfully")
 	span.SetAttributes(attribute.Int64("messenger_related_user.id", messengerRelatedUserID))
+	touchUserActivity(ctx, s.activity, s.logger, *messengerRelatedUser.UserID)
 	span.SetStatus(codes.Ok, "messenger related user created successfully")
 	return messengerRelatedUserID, nil
 }

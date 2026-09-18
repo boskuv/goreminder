@@ -5,11 +5,12 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	mock_repository "github.com/boskuv/goreminder/internal/mocks/repository"
 	"github.com/boskuv/goreminder/internal/models"
-	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/attachments"
+	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/queue"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -25,7 +26,7 @@ func TestUserService_CreateUser(t *testing.T) {
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), testLogger)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -61,7 +62,7 @@ func TestUserService_GetUser(t *testing.T) {
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), testLogger)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -89,7 +90,7 @@ func TestUserService_UpdateUser(t *testing.T) {
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), testLogger)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -142,7 +143,7 @@ func TestUserService_DeleteUser(t *testing.T) {
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), testLogger)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -181,7 +182,7 @@ func TestUserService_GetAllUsers(t *testing.T) {
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), testLogger)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -199,5 +200,36 @@ func TestUserService_GetAllUsers(t *testing.T) {
 		assert.Error(t, err)
 		assert.Nil(t, users)
 		assert.Equal(t, 0, total)
+	})
+}
+
+func TestUserService_GetRecentUserActivity(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	userRepo := mock_repository.NewMockUserRepository(ctrl)
+	taskRepo := mock_repository.NewMockTaskRepository(ctrl)
+	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
+	producer := &queue.Producer{}
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	tracker := NewPostgresActivityTracker(userRepo, testLogger)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), tracker, testLogger)
+	ctx := context.Background()
+
+	at := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
+	expected := []models.UserActivity{{UserID: 1, Name: "Alice", LastActivityAt: at}}
+
+	t.Run("success clamps limit", func(t *testing.T) {
+		userRepo.EXPECT().ListRecentActivity(gomock.Any(), 100).Return(expected, nil)
+		got, err := svc.GetRecentUserActivity(ctx, 500)
+		assert.NoError(t, err)
+		assert.Equal(t, expected, got)
+	})
+
+	t.Run("tracker error", func(t *testing.T) {
+		userRepo.EXPECT().ListRecentActivity(gomock.Any(), 5).Return(nil, errors.New("db error"))
+		got, err := svc.GetRecentUserActivity(ctx, 5)
+		assert.Error(t, err)
+		assert.Nil(t, got)
 	})
 }

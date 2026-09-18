@@ -30,7 +30,7 @@ func setupDigestService(t *testing.T) (*DigestService, *mock_repository.MockDige
 
 	var producer queue.Publisher = queue.NoopPublisher{}
 
-	service := NewDigestService(digestSettingsRepo, backlogRepo, targetRepo, taskRepo, userRepo, messengerRepo, producer, testLogger)
+	service := NewDigestService(digestSettingsRepo, backlogRepo, targetRepo, taskRepo, userRepo, messengerRepo, producer, NoopActivityTracker{}, testLogger)
 	return service, digestSettingsRepo, backlogRepo, targetRepo, taskRepo, userRepo, messengerRepo, producer
 }
 

@@ -31,6 +31,7 @@ type TaskService struct {
 	taskHistoryRepo            repository.TaskHistoryRepository
 	producer                   queue.Publisher
 	attachments                attachments.Client
+	activity                   ActivityTracker
 	attachmentsPurgeOnTaskDone bool
 	tracer                     trace.Tracer
 	logger                     zerolog.Logger
@@ -38,7 +39,10 @@ type TaskService struct {
 
 // NewTaskService creates a new TaskService.
 // attachmentsPurgeOnTaskDone should be true only when attachments.enabled and purgeOnTaskDone are set in config.
-func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, taskHistoryRepo repository.TaskHistoryRepository, producer queue.Publisher, attClient attachments.Client, attachmentsPurgeOnTaskDone bool, logger zerolog.Logger) *TaskService {
+func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, taskHistoryRepo repository.TaskHistoryRepository, producer queue.Publisher, attClient attachments.Client, activity ActivityTracker, attachmentsPurgeOnTaskDone bool, logger zerolog.Logger) *TaskService {
+	if activity == nil {
+		activity = NoopActivityTracker{}
+	}
 	return &TaskService{
 		taskRepo:                   taskRepo,
 		userRepo:                   userRepo,
@@ -46,6 +50,7 @@ func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.User
 		taskHistoryRepo:            taskHistoryRepo,
 		producer:                   producer,
 		attachments:                attClient,
+		activity:                   activity,
 		attachmentsPurgeOnTaskDone: attachmentsPurgeOnTaskDone,
 		tracer:                     otel.Tracer("task-service"),
 		logger:                     logger,
@@ -334,6 +339,7 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 		Int64("task.id", taskID).
 		Int64("user.id", task.UserID).
 		Msg("task creation completed successfully")
+	touchUserActivity(ctx, s.activity, s.logger, task.UserID)
 	span.SetStatus(codes.Ok, "task created successfully")
 	return taskID, childTaskID, nil
 }
@@ -1435,6 +1441,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		auditEvent = auditEvent.Int("child_tasks.deleted_count", deletedActiveChildTasksCount)
 	}
 	auditEvent.Msg("task updated successfully")
+	touchUserActivity(ctx, s.activity, s.logger, oldTask.UserID)
 	span.SetStatus(codes.Ok, "task updated successfully")
 	return oldTask, nil
 }
@@ -1517,6 +1524,7 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "deleted", "task", taskID, deletedTaskFields)).
 			Int64("user.id", task.UserID).
 			Msg("task deleted successfully (non-transactional fallback)")
+		touchUserActivity(ctx, s.activity, s.logger, task.UserID)
 		span.SetStatus(codes.Ok, "task deleted successfully (non-transactional fallback)")
 		s.purgeAttachmentsBestEffort(ctx, log, taskID, nil)
 		return nil
@@ -1724,6 +1732,7 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "deleted", "task", taskID, deletedTaskFields)).
 		Int64("user.id", task.UserID).
 		Msg("task deleted successfully")
+	touchUserActivity(ctx, s.activity, s.logger, task.UserID)
 	span.SetStatus(codes.Ok, "task deleted successfully")
 	s.purgeAttachmentsBestEffort(ctx, log, taskID, childTaskIDsForPurge)
 	return nil
@@ -1796,6 +1805,7 @@ func (s *TaskService) QueueTask(ctx context.Context, scheduledTask *models.Sched
 		Int64("task.id", scheduledTask.TaskID).
 		Str("action", scheduledTask.Action).
 		Msg("task queued successfully")
+	touchUserActivity(ctx, s.activity, s.logger, task.UserID)
 	span.SetStatus(codes.Ok, "task queued successfully")
 	return nil
 }
@@ -1925,6 +1935,7 @@ func (s *TaskService) MuteTask(ctx context.Context, taskID int64) (*models.Task,
 	}
 
 	log.Debug().Int64("task.id", taskID).Msg("task muted successfully")
+	touchUserActivity(ctx, s.activity, s.logger, task.UserID)
 	span.SetStatus(codes.Ok, "task muted")
 	return task, nil
 }
@@ -1995,6 +2006,7 @@ func (s *TaskService) UnmuteTask(ctx context.Context, taskID int64) (*models.Tas
 	}
 
 	log.Debug().Int64("task.id", taskID).Msg("task unmuted successfully")
+	touchUserActivity(ctx, s.activity, s.logger, task.UserID)
 	span.SetStatus(codes.Ok, "task unmuted")
 	return task, nil
 }
@@ -2463,6 +2475,7 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 	log.Debug().
 		Int64("task.id", taskID).
 		Msg("task marked as done successfully")
+	touchUserActivity(ctx, s.activity, s.logger, task.UserID)
 	span.SetStatus(codes.Ok, "task marked as done successfully")
 	return task, nil
 }
@@ -3150,4 +3163,5 @@ func (s *TaskService) recordAttachmentHistory(
 			Str("action", string(action)).
 			Msg("failed to record attachment task history")
 	}
+	touchUserActivity(ctx, s.activity, s.logger, userID)
 }

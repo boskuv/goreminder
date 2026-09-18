@@ -33,7 +33,7 @@ func UpdateUserRequestToModel(req *dto.UpdateUserRequest) *models.UserUpdateRequ
 
 // UserModelToResponse converts models.User to UserResponse DTO
 func UserModelToResponse(user *models.User) *dto.UserResponse {
-	return &dto.UserResponse{
+	resp := &dto.UserResponse{
 		ID:           user.ID,
 		Name:         user.Name,
 		Email:        user.Email,
@@ -41,5 +41,19 @@ func UserModelToResponse(user *models.User) *dto.UserResponse {
 		LanguageCode: user.LanguageCode,
 		Role:         user.Role,
 		CreatedAt:    user.CreatedAt.Format(time.RFC3339),
+	}
+	if user.LastActivityAt != nil {
+		formatted := user.LastActivityAt.UTC().Format(time.RFC3339)
+		resp.LastActivityAt = &formatted
+	}
+	return resp
+}
+
+// UserActivityModelToResponse converts models.UserActivity to UserActivityResponse DTO
+func UserActivityModelToResponse(activity models.UserActivity) dto.UserActivityResponse {
+	return dto.UserActivityResponse{
+		UserID:         activity.UserID,
+		Name:           activity.Name,
+		LastActivityAt: activity.LastActivityAt.UTC().Format(time.RFC3339),
 	}
 }

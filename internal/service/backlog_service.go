@@ -22,16 +22,21 @@ type BacklogService struct {
 	backlogRepo   repository.BacklogRepository
 	userRepo      repository.UserRepository
 	messengerRepo repository.MessengerRepository
+	activity      ActivityTracker
 	tracer        trace.Tracer
 	logger        zerolog.Logger
 }
 
 // NewBacklogService creates a new BacklogService
-func NewBacklogService(backlogRepo repository.BacklogRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, logger zerolog.Logger) *BacklogService {
+func NewBacklogService(backlogRepo repository.BacklogRepository, userRepo repository.UserRepository, messengerRepo repository.MessengerRepository, activity ActivityTracker, logger zerolog.Logger) *BacklogService {
+	if activity == nil {
+		activity = NoopActivityTracker{}
+	}
 	return &BacklogService{
 		backlogRepo:   backlogRepo,
 		userRepo:      userRepo,
 		messengerRepo: messengerRepo,
+		activity:      activity,
 		tracer:        otel.Tracer("backlog-service"),
 		logger:        logger,
 	}
@@ -102,6 +107,7 @@ func (s *BacklogService) CreateBacklog(ctx context.Context, backlog *models.Back
 		Int64("user.id", backlog.UserID).
 		Msg("backlog created successfully")
 
+	touchUserActivity(ctx, s.activity, s.logger, backlog.UserID)
 	span.SetStatus(codes.Ok, "backlog created successfully")
 	return backlogID, nil
 }
@@ -209,6 +215,7 @@ func (s *BacklogService) CreateBacklogsBatch(ctx context.Context, items string, 
 		Int("created.count", len(createdIDs)).
 		Msg("batch backlog creation completed successfully")
 
+	touchUserActivity(ctx, s.activity, s.logger, userID)
 	span.SetStatus(codes.Ok, "batch backlog creation completed successfully")
 	return createdIDs, nil
 }
@@ -377,6 +384,7 @@ func (s *BacklogService) UpdateBacklog(ctx context.Context, id int64, updateRequ
 	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "updated", "backlog", id, changedFieldsFromMaps(beforeMap, afterMap))).
 		Int64("user.id", oldBacklog.UserID).
 		Msg("backlog updated successfully")
+	touchUserActivity(ctx, s.activity, s.logger, oldBacklog.UserID)
 	span.SetStatus(codes.Ok, "backlog updated successfully")
 	return oldBacklog, nil
 }
@@ -419,6 +427,7 @@ func (s *BacklogService) DeleteBacklog(ctx context.Context, id int64) error {
 	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "deleted", "backlog", id, mapKeysForAudit(backlogToAuditMap(existingBacklog)))).
 		Int64("user.id", existingBacklog.UserID).
 		Msg("backlog deleted successfully")
+	touchUserActivity(ctx, s.activity, s.logger, existingBacklog.UserID)
 	span.SetStatus(codes.Ok, "backlog deleted successfully")
 	return nil
 }

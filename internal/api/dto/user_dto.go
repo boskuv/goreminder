@@ -24,11 +24,19 @@ type UpdateUserRequest struct {
 // UserResponse represents the response DTO for a user
 // Note: PasswordHash and DeletedAt are excluded for security
 type UserResponse struct {
-	ID           int64   `json:"id" example:"1"`
-	Name         string  `json:"name" example:"John Doe"`
-	Email        string  `json:"email" example:"john.doe@example.com"`
-	Timezone     *string `json:"timezone,omitempty" example:"UTC"`
-	LanguageCode *string `json:"language_code,omitempty" example:"en"`
-	Role         *string `json:"role,omitempty" example:"user" enums:"user,admin"`
-	CreatedAt    string  `json:"created_at" example:"2024-01-10T08:00:00Z"` // ISO 8601 format
+	ID             int64   `json:"id" example:"1"`
+	Name           string  `json:"name" example:"John Doe"`
+	Email          string  `json:"email" example:"john.doe@example.com"`
+	Timezone       *string `json:"timezone,omitempty" example:"UTC"`
+	LanguageCode   *string `json:"language_code,omitempty" example:"en"`
+	Role           *string `json:"role,omitempty" example:"user" enums:"user,admin"`
+	CreatedAt      string  `json:"created_at" example:"2024-01-10T08:00:00Z"` // ISO 8601 format
+	LastActivityAt *string `json:"last_activity_at,omitempty" example:"2024-01-15T12:00:00Z"`
+}
+
+// UserActivityResponse represents a recently active user entry
+type UserActivityResponse struct {
+	UserID         int64  `json:"user_id" example:"1"`
+	Name           string `json:"name" example:"John Doe"`
+	LastActivityAt string `json:"last_activity_at" example:"2024-01-15T12:00:00Z"`
 }

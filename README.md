@@ -753,9 +753,12 @@ Access Swagger UI at: `http://localhost:8080/docs/index.html`
 |----------|--------|-------------|------------------|
 | `/api/v1/users` | GET | Get all users with pagination | `page`, `page_size`, `order_by` |
 | `/api/v1/users` | POST | Create a new user | - |
+| `/api/v1/users/activity` | GET | Recently active users (`last_activity_at` DESC) | `limit` (default/max 100) |
 | `/api/v1/users/:user_id` | GET | Get user by ID | - |
 | `/api/v1/users/:user_id` | PUT | Update user by ID | - |
 | `/api/v1/users/:user_id` | DELETE | Soft delete user | - |
+
+Activity is recorded on successful user-driven mutations (tasks, users, backlogs, targets, digests, messengers, attachments). GET requests and autoreschedule/scheduler paths do not update `last_activity_at`. Users without any recorded activity are omitted from `/users/activity`. User JSON responses may include optional `last_activity_at` when set.
 
 ### Messengers
 

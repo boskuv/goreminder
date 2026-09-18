@@ -865,6 +865,18 @@ definitions:
         example: America/New_York
         type: string
     type: object
+  dto.UserActivityResponse:
+    properties:
+      last_activity_at:
+        example: "2024-01-15T12:00:00Z"
+        type: string
+      name:
+        example: John Doe
+        type: string
+      user_id:
+        example: 1
+        type: integer
+    type: object
   dto.UserIDResponse:
     properties:
       user_id:
@@ -885,6 +897,9 @@ definitions:
         type: integer
       language_code:
         example: en
+        type: string
+      last_activity_at:
+        example: "2024-01-15T12:00:00Z"
         type: string
       name:
         example: John Doe
@@ -2705,6 +2720,37 @@ paths:
       summary: Get task history by user ID
       tags:
       - Tasks
+  /api/v1/users/activity:
+    get:
+      description: Returns users with non-null last_activity_at, most recent first
+        (default/max limit 100). Activity is recorded on user-driven mutations only
+        (not GET, not autoreschedule).
+      parameters:
+      - default: 100
+        description: 'Max number of users to return (default: 100, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Recently active users
+          schema:
+            items:
+              $ref: '#/definitions/dto.UserActivityResponse'
+            type: array
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: List recently active users
+      tags:
+      - Users
   /docs:
     get:
       description: Access the API documentation

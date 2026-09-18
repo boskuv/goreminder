@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
@@ -21,11 +22,12 @@ import (
 )
 
 type stubUserService struct {
-	createUser  func(ctx context.Context, user *models.User) (int64, error)
-	getUser     func(ctx context.Context, userID int64) (*models.User, error)
-	updateUser  func(ctx context.Context, userID int64, req *models.UserUpdateRequest) (*models.User, error)
-	deleteUser  func(ctx context.Context, userID int64) error
-	getAllUsers func(ctx context.Context, page, pageSize int, orderBy string) ([]*models.User, int, error)
+	createUser             func(ctx context.Context, user *models.User) (int64, error)
+	getUser                func(ctx context.Context, userID int64) (*models.User, error)
+	updateUser             func(ctx context.Context, userID int64, req *models.UserUpdateRequest) (*models.User, error)
+	deleteUser             func(ctx context.Context, userID int64) error
+	getAllUsers            func(ctx context.Context, page, pageSize int, orderBy string) ([]*models.User, int, error)
+	getRecentUserActivity  func(ctx context.Context, limit int) ([]models.UserActivity, error)
 }
 
 func (s *stubUserService) CreateUser(ctx context.Context, user *models.User) (int64, error) {
@@ -58,6 +60,12 @@ func (s *stubUserService) GetAllUsers(ctx context.Context, page, pageSize int, o
 	}
 	return s.getAllUsers(ctx, page, pageSize, orderBy)
 }
+func (s *stubUserService) GetRecentUserActivity(ctx context.Context, limit int) ([]models.UserActivity, error) {
+	if s.getRecentUserActivity == nil {
+		panic("unexpected GetRecentUserActivity")
+	}
+	return s.getRecentUserActivity(ctx, limit)
+}
 
 func newUserRouter(svc handlers.UserService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
@@ -66,6 +74,7 @@ func newUserRouter(svc handlers.UserService) *gin.Engine {
 	api := r.Group("/api/v1")
 	api.GET("/users", h.GetAllUsers)
 	api.POST("/users", h.CreateUser)
+	api.GET("/users/activity", h.GetRecentUserActivity)
 	api.GET("/users/:user_id", h.GetUser)
 	api.PUT("/users/:user_id", h.UpdateUser)
 	api.DELETE("/users/:user_id", h.DeleteUser)
@@ -149,4 +158,27 @@ func TestUserHandler_GetAllUsers_Success(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestUserHandler_GetRecentUserActivity_Success(t *testing.T) {
+	at := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
+	svc := &stubUserService{
+		getRecentUserActivity: func(_ context.Context, limit int) ([]models.UserActivity, error) {
+			assert.Equal(t, 100, limit)
+			return []models.UserActivity{
+				{UserID: 1, Name: "Alice", LastActivityAt: at},
+			}, nil
+		},
+	}
+	r := newUserRouter(svc)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/users/activity", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	var body []map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Len(t, body, 1)
+	assert.Equal(t, float64(1), body[0]["user_id"])
+	assert.Equal(t, "Alice", body[0]["name"])
+	assert.Equal(t, "2026-09-18T12:00:00Z", body[0]["last_activity_at"])
 }

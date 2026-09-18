@@ -27,6 +27,7 @@ type DigestService struct {
 	userRepo           repository.UserRepository
 	messengerRepo      repository.MessengerRepository
 	producer           queue.Publisher
+	activity           ActivityTracker
 	tracer             trace.Tracer
 	logger             zerolog.Logger
 }
@@ -40,8 +41,12 @@ func NewDigestService(
 	userRepo repository.UserRepository,
 	messengerRepo repository.MessengerRepository,
 	producer queue.Publisher,
+	activity ActivityTracker,
 	logger zerolog.Logger,
 ) *DigestService {
+	if activity == nil {
+		activity = NoopActivityTracker{}
+	}
 	return &DigestService{
 		digestSettingsRepo: digestSettingsRepo,
 		backlogRepo:        backlogRepo,
@@ -50,6 +55,7 @@ func NewDigestService(
 		userRepo:           userRepo,
 		messengerRepo:      messengerRepo,
 		producer:           producer,
+		activity:           activity,
 		tracer:             otel.Tracer("digest-service"),
 		logger:             logger,
 	}
@@ -186,6 +192,7 @@ func (s *DigestService) CreateDigestSettings(ctx context.Context, settings *mode
 		Int64("user.id", settings.UserID).
 		Msg("digest settings created successfully")
 
+	touchUserActivity(ctx, s.activity, s.logger, settings.UserID)
 	span.SetStatus(codes.Ok, "digest settings created successfully")
 	return settingsID, nil
 }
@@ -339,6 +346,7 @@ func (s *DigestService) UpdateDigestSettings(ctx context.Context, userID int64, 
 	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "updated", "digest_settings", oldSettings.ID, changedFieldsFromMaps(beforeMap, afterMap))).
 		Int64("user.id", userID).
 		Msg("digest settings updated successfully")
+	touchUserActivity(ctx, s.activity, s.logger, userID)
 	span.SetStatus(codes.Ok, "digest settings updated successfully")
 	return oldSettings, nil
 }
@@ -651,6 +659,7 @@ func (s *DigestService) DeleteDigestSettings(ctx context.Context, userID int64, 
 	withAuditLog(log.Debug(), buildAuditLogPayload(ctx, "deleted", "digest_settings", oldSettings.ID, mapKeysForAudit(digestSettingsToAuditMap(oldSettings)))).
 		Int64("user.id", userID).
 		Msg("digest settings deleted successfully")
+	touchUserActivity(ctx, s.activity, s.logger, userID)
 	span.SetStatus(codes.Ok, "digest settings deleted successfully")
 	return nil
 }
