@@ -25,6 +25,8 @@ type UserRepository interface {
 	UpdateUser(ctx context.Context, user *models.User) error
 	DeleteUser(ctx context.Context, id int64) error
 	GetAllUsers(ctx context.Context, page, pageSize int, orderBy string) ([]*models.User, int, error)
+	TouchLastActivity(ctx context.Context, userID int64, at time.Time) error
+	ListRecentActivity(ctx context.Context, limit int) ([]models.UserActivity, error)
 }
 
 type userRepository struct {
@@ -98,7 +100,7 @@ func (r *userRepository) GetUserByID(ctx context.Context, id int64) (*models.Use
 		Int64("user.id", id).
 		Msg("getting user by id from database")
 
-	query, args, err := r.sb.Select("id", "name", "email", "password_hash", "created_at", "timezone", "language_code", "role").
+	query, args, err := r.sb.Select("id", "name", "email", "password_hash", "created_at", "timezone", "language_code", "role", "last_activity_at").
 		From("users").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		Where(squirrel.Eq{"id": id}).
@@ -282,7 +284,7 @@ func (r *userRepository) GetAllUsers(ctx context.Context, page, pageSize int, or
 	}
 
 	// Get paginated data
-	query, args, err := r.sb.Select("id", "name", "email", "password_hash", "created_at", "timezone", "language_code", "role").
+	query, args, err := r.sb.Select("id", "name", "email", "password_hash", "created_at", "timezone", "language_code", "role", "last_activity_at").
 		From("users").
 		Where(squirrel.Eq{"deleted_at": nil}).
 		OrderBy(orderBy).
@@ -314,4 +316,81 @@ func (r *userRepository) GetAllUsers(ctx context.Context, page, pageSize int, or
 	)
 	span.SetStatus(codes.Ok, "users retrieved successfully")
 	return users, totalCount, nil
+}
+
+// TouchLastActivity sets last_activity_at to the greater of the current value and at.
+func (r *userRepository) TouchLastActivity(ctx context.Context, userID int64, at time.Time) error {
+	ctx, span := r.tracer.Start(ctx, "user_repository.TouchLastActivity",
+		trace.WithAttributes(
+			attribute.Int64("user.id", userID),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().
+		Int64("user.id", userID).
+		Time("last_activity_at", at).
+		Msg("touching user last activity")
+
+	query := `UPDATE users SET last_activity_at = GREATEST(COALESCE(last_activity_at, '-infinity'::timestamptz), $1::timestamptz) WHERE id = $2 AND deleted_at IS NULL`
+	_, err := r.db.ExecContext(ctx, query, at.UTC(), userID)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Int64("user.id", userID).
+			Msg("failed to touch user last activity")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "failed to touch user last activity")
+	}
+
+	span.SetStatus(codes.Ok, "user last activity updated")
+	return nil
+}
+
+// ListRecentActivity returns users with non-null last_activity_at, most recent first.
+func (r *userRepository) ListRecentActivity(ctx context.Context, limit int) ([]models.UserActivity, error) {
+	ctx, span := r.tracer.Start(ctx, "user_repository.ListRecentActivity",
+		trace.WithAttributes(
+			attribute.Int("limit", limit),
+		))
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	if limit < 1 {
+		limit = 100
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	log.Debug().
+		Int("limit", limit).
+		Msg("listing recent user activity")
+
+	query, args, err := r.sb.Select("id", "name", "last_activity_at").
+		From("users").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where("last_activity_at IS NOT NULL").
+		OrderBy("last_activity_at DESC").
+		Limit(uint64(limit)).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to build list recent activity query")
+	}
+
+	var activities []models.UserActivity
+	err = r.db.SelectContext(ctx, &activities, query, args...)
+	if err != nil {
+		log.Debug().Err(err).Msg("failed to list recent user activity")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to list recent user activity")
+	}
+
+	span.SetAttributes(attribute.Int("activity.count", len(activities)))
+	span.SetStatus(codes.Ok, "recent activity listed")
+	return activities, nil
 }
