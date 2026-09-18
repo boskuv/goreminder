@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Users — last activity**: column `users.last_activity_at` (migration `20260918190000_add_column_last_activity_at_to_users_table.sql`). Best-effort `ActivityTracker` updates it on successful user-driven mutations (tasks CRUD / mute / unmute / done / queue / attachments, user create/update, backlogs, targets, digest settings, messenger-related user create). Autoreschedule/scheduler and GET requests do not touch activity. **API**: `GET /api/v1/users/activity?limit=` (default/max 100) returns `[{user_id, name, last_activity_at}]`; optional `last_activity_at` on `UserResponse` when set.
 - **Examples — sample worker**: `examples/worker` consumes Celery-style `{task, args}` from RabbitMQ (`worker.schedule_task` / `worker.delete_task`), stores due times in a Redis ZSET, and POSTs the production-compatible `/send_message` webhook payload.
 - **Examples — telegram-bot webhook**: `examples/telegram-bot` listens on `POST /send_message` (default `:8001`) and handles `done:` / `later:` inline callbacks so the sample worker can deliver end-to-end.
 
