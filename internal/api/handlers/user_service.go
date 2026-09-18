@@ -14,4 +14,5 @@ type UserService interface {
 	UpdateUser(ctx context.Context, userID int64, updateRequest *models.UserUpdateRequest) (*models.User, error)
 	DeleteUser(ctx context.Context, userID int64) error
 	GetAllUsers(ctx context.Context, page, pageSize int, orderBy string) ([]*models.User, int, error)
+	GetRecentUserActivity(ctx context.Context, limit int) ([]models.UserActivity, error)
 }

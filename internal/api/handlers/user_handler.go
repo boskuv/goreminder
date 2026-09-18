@@ -284,3 +284,46 @@ func (h *UserHandler) GetAllUsers(c *gin.Context) {
 
 	c.JSON(http.StatusOK, response)
 }
+
+// @Summary List recently active users
+// @Description Returns users with non-null last_activity_at, most recent first (default/max limit 100). Activity is recorded on user-driven mutations only (not GET, not autoreschedule).
+// @Tags Users
+// @Produce json
+// @Param limit query int false "Max number of users to return (default: 100, max: 100)" default(100)
+// @Success 200 {array} dto.UserActivityResponse "Recently active users"
+// @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
+// @Router /api/v1/users/activity [get]
+func (h *UserHandler) GetRecentUserActivity(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
+	limit, err := validation.ValidateInt64Query(c, "limit", 100, 1)
+	if err != nil {
+		log.Info().Err(err).Msg("invalid limit query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	activities, err := h.userService.GetRecentUserActivity(ctx, int(limit))
+	if err != nil {
+		h.logger.Error().Stack().Err(err).Msg("error while getting recent user activity")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	responses := make([]dto.UserActivityResponse, len(activities))
+	for i, activity := range activities {
+		responses[i] = mapper.UserActivityModelToResponse(activity)
+	}
+
+	log.Info().
+		Int("activity.count", len(responses)).
+		Int64("limit", limit).
+		Msg("recent user activity retrieved successfully")
+
+	c.JSON(http.StatusOK, responses)
+}
