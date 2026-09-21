@@ -14,6 +14,8 @@ type CreateTaskRequest struct {
 	RRule                  *string    `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 	RequiresConfirmation   bool       `json:"requires_confirmation,omitempty" example:"true"`
 	Muted                  bool       `json:"muted,omitempty" example:"false"`
+	// PreRemindBeforeSeconds: seconds before start_date for a preliminary reminder; omit/null = disabled.
+	PreRemindBeforeSeconds *int64 `json:"pre_remind_before_seconds,omitempty" example:"900"`
 	Status                 string     `json:"status,omitempty" binding:"omitempty,task_status" example:"pending" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
 }
 
@@ -27,8 +29,10 @@ type UpdateTaskRequest struct {
 	FinishDate           *time.Time `json:"finish_date,omitempty" example:"2024-01-20T18:00:00Z"`
 	RequiresConfirmation *bool      `json:"requires_confirmation,omitempty" example:"true"`
 	Muted                *bool      `json:"muted,omitempty" example:"false"`
-	CronExpression       *string    `json:"cron_expression,omitempty" binding:"omitempty,cron" example:"0 9 * * *"`
-	RRule                *string    `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
+	// PreRemindBeforeSeconds: omit = no change; 0 = disable; >0 = set offset in seconds before start_date.
+	PreRemindBeforeSeconds *int64  `json:"pre_remind_before_seconds,omitempty" example:"900"`
+	CronExpression         *string `json:"cron_expression,omitempty" binding:"omitempty,cron" example:"0 9 * * *"`
+	RRule                  *string `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 }
 
 // TaskResponse represents a task in list and mutation responses (no attachments).
@@ -45,6 +49,7 @@ type TaskResponse struct {
 	RRule                  *string    `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 	RequiresConfirmation   bool       `json:"requires_confirmation,omitempty" example:"true"`
 	Muted                  bool       `json:"muted" example:"false"`
+	PreRemindBeforeSeconds *int64     `json:"pre_remind_before_seconds,omitempty" example:"900"`
 	Status                 string     `json:"status" example:"pending" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
 	CreatedAt              time.Time  `json:"created_at" example:"2024-01-10T08:00:00Z"`
 }
@@ -63,6 +68,7 @@ type TaskDetailResponse struct {
 	RRule                  *string              `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 	RequiresConfirmation   bool                 `json:"requires_confirmation,omitempty" example:"true"`
 	Muted                  bool                 `json:"muted" example:"false"`
+	PreRemindBeforeSeconds *int64               `json:"pre_remind_before_seconds,omitempty" example:"900"`
 	Status                 string               `json:"status" example:"pending" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
 	CreatedAt              time.Time            `json:"created_at" example:"2024-01-10T08:00:00Z"`
 	Attachments            []AttachmentResponse `json:"attachments,omitempty"` // when attachments.enabled; omitted when empty
@@ -83,6 +89,7 @@ type TaskMarkedDoneResponse struct {
 	RRule                  *string    `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 	RequiresConfirmation   bool       `json:"requires_confirmation,omitempty" example:"true"`
 	Muted                  bool       `json:"muted" example:"false"`
+	PreRemindBeforeSeconds *int64     `json:"pre_remind_before_seconds,omitempty" example:"900"`
 	CreatedAt              time.Time  `json:"created_at" example:"2024-01-10T08:00:00Z"`
 }
 
