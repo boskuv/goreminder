@@ -18,6 +18,11 @@ def job_id(messenger_name: str, task_id: int | str) -> str:
     return f"{messenger_name}_{task_id}"
 
 
+def pre_job_id(messenger_name: str, task_id: int | str) -> str:
+    """Separate Redis key so pre-remind and main reminder coexist."""
+    return f"{messenger_name}_{task_id}_pre"
+
+
 class DueStore:
     """Schedule reminders as score=unix_ts members in a Redis ZSET."""
 
