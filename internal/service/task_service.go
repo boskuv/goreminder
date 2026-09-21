@@ -123,12 +123,30 @@ func shouldRepublishScheduleAfterUnmute(task *models.Task) bool {
 // updates when applicable. Past start_date values are advanced using the task's recurrence rule or the
 // parent's rule (for children).
 func (s *TaskService) publishScheduleForTaskAfterUnmute(ctx context.Context, task *models.Task) error {
+	return s.publishScheduleTaskEvent(ctx, nil, task, true)
+}
+
+// publishScheduleTaskEvent republishes worker.schedule_task when applicable.
+// If advancePastStartDate is true and start_date is past, the date is advanced via the recurrence rule
+// (or the parent's rule for children) before publish — same as unmute.
+// If advancePastStartDate is false and start_date is past, publish is skipped and start_date is left
+// unchanged (metadata-only updates must not skip a pending confirmation occurrence).
+// When tx is non-nil, start_date persistence uses UpdateTaskWithTx so it stays in the caller's transaction.
+func (s *TaskService) publishScheduleTaskEvent(ctx context.Context, tx *sqlx.Tx, task *models.Task, advancePastStartDate bool) error {
 	if !shouldRepublishScheduleAfterUnmute(task) {
 		return nil
 	}
 
 	log := logger.WithTraceContext(ctx, s.logger)
 	now := time.Now().UTC()
+
+	if task.StartDate.Before(now) && !advancePastStartDate {
+		log.Debug().
+			Int64("task.id", task.ID).
+			Time("start_date", task.StartDate).
+			Msg("skipping schedule_task: past start_date and advance not requested")
+		return nil
+	}
 
 	var parent *models.Task
 	if task.ParentID != nil && task.StartDate.Before(now) {
@@ -146,13 +164,18 @@ func (s *TaskService) publishScheduleForTaskAfterUnmute(ctx context.Context, tas
 	if effectiveStart.IsZero() {
 		log.Debug().
 			Int64("task.id", task.ID).
-			Msg("skipping schedule_task after unmute: no future start_date")
+			Msg("skipping schedule_task: no future start_date")
 		return nil
 	}
 
 	if !effectiveStart.Equal(task.StartDate) {
 		task.StartDate = effectiveStart
-		if err := s.taskRepo.UpdateTask(ctx, task); err != nil {
+		if tx != nil {
+			err = s.taskRepo.UpdateTaskWithTx(ctx, tx, task)
+		} else {
+			err = s.taskRepo.UpdateTask(ctx, task)
+		}
+		if err != nil {
 			return errors.WithStack(err)
 		}
 	}
@@ -162,6 +185,44 @@ func (s *TaskService) publishScheduleForTaskAfterUnmute(ctx context.Context, tas
 		return errors.WithStack(err)
 	}
 	return s.publishTaskEvent(ctx, task, schEv)
+}
+
+// prepareChildScheduleStartDate advances an overdue child start_date inside tx when advancePastStartDate
+// is true. When advancePastStartDate is false, overdue dates are left unchanged so metadata-only
+// parent updates cannot skip a pending confirmation occurrence.
+func (s *TaskService) prepareChildScheduleStartDate(ctx context.Context, tx *sqlx.Tx, task *models.Task, advancePastStartDate bool) error {
+	now := time.Now().UTC()
+	if !task.StartDate.Before(now) {
+		return nil
+	}
+	if !advancePastStartDate {
+		return nil
+	}
+
+	var parent *models.Task
+	if task.ParentID != nil {
+		p, err := s.taskRepo.GetTaskByIDWithoutStatusFilter(ctx, *task.ParentID)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		parent = p
+	}
+
+	effectiveStart, err := nextExecutableStartDate(task, parent, now)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if effectiveStart.IsZero() || effectiveStart.Equal(task.StartDate) {
+		return nil
+	}
+
+	task.StartDate = effectiveStart
+	if tx != nil {
+		err = s.taskRepo.UpdateTaskWithTx(ctx, tx, task)
+	} else {
+		err = s.taskRepo.UpdateTask(ctx, task)
+	}
+	return errors.WithStack(err)
 }
 
 // CreateTask implements BL of adding new task
@@ -983,6 +1044,10 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				(updateRequest.FinishDate == nil && oldFinishDate != nil) ||
 				(updateRequest.FinishDate != nil && oldFinishDate != nil && !updateRequest.FinishDate.Equal(*oldFinishDate))
 
+			// schedule_task publishes run after commit so a slow queue / canceled request ctx
+			// cannot leave the DB transaction in a half-committed state.
+			var pendingChildSchedulePublishes []*models.Task
+
 			// Update each child task (skip done/deleted tasks)
 			for _, childTask := range childTasks {
 				// Skip already done or deleted tasks
@@ -1099,23 +1164,26 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 						return nil, errors.WithStack(err)
 					}
 
-					// Publish update to queue if start_date, title, description, or pre-remind changed.
+					// Prepare schedule republish if start_date, title, description, or pre-remind changed.
+					// Metadata-only updates (no startDateUpdated) must not advance overdue children —
+					// advancing would skip a pending confirmation occurrence.
 					if startDateUpdated || titleChanged || descriptionChanged || preRemindChanged {
 						if shouldRepublishScheduleAfterUnmute(childTask) {
-							if pubErr := s.publishScheduleForTaskAfterUnmute(ctx, childTask); pubErr != nil {
+							if prepErr := s.prepareChildScheduleStartDate(ctx, tx, childTask, startDateUpdated); prepErr != nil {
 								log.Error().
 									Stack().
-									Err(pubErr).
+									Err(prepErr).
 									Int64("task.id", taskID).
 									Int64("child_task.id", childTask.ID).
-									Msg("failed to queue schedule_task message for updated child task")
-								// Don't fail the operation, just log the error
-								// The database update was successful, queue update failure is non-critical
+									Msg("failed to prepare schedule start_date for updated child task")
+							} else if !childTask.StartDate.Before(time.Now().UTC()) {
+								pendingChildSchedulePublishes = append(pendingChildSchedulePublishes, childTask)
 							} else {
 								log.Debug().
 									Int64("task.id", taskID).
 									Int64("child_task.id", childTask.ID).
-									Msg("child task update queued successfully")
+									Time("start_date", childTask.StartDate).
+									Msg("child task startDate is in the past, skipping queue publication (only DB update)")
 							}
 						} else {
 							log.Debug().
@@ -1154,13 +1222,15 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 								}
 							}
 						} else if shouldRepublishScheduleAfterUnmute(childTask) {
-							if pubErr := s.publishScheduleForTaskAfterUnmute(ctx, childTask); pubErr != nil {
+							if prepErr := s.prepareChildScheduleStartDate(ctx, tx, childTask, true); prepErr != nil {
 								log.Error().
 									Stack().
-									Err(pubErr).
+									Err(prepErr).
 									Int64("task.id", taskID).
 									Int64("child_task.id", childTask.ID).
-									Msg("failed to queue schedule_task for child after parent unmute")
+									Msg("failed to prepare schedule start_date for child after parent unmute")
+							} else if !childTask.StartDate.Before(time.Now().UTC()) {
+								pendingChildSchedulePublishes = append(pendingChildSchedulePublishes, childTask)
 							}
 						}
 					}
@@ -1171,6 +1241,54 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				Int64("task.id", taskID).
 				Int("child_tasks.count", len(childTasks)).
 				Msg("child tasks synchronized successfully")
+
+			// Commit transaction if we started one (before queue publishes)
+			if hasActiveTransaction {
+				err = tx.Commit()
+				if err != nil {
+					log.Error().
+						Stack().
+						Err(err).
+						Int64("task.id", taskID).
+						Msg("failed to commit transaction")
+					span.RecordError(err)
+					span.SetStatus(codes.Error, err.Error())
+					return nil, errors.Wrap(err, "failed to commit transaction")
+				}
+				hasActiveTransaction = false
+				log.Debug().
+					Int64("task.id", taskID).
+					Msg("transaction committed successfully")
+				span.SetAttributes(attribute.Bool("transaction.committed", true))
+			}
+
+			// Publish schedule_task after commit so request cancel / slow broker cannot roll back DB writes.
+			pubCtx := context.WithoutCancel(ctx)
+			for _, childTask := range pendingChildSchedulePublishes {
+				schEv, schErr := s.buildScheduleTaskEvent(pubCtx, childTask)
+				if schErr != nil {
+					log.Error().
+						Stack().
+						Err(schErr).
+						Int64("task.id", taskID).
+						Int64("child_task.id", childTask.ID).
+						Msg("failed to build schedule_task message for updated child task")
+					continue
+				}
+				if pubErr := s.publishTaskEvent(pubCtx, childTask, schEv); pubErr != nil {
+					log.Error().
+						Stack().
+						Err(pubErr).
+						Int64("task.id", taskID).
+						Int64("child_task.id", childTask.ID).
+						Msg("failed to queue schedule_task message for updated child task")
+				} else {
+					log.Debug().
+						Int64("task.id", taskID).
+						Int64("child_task.id", childTask.ID).
+						Msg("child task update queued successfully")
+				}
+			}
 		}
 
 		if muteTransition && (wasParentTask || isParentTask) && oldTask.Muted && oldTask.MessengerRelatedUserID != nil {
@@ -1196,7 +1314,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				}
 			}
 		}
-		// Commit transaction if we started one
+		// Commit transaction if we started one and it was not committed above (e.g. no child sync path)
 		if hasActiveTransaction {
 			err = tx.Commit()
 			if err != nil {

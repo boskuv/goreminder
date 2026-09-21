@@ -9,6 +9,7 @@ import (
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	errs "github.com/boskuv/goreminder/internal/errors"
 	"github.com/boskuv/goreminder/internal/models"
+	"github.com/boskuv/goreminder/pkg/queue"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -352,6 +353,278 @@ func TestTaskService_UpdateTask_ParentTitleChange_SyncsActiveChildren(t *testing
 	require.NoError(t, err)
 	assert.Equal(t, "new title", out.Title)
 	assert.NotEmpty(t, pub.published)
+	assert.NoError(t, mockDB.ExpectationsWereMet())
+}
+
+func TestTaskService_UpdateTask_ParentTitleChange_OverdueChild_DoesNotAdvanceStartDate(t *testing.T) {
+	service, taskRepo, _, _, taskHistoryRepo, _ := setup(t)
+	ctx := context.Background()
+	taskID := int64(235)
+	mu := 7
+	pub := &stubPublisher{}
+	service.producer = pub
+
+	db, mockDB, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+	mockDB.ExpectBegin()
+	mockDB.ExpectCommit()
+
+	pastStart := time.Now().UTC().Add(-72 * time.Hour)
+	parent := &models.Task{
+		ID:                     taskID,
+		UserID:                 1,
+		Title:                  "old",
+		Description:            "d",
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              pastStart,
+		RRule:                  ptrString("FREQ=MONTHLY"),
+		RequiresConfirmation:   true,
+		MessengerRelatedUserID: &mu,
+	}
+	overdueChild := &models.Task{
+		ID: 1465, Title: "old", Description: "d", UserID: 1, ParentID: &taskID,
+		Status: string(models.TaskStatusScheduled), StartDate: pastStart,
+		MessengerRelatedUserID: &mu, RequiresConfirmation: true,
+	}
+
+	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(parent, nil)
+	taskRepo.EXPECT().GetDB().Return(sqlxDB)
+	taskRepo.EXPECT().UpdateTaskWithTx(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ *sqlx.Tx, task *models.Task) error {
+			if task.ID == overdueChild.ID {
+				assert.Equal(t, "new title", task.Title)
+				assert.True(t, task.StartDate.Equal(pastStart), "overdue child start_date must not be advanced on title-only update")
+			}
+			return nil
+		},
+	).MinTimes(2)
+	taskRepo.EXPECT().GetChildTasksByParentID(gomock.Any(), taskID).Return([]*models.Task{overdueChild}, nil)
+	// Must not load parent for next-occurrence advance / must not publish schedule_task.
+	taskRepo.EXPECT().GetTaskByIDWithoutStatusFilter(gomock.Any(), gomock.Any()).Times(0)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	out, err := service.UpdateTask(ctx, taskID, &models.TaskUpdateRequest{
+		Title: ptrString("new title"),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "new title", out.Title)
+	assert.Empty(t, pub.published, "overdue confirmation child must not get schedule_task on title-only update")
+	assert.True(t, overdueChild.StartDate.Equal(pastStart))
+	assert.NoError(t, mockDB.ExpectationsWereMet())
+}
+
+func TestTaskService_UpdateTask_ParentDescriptionChange_OverdueChild_DoesNotAdvanceStartDate(t *testing.T) {
+	service, taskRepo, _, _, taskHistoryRepo, _ := setup(t)
+	ctx := context.Background()
+	taskID := int64(236)
+	mu := 7
+	pub := &stubPublisher{}
+	service.producer = pub
+
+	db, mockDB, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+	mockDB.ExpectBegin()
+	mockDB.ExpectCommit()
+
+	pastStart := time.Now().UTC().Add(-48 * time.Hour)
+	parent := &models.Task{
+		ID:                     taskID,
+		UserID:                 1,
+		Title:                  "t",
+		Description:            "old desc",
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              pastStart,
+		CronExpression:         ptrString("0 9 * * *"),
+		RequiresConfirmation:   true,
+		MessengerRelatedUserID: &mu,
+	}
+	overdueChild := &models.Task{
+		ID: 1466, Title: "t", Description: "old desc", UserID: 1, ParentID: &taskID,
+		Status: string(models.TaskStatusScheduled), StartDate: pastStart,
+		MessengerRelatedUserID: &mu, RequiresConfirmation: true,
+	}
+
+	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(parent, nil)
+	taskRepo.EXPECT().GetDB().Return(sqlxDB)
+	taskRepo.EXPECT().UpdateTaskWithTx(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ *sqlx.Tx, task *models.Task) error {
+			if task.ID == overdueChild.ID {
+				assert.Equal(t, "new desc", task.Description)
+				assert.True(t, task.StartDate.Equal(pastStart), "overdue child start_date must not be advanced on description-only update")
+			}
+			return nil
+		},
+	).MinTimes(2)
+	taskRepo.EXPECT().GetChildTasksByParentID(gomock.Any(), taskID).Return([]*models.Task{overdueChild}, nil)
+	taskRepo.EXPECT().GetTaskByIDWithoutStatusFilter(gomock.Any(), gomock.Any()).Times(0)
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	out, err := service.UpdateTask(ctx, taskID, &models.TaskUpdateRequest{
+		Description: ptrString("new desc"),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "new desc", out.Description)
+	assert.Empty(t, pub.published)
+	assert.True(t, overdueChild.StartDate.Equal(pastStart))
+	assert.NoError(t, mockDB.ExpectationsWereMet())
+}
+
+func TestTaskService_UpdateTask_ParentUnmute_OverdueChild_AdvancesStartDateAndPublishes(t *testing.T) {
+	service, taskRepo, _, messengerRepo, taskHistoryRepo, _ := setup(t)
+	ctx := context.Background()
+	taskID := int64(237)
+	mu := 7
+	messengerID := int64(3)
+	pub := &stubPublisher{}
+	service.producer = pub
+
+	db, mockDB, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+	mockDB.ExpectBegin()
+	mockDB.ExpectCommit()
+
+	pastStart := time.Now().UTC().Add(-72 * time.Hour)
+	cron := "0 9 * * *"
+	parent := &models.Task{
+		ID:                     taskID,
+		UserID:                 1,
+		Title:                  "parent",
+		Description:            "d",
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              pastStart,
+		CronExpression:         &cron,
+		RequiresConfirmation:   true,
+		MessengerRelatedUserID: &mu,
+		Muted:                  true,
+	}
+	overdueChild := &models.Task{
+		ID: 1467, Title: "parent", Description: "d", UserID: 1, ParentID: &taskID,
+		Status: string(models.TaskStatusScheduled), StartDate: pastStart,
+		MessengerRelatedUserID: &mu, RequiresConfirmation: true, Muted: true,
+	}
+
+	var advancedChildStart time.Time
+	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(parent, nil)
+	taskRepo.EXPECT().GetDB().Return(sqlxDB)
+	taskRepo.EXPECT().UpdateTaskWithTx(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ *sqlx.Tx, task *models.Task) error {
+			if task.ID == overdueChild.ID {
+				assert.False(t, task.Muted)
+				if task.StartDate.After(time.Now().UTC()) {
+					advancedChildStart = task.StartDate
+				}
+			}
+			return nil
+		},
+	).MinTimes(2)
+	taskRepo.EXPECT().GetChildTasksByParentID(gomock.Any(), taskID).Return([]*models.Task{overdueChild}, nil)
+	taskRepo.EXPECT().GetTaskByIDWithoutStatusFilter(gomock.Any(), taskID).Return(&models.Task{
+		ID: taskID, CronExpression: &cron, StartDate: pastStart, RequiresConfirmation: true,
+	}, nil)
+	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), mu).Return(&models.MessengerRelatedUser{
+		ID: int64(mu), MessengerID: &messengerID, ChatID: "c1",
+	}, nil).AnyTimes()
+	messengerRepo.EXPECT().GetMessengerByID(gomock.Any(), messengerID).Return(&models.Messenger{ID: messengerID, Name: "telegram"}, nil).AnyTimes()
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	out, err := service.UpdateTask(ctx, taskID, &models.TaskUpdateRequest{
+		Muted: ptrBool(false),
+	})
+	require.NoError(t, err)
+	assert.False(t, out.Muted)
+	require.False(t, advancedChildStart.IsZero(), "unmute must advance overdue child start_date inside the transaction")
+	assert.True(t, overdueChild.StartDate.Equal(advancedChildStart))
+	require.NotEmpty(t, pub.published)
+	msg := pub.published[0].(queue.TaskMessage)
+	assert.Equal(t, "worker.schedule_task", msg.Task)
+	assert.Equal(t, overdueChild.ID, msg.Args[2])
+	startArg, ok := msg.Args[5].(*time.Time)
+	require.True(t, ok)
+	require.NotNil(t, startArg)
+	assert.True(t, startArg.After(time.Now().UTC()))
+	assert.NoError(t, mockDB.ExpectationsWereMet())
+}
+
+func TestTaskService_UpdateTask_ParentCronChange_RecalculatesChildAndPublishes(t *testing.T) {
+	service, taskRepo, _, messengerRepo, taskHistoryRepo, _ := setup(t)
+	ctx := context.Background()
+	taskID := int64(238)
+	mu := 7
+	messengerID := int64(3)
+	pub := &stubPublisher{}
+	service.producer = pub
+
+	db, mockDB, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+	mockDB.ExpectBegin()
+	mockDB.ExpectCommit()
+
+	oldCron := "0 9 * * *"
+	newCron := "0 15 * * *"
+	pastStart := time.Now().UTC().Add(-24 * time.Hour)
+	parent := &models.Task{
+		ID:                     taskID,
+		UserID:                 1,
+		Title:                  "parent",
+		Description:            "d",
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              pastStart,
+		CronExpression:         &oldCron,
+		RequiresConfirmation:   true,
+		MessengerRelatedUserID: &mu,
+	}
+	child := &models.Task{
+		ID: 1468, Title: "parent", Description: "d", UserID: 1, ParentID: &taskID,
+		Status: string(models.TaskStatusScheduled), StartDate: pastStart,
+		MessengerRelatedUserID: &mu, RequiresConfirmation: true,
+	}
+
+	var childStartAfterRecalc time.Time
+	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(parent, nil)
+	taskRepo.EXPECT().GetDB().Return(sqlxDB)
+	taskRepo.EXPECT().UpdateTaskWithTx(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ *sqlx.Tx, task *models.Task) error {
+			if task.ID == child.ID {
+				assert.True(t, task.StartDate.After(time.Now().UTC()), "cron change must recalculate child start_date to the future")
+				childStartAfterRecalc = task.StartDate
+			}
+			if task.ID == taskID {
+				require.NotNil(t, task.CronExpression)
+				assert.Equal(t, newCron, *task.CronExpression)
+			}
+			return nil
+		},
+	).MinTimes(2)
+	taskRepo.EXPECT().GetChildTasksByParentID(gomock.Any(), taskID).Return([]*models.Task{child}, nil)
+	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), mu).Return(&models.MessengerRelatedUser{
+		ID: int64(mu), MessengerID: &messengerID, ChatID: "c1",
+	}, nil).AnyTimes()
+	messengerRepo.EXPECT().GetMessengerByID(gomock.Any(), messengerID).Return(&models.Messenger{ID: messengerID, Name: "telegram"}, nil).AnyTimes()
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	out, err := service.UpdateTask(ctx, taskID, &models.TaskUpdateRequest{
+		CronExpression: ptrString(newCron),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, out.CronExpression)
+	assert.Equal(t, newCron, *out.CronExpression)
+	require.False(t, childStartAfterRecalc.IsZero())
+	require.NotEmpty(t, pub.published, "recalculated child must publish schedule_task after commit")
+	msg := pub.published[0].(queue.TaskMessage)
+	assert.Equal(t, "worker.schedule_task", msg.Task)
+	assert.Equal(t, child.ID, msg.Args[2])
+	startArg, ok := msg.Args[5].(*time.Time)
+	require.True(t, ok)
+	require.NotNil(t, startArg)
+	assert.True(t, startArg.Equal(childStartAfterRecalc))
 	assert.NoError(t, mockDB.ExpectationsWereMet())
 }
 
