@@ -1136,6 +1136,56 @@ func TestTaskService_UpdateTask_MutedSkipsSchedulePublish(t *testing.T) {
 	assert.Len(t, pub.published, 0, "muted task must not publish schedule_task on title change")
 }
 
+func TestTaskService_UpdateTask_PreRemindChangePublishesSchedule(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	taskRepo := mock_repositories.NewMockTaskRepository(ctrl)
+	userRepo := mock_repositories.NewMockUserRepository(ctrl)
+	messengerRepo := mock_repositories.NewMockMessengerRepository(ctrl)
+	taskHistoryRepo := mock_repositories.NewMockTaskHistoryRepository(ctrl)
+	pub := &stubPublisher{}
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	service := NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, pub, attachments.NewNoopClient(), NoopActivityTracker{}, false, testLogger)
+
+	ctx := context.Background()
+	taskID := int64(1)
+	mu := 5
+	pre := int64(900)
+	originalTask := &models.Task{
+		ID:                     taskID,
+		UserID:                 1,
+		Title:                  "T",
+		Description:            "d",
+		Status:                 string(models.TaskStatusScheduled),
+		StartDate:              time.Now().UTC().Add(24 * time.Hour),
+		MessengerRelatedUserID: &mu,
+		RequiresConfirmation:   false,
+	}
+	updateReq := &models.TaskUpdateRequest{PreRemindBeforeSeconds: &pre}
+
+	taskRepo.EXPECT().GetTaskByID(gomock.Any(), taskID).Return(originalTask, nil)
+	taskRepo.EXPECT().UpdateTask(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, task *models.Task) error {
+		require.NotNil(t, task.PreRemindBeforeSeconds)
+		assert.Equal(t, int64(900), *task.PreRemindBeforeSeconds)
+		return nil
+	})
+	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), mu).Return(&models.MessengerRelatedUser{
+		ID: int64(mu), MessengerID: ptrInt64(1), ChatID: "c1",
+	}, nil).AnyTimes()
+	messengerRepo.EXPECT().GetMessengerByID(gomock.Any(), int64(1)).Return(&models.Messenger{ID: 1, Name: "telegram"}, nil).AnyTimes()
+	taskHistoryRepo.EXPECT().CreateTaskHistory(gomock.Any(), gomock.Any()).Return(nil)
+
+	out, err := service.UpdateTask(ctx, taskID, updateReq)
+	require.NoError(t, err)
+	require.NotNil(t, out.PreRemindBeforeSeconds)
+	assert.Equal(t, int64(900), *out.PreRemindBeforeSeconds)
+	require.Len(t, pub.published, 1)
+	msg := pub.published[0].(queue.TaskMessage)
+	assert.Equal(t, "worker.schedule_task", msg.Task)
+	require.Len(t, msg.Args, 9)
+	assert.Equal(t, int64(900), msg.Args[8])
+}
+
 func TestTaskService_UpdateTask_RecurringPastStartDate_PublishesScheduleOnTitleChange(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
