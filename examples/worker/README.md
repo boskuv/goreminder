@@ -32,13 +32,14 @@ GoReminder API
 6. `start_date` (RFC3339 / null — may include fractional seconds)
 7. `cron_expression` (string / null) — **not** `rrule`
 8. `requires_confirmation` (bool)
+9. `pre_remind_before_seconds` (int / null) — optional; when set, also schedules `{messenger}_{task_id}_pre`
 
 **`worker.delete_task` args:**
 
 1. `task_id`
 2. `messenger_name`
 
-Job id: `{messenger_name}_{task_id}` (same as production).
+Job ids: `{messenger_name}_{task_id}` (main) and `{messenger_name}_{task_id}_pre` (preliminary). Delete removes both.
 
 **Webhook body** (when due):
 
@@ -96,7 +97,7 @@ body = {
   "args": [
     "telegram", "YOUR_CHAT_ID", 999001, "Worker smoke", "",
     (datetime.now(timezone.utc) + timedelta(seconds=15)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    None, True,
+    None, True, 900,
   ],
 }
 conn = pika.BlockingConnection(pika.URLParameters("amqp://guest:guest@localhost:5672/"))

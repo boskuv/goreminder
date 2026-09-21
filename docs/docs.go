@@ -3046,6 +3046,11 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": false
                 },
+                "pre_remind_before_seconds": {
+                    "description": "PreRemindBeforeSeconds: seconds before start_date for a preliminary reminder; omit/null = disabled.",
+                    "type": "integer",
+                    "example": 900
+                },
                 "requires_confirmation": {
                     "type": "boolean",
                     "example": true
@@ -3612,6 +3617,10 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 5
                 },
+                "pre_remind_before_seconds": {
+                    "type": "integer",
+                    "example": 900
+                },
                 "requires_confirmation": {
                     "type": "boolean",
                     "example": true
@@ -3723,6 +3732,10 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 5
                 },
+                "pre_remind_before_seconds": {
+                    "type": "integer",
+                    "example": 900
+                },
                 "requires_confirmation": {
                     "type": "boolean",
                     "example": true
@@ -3779,6 +3792,10 @@ const docTemplate = `{
                 "parent_id": {
                     "type": "integer",
                     "example": 5
+                },
+                "pre_remind_before_seconds": {
+                    "type": "integer",
+                    "example": 900
                 },
                 "requires_confirmation": {
                     "type": "boolean",
@@ -3889,6 +3906,11 @@ const docTemplate = `{
                 "muted": {
                     "type": "boolean",
                     "example": false
+                },
+                "pre_remind_before_seconds": {
+                    "description": "PreRemindBeforeSeconds: omit = no change; 0 = disable; \u003e0 = set offset in seconds before start_date.",
+                    "type": "integer",
+                    "example": 900
                 },
                 "requires_confirmation": {
                     "type": "boolean",

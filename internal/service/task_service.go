@@ -239,6 +239,12 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 			return 0, 0, errors.Wrap(errs.ErrValidation, err.Error())
 		}
 	}
+	if err := validatePreRemindBeforeSeconds(task.PreRemindBeforeSeconds); err != nil {
+		return 0, 0, errors.Wrap(errs.ErrValidation, err.Error())
+	}
+	if task.PreRemindBeforeSeconds != nil && *task.PreRemindBeforeSeconds == 0 {
+		task.PreRemindBeforeSeconds = nil
+	}
 
 	log.Debug().
 		Int64("user.id", task.UserID).
@@ -312,6 +318,7 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 			RRule:                  nil,
 			RequiresConfirmation:   task.RequiresConfirmation,
 			Muted:                  task.Muted,
+			PreRemindBeforeSeconds: clonePreRemindBeforeSeconds(task.PreRemindBeforeSeconds),
 			Status:                 string(models.TaskStatusPending),
 		}
 
@@ -515,6 +522,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	oldRequiresConfirmation := oldTask.RequiresConfirmation
 	oldFinishDate := oldTask.FinishDate
 	oldMuted := oldTask.Muted
+	oldPreRemindBeforeSeconds := oldTask.PreRemindBeforeSeconds
 
 	// Check if this was a parent task before update (recurrence + requires_confirmation)
 	wasParentTask := isRecurrenceParentWithConfirmation(oldTask)
@@ -568,6 +576,9 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	}
 	if updateRequest.Muted != nil {
 		oldTask.Muted = *updateRequest.Muted
+	}
+	if err := applyPreRemindBeforeSecondsUpdate(oldTask, updateRequest.PreRemindBeforeSeconds); err != nil {
+		return nil, errors.Wrap(errs.ErrValidation, err.Error())
 	}
 
 	if err := validateCronExpressionAndRRuleExclusive(oldTask.CronExpression, oldTask.RRule); err != nil {
@@ -677,6 +688,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 		cronExpressionChanged := recurrenceFieldChanged(updateRequest.CronExpression, oldCronExpression)
 		rruleChanged := recurrenceFieldChanged(updateRequest.RRule, oldRRule)
 		recurrenceScheduleChanged := cronExpressionChanged || rruleChanged
+		preRemindChanged := updateRequest.PreRemindBeforeSeconds != nil && !preRemindBeforeSecondsEqual(oldPreRemindBeforeSeconds, oldTask.PreRemindBeforeSeconds)
 		statusChangedToDeleted := statusChanged && oldTask.Status == string(models.TaskStatusDeleted)
 		statusChangedToScheduled := statusChanged && oldTask.Status == string(models.TaskStatusScheduled)
 
@@ -715,7 +727,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					}
 				}
 			}
-		} else if statusChangedToScheduled || titleChanged || descriptionChanged || startDateChanged || recurrenceScheduleChanged {
+		} else if statusChangedToScheduled || titleChanged || descriptionChanged || startDateChanged || recurrenceScheduleChanged || preRemindChanged {
 			// Publish schedule_task when applicable. One-time tasks with a past start_date are skipped;
 			// recurring tasks advance start_date to the next occurrence before publish (same as unmute).
 			if shouldRepublishScheduleAfterUnmute(oldTask) {
@@ -966,6 +978,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 			cronExpressionChanged := recurrenceFieldChanged(updateRequest.CronExpression, oldCronExpression)
 			rruleChanged := recurrenceFieldChanged(updateRequest.RRule, oldRRule)
 			recurrenceScheduleChanged := cronExpressionChanged || rruleChanged
+			preRemindChanged := updateRequest.PreRemindBeforeSeconds != nil && !preRemindBeforeSecondsEqual(oldPreRemindBeforeSeconds, oldTask.PreRemindBeforeSeconds)
 			finishDateChanged := (updateRequest.FinishDate != nil && oldFinishDate == nil) ||
 				(updateRequest.FinishDate == nil && oldFinishDate != nil) ||
 				(updateRequest.FinishDate != nil && oldFinishDate != nil && !updateRequest.FinishDate.Equal(*oldFinishDate))
@@ -982,6 +995,11 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 
 				if updateRequest.Muted != nil {
 					childTask.Muted = oldTask.Muted
+					childUpdated = true
+				}
+
+				if updateRequest.PreRemindBeforeSeconds != nil {
+					childTask.PreRemindBeforeSeconds = clonePreRemindBeforeSeconds(oldTask.PreRemindBeforeSeconds)
 					childUpdated = true
 				}
 
@@ -1081,8 +1099,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 						return nil, errors.WithStack(err)
 					}
 
-					// Publish update to queue if start_date, title, or description changed.
-					if startDateUpdated || titleChanged || descriptionChanged {
+					// Publish update to queue if start_date, title, description, or pre-remind changed.
+					if startDateUpdated || titleChanged || descriptionChanged || preRemindChanged {
 						if shouldRepublishScheduleAfterUnmute(childTask) {
 							if pubErr := s.publishScheduleForTaskAfterUnmute(ctx, childTask); pubErr != nil {
 								log.Error().
@@ -1268,6 +1286,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				RRule:                  nil,
 				RequiresConfirmation:   oldTask.RequiresConfirmation,
 				Muted:                  oldTask.Muted,
+				PreRemindBeforeSeconds: clonePreRemindBeforeSeconds(oldTask.PreRemindBeforeSeconds),
 				Status:                 string(models.TaskStatusScheduled),
 			}
 
@@ -1315,16 +1334,17 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 								// Don't fail the operation, just log the error
 							} else {
 								event := queue.TaskEvent{
-									Type:                 queue.TaskEventSchedule,
-									TaskID:               childTaskID,
-									UserID:               childTask.UserID,
-									MessengerName:        messengerName,
-									ChatID:               messengerRelatedUser.ChatID,
-									Title:                childTask.Title,
-									Description:          childTask.Description,
-									StartDate:            &childTask.StartDate,
-									CronExpression:       childTask.CronExpression,
-									RequiresConfirmation: childTask.RequiresConfirmation,
+									Type:                   queue.TaskEventSchedule,
+									TaskID:                 childTaskID,
+									UserID:                 childTask.UserID,
+									MessengerName:          messengerName,
+									ChatID:                 messengerRelatedUser.ChatID,
+									Title:                  childTask.Title,
+									Description:            childTask.Description,
+									StartDate:              &childTask.StartDate,
+									CronExpression:         childTask.CronExpression,
+									RequiresConfirmation:   childTask.RequiresConfirmation,
+									PreRemindBeforeSeconds: childTask.PreRemindBeforeSeconds,
 								}
 
 								childTask.ID = childTaskID
@@ -1398,7 +1418,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	hasOtherChanges := updateRequest.Title != nil || updateRequest.Description != nil ||
 		updateRequest.StartDate != nil || updateRequest.FinishDate != nil ||
 		updateRequest.CronExpression != nil || updateRequest.RRule != nil || updateRequest.RequiresConfirmation != nil ||
-		updateRequest.Muted != nil
+		updateRequest.Muted != nil || updateRequest.PreRemindBeforeSeconds != nil
 
 	newTaskMap := s.taskToMap(oldTask)
 	updateChangedFields := changedFieldsFromMaps(oldTaskMap, newTaskMap)
@@ -1830,16 +1850,17 @@ func (s *TaskService) buildScheduleTaskEvent(ctx context.Context, task *models.T
 	}
 
 	return queue.TaskEvent{
-		Type:                 queue.TaskEventSchedule,
-		TaskID:               task.ID,
-		UserID:               task.UserID,
-		MessengerName:        messengerName,
-		ChatID:               messengerRelatedUser.ChatID,
-		Title:                task.Title,
-		Description:          task.Description,
-		StartDate:            &task.StartDate,
-		CronExpression:       task.CronExpression,
-		RequiresConfirmation: task.RequiresConfirmation,
+		Type:                   queue.TaskEventSchedule,
+		TaskID:                 task.ID,
+		UserID:                 task.UserID,
+		MessengerName:          messengerName,
+		ChatID:                 messengerRelatedUser.ChatID,
+		Title:                  task.Title,
+		Description:            task.Description,
+		StartDate:              &task.StartDate,
+		CronExpression:         task.CronExpression,
+		RequiresConfirmation:   task.RequiresConfirmation,
+		PreRemindBeforeSeconds: task.PreRemindBeforeSeconds,
 	}, nil
 }
 
@@ -2195,6 +2216,7 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 					RRule:                  nil,
 					RequiresConfirmation:   parentTask.RequiresConfirmation,
 					Muted:                  parentTask.Muted,
+					PreRemindBeforeSeconds: clonePreRemindBeforeSeconds(parentTask.PreRemindBeforeSeconds),
 					Status:                 string(models.TaskStatusScheduled),
 				}
 
@@ -2235,16 +2257,17 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 									Msg("failed to get messenger name for child task queue publish")
 							} else {
 								event := queue.TaskEvent{
-									Type:                 queue.TaskEventSchedule,
-									TaskID:               childTaskID,
-									UserID:               childTask.UserID,
-									MessengerName:        messengerName,
-									ChatID:               messengerRelatedUser.ChatID,
-									Title:                childTask.Title,
-									Description:          childTask.Description,
-									StartDate:            &childTask.StartDate,
-									CronExpression:       childTask.CronExpression,
-									RequiresConfirmation: childTask.RequiresConfirmation,
+									Type:                   queue.TaskEventSchedule,
+									TaskID:                 childTaskID,
+									UserID:                 childTask.UserID,
+									MessengerName:          messengerName,
+									ChatID:                 messengerRelatedUser.ChatID,
+									Title:                  childTask.Title,
+									Description:            childTask.Description,
+									StartDate:              &childTask.StartDate,
+									CronExpression:         childTask.CronExpression,
+									RequiresConfirmation:   childTask.RequiresConfirmation,
+									PreRemindBeforeSeconds: childTask.PreRemindBeforeSeconds,
 								}
 								childTask.ID = childTaskID
 								pubErr = s.publishTaskEvent(ctx, childTask, event)
@@ -2623,6 +2646,9 @@ func (s *TaskService) taskToMap(task *models.Task) map[string]interface{} {
 	if task.ParentID != nil {
 		result["parent_id"] = *task.ParentID
 	}
+	if task.PreRemindBeforeSeconds != nil {
+		result["pre_remind_before_seconds"] = *task.PreRemindBeforeSeconds
+	}
 
 	return result
 }
@@ -2765,16 +2791,17 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 		return errors.WithStack(err)
 	}
 	event := queue.TaskEvent{
-		Type:                 queue.TaskEventSchedule,
-		TaskID:               task.ID,
-		UserID:               task.UserID,
-		MessengerName:        messengerName,
-		ChatID:               messengerRelatedUser.ChatID,
-		Title:                task.Title,
-		Description:          task.Description,
-		StartDate:            &newStartDate,
-		CronExpression:       nil,
-		RequiresConfirmation: task.RequiresConfirmation,
+		Type:                   queue.TaskEventSchedule,
+		TaskID:                 task.ID,
+		UserID:                 task.UserID,
+		MessengerName:          messengerName,
+		ChatID:                 messengerRelatedUser.ChatID,
+		Title:                  task.Title,
+		Description:            task.Description,
+		StartDate:              &newStartDate,
+		CronExpression:         nil,
+		RequiresConfirmation:   task.RequiresConfirmation,
+		PreRemindBeforeSeconds: task.PreRemindBeforeSeconds,
 	}
 
 	// Publish to queue - if this fails, we don't reschedule

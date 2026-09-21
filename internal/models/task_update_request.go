@@ -11,6 +11,8 @@ type TaskUpdateRequest struct {
 	FinishDate           *time.Time `json:"finish_date,omitempty"`
 	CronExpression       *string    `json:"cron_expression,omitempty"`
 	RRule                *string    `json:"rrule,omitempty"`
-	RequiresConfirmation *bool      `json:"requires_confirmation,omitempty"`
-	Muted                *bool      `json:"muted,omitempty"`
+	RequiresConfirmation   *bool      `json:"requires_confirmation,omitempty"`
+	Muted                  *bool      `json:"muted,omitempty"`
+	// PreRemindBeforeSeconds: omit = no change; 0 = clear; >0 = set offset in seconds.
+	PreRemindBeforeSeconds *int64 `json:"pre_remind_before_seconds,omitempty"`
 }

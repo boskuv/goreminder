@@ -18,6 +18,7 @@ func CreateTaskRequestToModel(req *dto.CreateTaskRequest) *models.Task {
 		RRule:                  req.RRule,
 		RequiresConfirmation:   req.RequiresConfirmation,
 		Muted:                  req.Muted,
+		PreRemindBeforeSeconds: normalizePreRemindBeforeSeconds(req.PreRemindBeforeSeconds),
 		Status:                 req.Status,
 	}
 	if task.Status == "" {
@@ -29,15 +30,16 @@ func CreateTaskRequestToModel(req *dto.CreateTaskRequest) *models.Task {
 // UpdateTaskRequestToModel converts UpdateTaskRequest DTO to models.TaskUpdateRequest
 func UpdateTaskRequestToModel(req *dto.UpdateTaskRequest) *models.TaskUpdateRequest {
 	return &models.TaskUpdateRequest{
-		Title:                req.Title,
-		Description:          req.Description,
-		Status:               req.Status,
-		StartDate:            req.StartDate,
-		FinishDate:           req.FinishDate,
-		CronExpression:       req.CronExpression,
-		RRule:                req.RRule,
-		RequiresConfirmation: req.RequiresConfirmation,
-		Muted:                req.Muted,
+		Title:                  req.Title,
+		Description:            req.Description,
+		Status:                 req.Status,
+		StartDate:              req.StartDate,
+		FinishDate:             req.FinishDate,
+		CronExpression:         req.CronExpression,
+		RRule:                  req.RRule,
+		RequiresConfirmation:   req.RequiresConfirmation,
+		Muted:                  req.Muted,
+		PreRemindBeforeSeconds: req.PreRemindBeforeSeconds,
 	}
 }
 
@@ -56,6 +58,7 @@ func TaskModelToResponse(task *models.Task) *dto.TaskResponse {
 		RRule:                  task.RRule,
 		RequiresConfirmation:   task.RequiresConfirmation,
 		Muted:                  task.Muted,
+		PreRemindBeforeSeconds: task.PreRemindBeforeSeconds,
 		Status:                 task.Status,
 		CreatedAt:              task.CreatedAt,
 	}
@@ -76,6 +79,7 @@ func TaskModelToMarkedDoneResponse(task *models.Task) *dto.TaskMarkedDoneRespons
 		RRule:                  task.RRule,
 		RequiresConfirmation:   task.RequiresConfirmation,
 		Muted:                  task.Muted,
+		PreRemindBeforeSeconds: task.PreRemindBeforeSeconds,
 		CreatedAt:              task.CreatedAt,
 	}
 }
@@ -96,6 +100,7 @@ func TaskModelToDetailResponse(task *models.Task, attachments []dto.AttachmentRe
 		RRule:                  base.RRule,
 		RequiresConfirmation:   base.RequiresConfirmation,
 		Muted:                  base.Muted,
+		PreRemindBeforeSeconds: base.PreRemindBeforeSeconds,
 		Status:                 base.Status,
 		CreatedAt:              base.CreatedAt,
 		Attachments:            attachments,
@@ -118,4 +123,12 @@ func QueueTaskRequestToModel(req *dto.QueueTaskRequest) *models.ScheduledTask {
 		QueueName: req.QueueName,
 		TaskID:    req.TaskID,
 	}
+}
+
+// normalizePreRemindBeforeSeconds treats 0 as unset (nil) on create.
+func normalizePreRemindBeforeSeconds(v *int64) *int64 {
+	if v == nil || *v <= 0 {
+		return nil
+	}
+	return v
 }

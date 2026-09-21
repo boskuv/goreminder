@@ -19,7 +19,7 @@ func schemaTestDBReady(db *sqlx.DB) bool {
 	var n int
 	if err := db.Get(&n, `
 		SELECT count(*)::int FROM information_schema.columns
-		WHERE table_schema = 'public' AND table_name = 'tasks' AND column_name = 'rrule'`); err != nil || n == 0 {
+		WHERE table_schema = 'public' AND table_name = 'tasks' AND column_name = 'pre_remind_before_seconds'`); err != nil || n == 0 {
 		return false
 	}
 	if err := db.Get(&n, `
@@ -37,14 +37,14 @@ func TestTableSchemasMatchModels(t *testing.T) {
 			expectedColumns: []string{
 				"id", "title", "description", "user_id", "messenger_related_user_id",
 				"parent_id", "start_date", "finish_date", "cron_expression", "rrule",
-				"requires_confirmation", "muted", "status", "created_at", "updated_at", "deleted_at",
+				"requires_confirmation", "muted", "pre_remind_before_seconds", "status", "created_at", "updated_at", "deleted_at",
 			},
 		},
 		{
 			tableName: "users",
 			expectedColumns: []string{
 				"id", "name", "email", "password_hash", "timezone", "language_code", "role",
-				"created_at", "updated_at", "deleted_at",
+				"last_activity_at", "created_at", "updated_at", "deleted_at",
 			},
 		},
 		{

@@ -16,12 +16,18 @@ log = logging.getLogger("goreminder-worker.webhook")
 def build_payload(job: dict[str, Any]) -> dict[str, Any]:
     title = str(job.get("task_title") or "").replace("🔔", "").strip()
     task_id = job.get("task_id")
+    is_pre = bool(job.get("is_pre_remind"))
+    if is_pre:
+        text = f"⏳ Скоро: {title}" if title else "⏳ Скоро напоминание"
+    else:
+        text = f"🔔 {title}" if title else "🔔 reminder"
     payload: dict[str, Any] = {
         "chat_id": str(job.get("chat_id") or ""),
-        "text": f"🔔 {title}" if title else "🔔 reminder",
+        "text": text,
         "task_id": task_id,
     }
-    if job.get("requires_confirmation"):
+    # Pre-remind never includes done/later buttons.
+    if job.get("requires_confirmation") and not is_pre:
         payload["reply_markup"] = {
             "inline_keyboard": [
                 [
@@ -36,8 +42,9 @@ def build_payload(job: dict[str, Any]) -> dict[str, Any]:
 def send_reminder(job: dict[str, Any], *, webhook_url: str = WEBHOOK_URL) -> bool:
     chat_id = str(job.get("chat_id") or "")
     task_id = job.get("task_id")
+    kind = "pre" if job.get("is_pre_remind") else "main"
     r = redis.Redis.from_url(REDIS_URL, decode_responses=True)
-    cache_key = f"anti_dupe:{chat_id}:{task_id or job.get('task_title')}"
+    cache_key = f"anti_dupe:{chat_id}:{task_id or job.get('task_title')}:{kind}"
     if not r.set(cache_key, "1", ex=ANTI_DUPE_TTL, nx=True):
         log.warning("skip duplicate send key=%s", cache_key)
         return True
@@ -52,13 +59,20 @@ def send_reminder(job: dict[str, Any], *, webhook_url: str = WEBHOOK_URL) -> boo
         )
         resp.raise_for_status()
         log.info(
-            "webhook ok chat_id=%s task_id=%s status=%s",
+            "webhook ok chat_id=%s task_id=%s kind=%s status=%s",
             chat_id,
             task_id,
+            kind,
             resp.status_code,
         )
         return True
     except Exception:
         r.delete(cache_key)
-        log.exception("webhook failed chat_id=%s task_id=%s url=%s", chat_id, task_id, webhook_url)
+        log.exception(
+            "webhook failed chat_id=%s task_id=%s kind=%s url=%s",
+            chat_id,
+            task_id,
+            kind,
+            webhook_url,
+        )
         raise

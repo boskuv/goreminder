@@ -105,6 +105,7 @@ class GoReminderClient:
         rrule: Optional[str] = None,
         requires_confirmation: bool = False,
         muted: bool = False,
+        pre_remind_before_seconds: Optional[int] = None,
         status: Optional[str] = None,
     ) -> JsonDict:
         """POST /tasks → {"id": int, "child_id": int}."""
@@ -125,6 +126,8 @@ class GoReminderClient:
             data["requires_confirmation"] = True
         if muted:
             data["muted"] = True
+        if pre_remind_before_seconds is not None:
+            data["pre_remind_before_seconds"] = pre_remind_before_seconds
         if status is not None:
             data["status"] = status
         return self._make_request("POST", "/tasks", data=data)  # type: ignore[return-value]
@@ -182,6 +185,7 @@ class GoReminderClient:
         finish_date: Optional[datetime] = None,
         requires_confirmation: Optional[bool] = None,
         muted: Optional[bool] = None,
+        pre_remind_before_seconds: Optional[int] = None,
         cron_expression: Optional[str] = None,
         rrule: Optional[str] = None,
     ) -> JsonDict:
@@ -200,6 +204,8 @@ class GoReminderClient:
             data["requires_confirmation"] = requires_confirmation
         if muted is not None:
             data["muted"] = muted
+        if pre_remind_before_seconds is not None:
+            data["pre_remind_before_seconds"] = pre_remind_before_seconds
         if cron_expression is not None:
             data["cron_expression"] = cron_expression
         if rrule is not None:

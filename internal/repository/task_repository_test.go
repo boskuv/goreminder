@@ -38,16 +38,16 @@ func TestTaskRepository_GetTaskByID_Success(t *testing.T) {
 	rows := sqlmock.NewRows([]string{
 		"id", "title", "description", "user_id", "messenger_related_user_id", "parent_id",
 		"start_date", "finish_date", "cron_expression", "rrule", "status", "created_at",
-		"requires_confirmation", "muted",
+		"requires_confirmation", "muted", "pre_remind_before_seconds",
 	}).AddRow(
 		int64(1), "t", "d", int64(10), nil, nil,
 		now, nil, nil, nil, "scheduled", now,
-		false, false,
+		false, false, nil,
 	)
 
 	// Match soft-delete + id + status <> done filters from GetTaskByID.
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted FROM tasks WHERE deleted_at IS NULL AND id = $1 AND status <> $2`,
+		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted, pre_remind_before_seconds FROM tasks WHERE deleted_at IS NULL AND id = $1 AND status <> $2`,
 	)).WithArgs(int64(1), "done").WillReturnRows(rows)
 
 	task, err := repo.GetTaskByID(context.Background(), 1)
@@ -87,15 +87,15 @@ func TestTaskRepository_GetAllTasks_AppliesStatusFilterAndPagination(t *testing.
 
 	// Data query with ORDER BY / LIMIT / OFFSET (page=2, pageSize=10 → offset 10).
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted FROM tasks WHERE deleted_at IS NULL AND status = $1 ORDER BY created_at DESC LIMIT 10 OFFSET 10`,
+		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted, pre_remind_before_seconds FROM tasks WHERE deleted_at IS NULL AND status = $1 ORDER BY created_at DESC LIMIT 10 OFFSET 10`,
 	)).WithArgs(status).WillReturnRows(sqlmock.NewRows([]string{
 		"id", "title", "description", "user_id", "messenger_related_user_id", "parent_id",
 		"start_date", "finish_date", "cron_expression", "rrule", "status", "created_at",
-		"requires_confirmation", "muted",
+		"requires_confirmation", "muted", "pre_remind_before_seconds",
 	}).AddRow(
 		int64(11), "paged", "d", int64(1), nil, nil,
 		now, nil, nil, nil, status, now,
-		false, false,
+		false, false, nil,
 	))
 
 	tasks, total, err := repo.GetAllTasks(
@@ -131,15 +131,15 @@ func TestTaskRepository_GetTaskByIDWithoutStatusFilter_AllowsDone(t *testing.T) 
 
 	now := time.Now().UTC().Truncate(time.Second)
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted FROM tasks WHERE deleted_at IS NULL AND id = $1`,
+		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted, pre_remind_before_seconds FROM tasks WHERE deleted_at IS NULL AND id = $1`,
 	)).WithArgs(int64(2)).WillReturnRows(sqlmock.NewRows([]string{
 		"id", "title", "description", "user_id", "messenger_related_user_id", "parent_id",
 		"start_date", "finish_date", "cron_expression", "rrule", "status", "created_at",
-		"requires_confirmation", "muted",
+		"requires_confirmation", "muted", "pre_remind_before_seconds",
 	}).AddRow(
 		int64(2), "done-task", "d", int64(1), nil, nil,
 		now, &now, nil, nil, "done", now,
-		false, false,
+		false, false, nil,
 	))
 
 	task, err := repo.GetTaskByIDWithoutStatusFilter(context.Background(), 2)
@@ -164,10 +164,10 @@ func TestTaskRepository_CreateTask_ReturnsID(t *testing.T) {
 	}
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`INSERT INTO tasks (title,description,user_id,messenger_related_user_id,status,parent_id,start_date,finish_date,cron_expression,rrule,requires_confirmation,muted) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+		`INSERT INTO tasks (title,description,user_id,messenger_related_user_id,status,parent_id,start_date,finish_date,cron_expression,rrule,requires_confirmation,muted,pre_remind_before_seconds) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
 	)).WithArgs(
 		task.Title, task.Description, task.UserID, nil, task.Status, nil,
-		task.StartDate, nil, nil, nil, false, false,
+		task.StartDate, nil, nil, nil, false, false, nil,
 	).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(77)))
 
 	id, err := repo.CreateTask(context.Background(), task)
@@ -203,11 +203,11 @@ func TestTaskRepository_GetAllTasks_UserAndDateFilters(t *testing.T) {
 	)).WithArgs(from, to, userID).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted FROM tasks WHERE deleted_at IS NULL AND start_date >= $1 AND start_date <= $2 AND user_id = $3 ORDER BY created_at DESC LIMIT 50 OFFSET 0`,
+		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted, pre_remind_before_seconds FROM tasks WHERE deleted_at IS NULL AND start_date >= $1 AND start_date <= $2 AND user_id = $3 ORDER BY created_at DESC LIMIT 50 OFFSET 0`,
 	)).WithArgs(from, to, userID).WillReturnRows(sqlmock.NewRows([]string{
 		"id", "title", "description", "user_id", "messenger_related_user_id", "parent_id",
 		"start_date", "finish_date", "cron_expression", "rrule", "status", "created_at",
-		"requires_confirmation", "muted",
+		"requires_confirmation", "muted", "pre_remind_before_seconds",
 	}))
 
 	tasks, total, err := repo.GetAllTasks(
