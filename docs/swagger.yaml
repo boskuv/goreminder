@@ -206,6 +206,11 @@ definitions:
       muted:
         example: false
         type: boolean
+      pre_remind_before_seconds:
+        description: 'PreRemindBeforeSeconds: seconds before start_date for a preliminary
+          reminder; omit/null = disabled.'
+        example: 900
+        type: integer
       requires_confirmation:
         example: true
         type: boolean
@@ -611,6 +616,9 @@ definitions:
       parent_id:
         example: 5
         type: integer
+      pre_remind_before_seconds:
+        example: 900
+        type: integer
       requires_confirmation:
         example: true
         type: boolean
@@ -695,6 +703,9 @@ definitions:
       parent_id:
         example: 5
         type: integer
+      pre_remind_before_seconds:
+        example: 900
+        type: integer
       requires_confirmation:
         example: true
         type: boolean
@@ -736,6 +747,9 @@ definitions:
         type: boolean
       parent_id:
         example: 5
+        type: integer
+      pre_remind_before_seconds:
+        example: 900
         type: integer
       requires_confirmation:
         example: true
@@ -818,6 +832,11 @@ definitions:
       muted:
         example: false
         type: boolean
+      pre_remind_before_seconds:
+        description: 'PreRemindBeforeSeconds: omit = no change; 0 = disable; >0 =
+          set offset in seconds before start_date.'
+        example: 900
+        type: integer
       requires_confirmation:
         example: true
         type: boolean

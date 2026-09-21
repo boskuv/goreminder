@@ -17,7 +17,7 @@
 |---|---|
 | **Start here** | [Features](#business-features) · [Prerequisites](#prerequisites) · [Quick start](#setup-instructions) |
 | **Reference** | [Configuration](#configuration) · [API](#api-documentation) · [Filtering](#filtering-and-ordering) |
-| **Domain** | [Muting](#task-muting-muted) · [Task types](#task-types) · [Schema](#database-schema) |
+| **Domain** | [Muting](#task-muting-muted) · [Pre-remind](#pre-remind-pre_remind_before_seconds) · [Task types](#task-types) · [Schema](#database-schema) |
 | **Dev** | [Testing](#testing) · [Development](#development) · [Architecture](#architecture) |
 
 > Long sections (schema, full config, middleware, curl examples, …) are folded behind **Expand** / summary toggles.
@@ -30,7 +30,7 @@
 - [x] **Task Muting**: Per-task silence for the worker queue (see [Task muting (`muted`)](#task-muting-muted)).
 - [ ] **Reminder Groups**: Group related tasks together for batch management
 - [ ] **ICS Import**: Import tasks from iCalendar (.ics) files
-- [ ] **Advanced Reminders**: Pre-reminders before task deadlines
+- [x] **Advanced Reminders**: Optional preliminary reminder before `start_date` (`pre_remind_before_seconds`; see [Pre-remind](#pre-remind-pre_remind_before_seconds)).
 
 ## Tech Features
 - **Task Management**: Create, fetch, update, and delete tasks with soft delete support
@@ -108,12 +108,13 @@ The API publishes messages to RabbitMQ using a simple, Celery-style JSON contrac
     "<description>",
     "<start_date>",
     "<cron_expression|null>",
-    "<requires_confirmation>"
+    "<requires_confirmation>",
+    "<pre_remind_before_seconds|null>"
   ]
 }
 ```
 
-This payload is represented in code by the low-level `queue.TaskMessage` struct and is sent via the `queue.Publisher` interface. At the domain level, task messages are modeled as `queue.TaskEvent` with a `TaskEventType` (`schedule_task`, `delete_task`, etc.), which are mapped to the Celery-style JSON. The seventh argument still reflects the task row’s `cron_expression` only; executable child tasks usually have both `cron_expression` and `rrule` unset, with the parent holding `rrule` in the database. Workers that need the RRULE string should resolve it via `task_id` (for example from the API or DB). For deployments that should not use RabbitMQ, set `producer.enabled: false` in the config – the application will then use a no-op publisher and work purely at the database level.
+This payload is represented in code by the low-level `queue.TaskMessage` struct and is sent via the `queue.Publisher` interface. At the domain level, task messages are modeled as `queue.TaskEvent` with a `TaskEventType` (`schedule_task`, `delete_task`, etc.), which are mapped to the Celery-style JSON. The seventh argument still reflects the task row’s `cron_expression` only; executable child tasks usually have both `cron_expression` and `rrule` unset, with the parent holding `rrule` in the database. Workers that need the RRULE string should resolve it via `task_id` (for example from the API or DB). The ninth argument is optional preliminary-reminder offset in seconds (`null` when unset); sample worker schedules a separate `{messenger}_{task_id}_pre` job. For deployments that should not use RabbitMQ, set `producer.enabled: false` in the config – the application will then use a no-op publisher and work purely at the database level.
 
 `internal/models.ScheduledTask` uses explicit action values (`"schedule"`, `"delete"`) via `ScheduledTaskActionSchedule` and `ScheduledTaskActionDelete` constants, which are dispatched in `TaskService.QueueTask` and converted into `queue.TaskEvent` instances before publishing.
 
@@ -169,6 +170,7 @@ erDiagram
         text rrule
         boolean requires_confirmation
         boolean muted
+        bigint pre_remind_before_seconds
         varchar status
         timestamp created_at
         timestamp updated_at
@@ -834,6 +836,23 @@ For recurring **parents** with `requires_confirmation`, mute/unmute can propagat
 </details>
 
 <details>
+<summary><strong>Pre-remind (`pre_remind_before_seconds`)</strong></summary>
+
+## Pre-remind (`pre_remind_before_seconds`)
+
+Optional **preliminary reminder** fired before the main `start_date`. Stored as nullable `BIGINT` seconds on `tasks.pre_remind_before_seconds` (`NULL` = disabled). Max **30 days**.
+
+| Mechanism | Behavior |
+|-----------|----------|
+| **JSON** | Optional `pre_remind_before_seconds` on create/update. Responses include the field when set. Update with `0` clears it. |
+| **Children** | Recurrence children inherit the parent’s offset on create; parent updates propagate to active children. |
+| **Queue** | 9th argument of `worker.schedule_task` (integer seconds or `null`). Changing the offset (or `start_date` / recurrence) republishes schedule so the worker recalculates both jobs. |
+| **Worker** | Main job id `{messenger}_{task_id}`; pre job `{messenger}_{task_id}_pre` at `start_date − offset`. Pre webhook text uses `⏳` and has **no** done/later buttons. `delete_task` removes both. If pre fire time is already past at schedule time, the pre job is skipped/removed. |
+| **Mute** | Same as main: while muted, no `schedule_task`; `delete_task` clears both jobs. |
+
+</details>
+
+<details>
 <summary><strong>Task Types & reschedule / done behavior</strong></summary>
 
 ## Task Types
@@ -848,6 +867,7 @@ GoReminder supports two types of tasks: **one-time tasks** and **recurring tasks
 | `requires_confirmation` | `true` | `true` or `false` | `true` only |
 | `parent_id` | `null` | `null` | Points to parent task ID |
 | `muted` | Optional; while `true`, new `worker.schedule_task` messages are not enqueued (row still updated; `delete_task` still sent when required). | Same | Same |
+| `pre_remind_before_seconds` | Optional offset before `start_date` for a preliminary reminder | Inherited by children | Copied from parent |
 | Execution | Executes once at `start_date` | Does not execute directly | Executes at calculated `start_date` |
 | Auto-creates child | No | Yes (on creation and when child is done) | No |
 
