@@ -26,7 +26,9 @@ import (
 	"github.com/boskuv/goreminder/pkg/args"
 	"github.com/boskuv/goreminder/pkg/attachments"
 	"github.com/boskuv/goreminder/pkg/config"
+	tokencrypto "github.com/boskuv/goreminder/pkg/crypto"
 	"github.com/boskuv/goreminder/pkg/database"
+	"github.com/boskuv/goreminder/pkg/googlecalendar"
 	"github.com/boskuv/goreminder/pkg/logger"
 	"github.com/boskuv/goreminder/pkg/observability"
 	"github.com/boskuv/goreminder/pkg/queue"
@@ -142,6 +144,11 @@ func main() {
 	backlogRepo := repository.NewBacklogRepository(db, log)
 	targetRepo := repository.NewTargetRepository(db, log)
 	digestSettingsRepo := repository.NewDigestSettingsRepository(db, log)
+	taskGroupRepo := repository.NewTaskGroupRepository(db, log)
+	googleAccountRepo := repository.NewGoogleAccountRepository(db, log)
+	calendarBindingRepo := repository.NewCalendarBindingRepository(db, log)
+	taskSyncLinkRepo := repository.NewTaskSyncLinkRepository(db, log)
+	syncOutboxRepo := repository.NewSyncOutboxRepository(db, log)
 
 	// producer init (can be disabled via configuration for DB-only mode)
 	var publisher queue.Publisher
@@ -210,17 +217,54 @@ func main() {
 	messengerService := service.NewMessengerService(messengerRepo, userRepo, activityTracker, log)
 	backlogService := service.NewBacklogService(backlogRepo, userRepo, messengerRepo, activityTracker, log)
 	targetService := service.NewTargetService(targetRepo, userRepo, messengerRepo, activityTracker, log)
+	taskGroupService := service.NewTaskGroupService(taskGroupRepo, userRepo, activityTracker, log)
 	digestService := service.NewDigestService(digestSettingsRepo, backlogRepo, targetRepo, taskRepo, userRepo, messengerRepo, publisher, activityTracker, log)
+
+	var calendarSyncService *service.CalendarSyncService
+	var calendarHandler *handlers.CalendarHandler
+	if cfg.GoogleCalendar.Enabled {
+		cipher, err := tokencrypto.NewTokenCipher(cfg.GoogleCalendar.TokenEncryptionKey)
+		if err != nil {
+			log.Fatal().Stack().Err(err).Msg("failed to create token cipher for google calendar")
+		}
+		oauthCfg := googlecalendar.NewOAuthConfig(
+			cfg.GoogleCalendar.ClientID,
+			cfg.GoogleCalendar.ClientSecret,
+			cfg.GoogleCalendar.RedirectURL,
+		)
+		calendarSyncService = service.NewCalendarSyncService(
+			cfg.GoogleCalendar,
+			oauthCfg,
+			cipher,
+			googlecalendar.DefaultClientFactory(oauthCfg),
+			googleAccountRepo,
+			calendarBindingRepo,
+			taskSyncLinkRepo,
+			syncOutboxRepo,
+			taskRepo,
+			userRepo,
+			log,
+		)
+		taskService.SetCalendarExportHook(calendarSyncService)
+		calendarHandler = handlers.NewCalendarHandler(calendarSyncService, log)
+		log.Info().Msg("google calendar integration enabled")
+	} else {
+		log.Info().Msg("google calendar integration disabled")
+	}
 
 	// setup scheduler
 	taskScheduler := service.NewTaskScheduler(taskRepo, taskService, log)
 
 	// initialize handlers
 	taskHandler := handlers.NewTaskHandler(taskService, attClient, cfg.Attachments.Enabled, log)
+	if calendarSyncService != nil {
+		taskHandler.SetCalendarService(calendarSyncService)
+	}
 	userHandler := handlers.NewUserHandler(userService, log)
 	messengerHandler := handlers.NewMessengerHandler(messengerService, log)
 	backlogHandler := handlers.NewBacklogHandler(backlogService, log)
 	targetHandler := handlers.NewTargetHandler(targetService, log)
+	taskGroupHandler := handlers.NewTaskGroupHandler(taskGroupService, log)
 	digestHandler := handlers.NewDigestHandler(digestService, log)
 	directMax := cfg.Attachments.DirectUploadMaxBytes
 	if directMax <= 0 {
@@ -310,8 +354,16 @@ func main() {
 		router.Use(middleware.TracingMiddleware(cfg.Tracing.ServiceName))
 	}
 
+	// 7. Optional API key gate for calendar-related endpoints (and whole API when enabled)
+	if cfg.GoogleCalendar.APIKeyEnabled {
+		router.Use(middleware.APIKeyMiddleware(middleware.APIKeyConfig{
+			Enabled: true,
+			APIKey:  cfg.GoogleCalendar.APIKey,
+		}))
+	}
+
 	// register application routes
-	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler, backlogHandler, targetHandler, digestHandler, attachmentHandler)
+	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler, backlogHandler, targetHandler, digestHandler, attachmentHandler, taskGroupHandler, calendarHandler)
 	routes.RegisterSystemRoutes(router, appVersion)
 
 	log.Info().Msg("graceful startup")
@@ -332,6 +384,16 @@ func main() {
 			Msg("task scheduler started")
 	} else {
 		log.Info().Msg("task scheduler disabled (autoreschedule.enabled = false)")
+	}
+
+	// start calendar sync scheduler when integration is enabled
+	if calendarSyncService != nil {
+		syncInterval, err := time.ParseDuration(cfg.GoogleCalendar.SyncInterval)
+		if err != nil {
+			syncInterval = 5 * time.Minute
+		}
+		calScheduler := service.NewCalendarSyncScheduler(calendarSyncService, syncInterval, log)
+		go calScheduler.Start(ctx)
 	}
 
 	// start server

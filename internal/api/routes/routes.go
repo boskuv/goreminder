@@ -7,7 +7,7 @@ import (
 )
 
 // RegisterRoutes registers all API routes
-func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userHandler *handlers.UserHandler, messengerHandler *handlers.MessengerHandler, backlogHandler *handlers.BacklogHandler, targetHandler *handlers.TargetHandler, digestHandler *handlers.DigestHandler, attachmentHandler *handlers.AttachmentHandler) {
+func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userHandler *handlers.UserHandler, messengerHandler *handlers.MessengerHandler, backlogHandler *handlers.BacklogHandler, targetHandler *handlers.TargetHandler, digestHandler *handlers.DigestHandler, attachmentHandler *handlers.AttachmentHandler, taskGroupHandler *handlers.TaskGroupHandler, calendarHandler *handlers.CalendarHandler) {
 	api := router.Group("/api/v1")
 	{
 		// Task routes
@@ -65,6 +65,13 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 		api.PUT("/targets/:id", targetHandler.UpdateTarget)
 		api.DELETE("/targets/:id", targetHandler.DeleteTarget)
 
+		// Task group routes
+		api.GET("/task-groups", taskGroupHandler.GetAllTaskGroups)
+		api.POST("/task-groups", taskGroupHandler.CreateTaskGroup)
+		api.GET("/task-groups/:id", taskGroupHandler.GetTaskGroup)
+		api.PUT("/task-groups/:id", taskGroupHandler.UpdateTaskGroup)
+		api.DELETE("/task-groups/:id", taskGroupHandler.DeleteTaskGroup)
+
 		// Digest routes
 		api.GET("/digests", digestHandler.GetDigest)
 		api.POST("/digests/settings", digestHandler.CreateDigestSettings)
@@ -72,5 +79,19 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 		api.PUT("/digests/settings", digestHandler.UpdateDigestSettings)
 		api.DELETE("/digests/settings", digestHandler.DeleteDigestSettings)
 		api.GET("/digests/settings/all", digestHandler.GetAllDigestSettings)
+
+		// Google Calendar routes (handler may be nil when disabled)
+		if calendarHandler != nil {
+			api.GET("/calendar/oauth/callback", calendarHandler.OAuthCallback)
+			api.GET("/users/:user_id/calendar/oauth/start", calendarHandler.StartOAuth)
+			api.GET("/users/:user_id/calendar/calendars", calendarHandler.ListCalendars)
+			api.GET("/users/:user_id/calendar/bindings", calendarHandler.ListBindings)
+			api.POST("/users/:user_id/calendar/bindings", calendarHandler.CreateBinding)
+			api.DELETE("/users/:user_id/calendar/bindings/:binding_id", calendarHandler.DeleteBinding)
+			api.POST("/users/:user_id/calendar/bindings/:binding_id/sync", calendarHandler.ForceSync)
+			api.DELETE("/users/:user_id/calendar/disconnect", calendarHandler.Disconnect)
+			api.POST("/tasks/:id/calendar/export", calendarHandler.EnableTaskExport)
+			api.GET("/tasks/:id/calendar/external", calendarHandler.GetTaskExternal)
+		}
 	}
 }

@@ -57,7 +57,7 @@ func (s *stubTaskService) GetTask(ctx context.Context, taskID int64) (*models.Ta
 	}
 	return s.getTask(ctx, taskID)
 }
-func (s *stubTaskService) GetUserTasks(context.Context, int64, int, int, string, *time.Time, *time.Time, *time.Time, *time.Time, *bool, *string, *string, *string, *bool, *bool, *int, *string) ([]*models.Task, int, error) {
+func (s *stubTaskService) GetUserTasks(context.Context, int64, int, int, string, *time.Time, *time.Time, *time.Time, *time.Time, *bool, *string, *string, *string, *bool, *bool, *int, *string, *string) ([]*models.Task, int, error) {
 	panic("unexpected GetUserTasks")
 }
 func (s *stubTaskService) UpdateTask(ctx context.Context, taskID int64, req *models.TaskUpdateRequest) (*models.Task, error) {
@@ -99,7 +99,7 @@ func (s *stubTaskService) GetTaskHistory(context.Context, int64) ([]*models.Task
 func (s *stubTaskService) GetUserTaskHistory(context.Context, int64, int, int) ([]*models.TaskHistory, error) {
 	panic("unexpected GetUserTaskHistory")
 }
-func (s *stubTaskService) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, statusNot *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64, cronExpression *string, cronExpressionIsNull *bool, requiresConfirmation *bool, excludeCronWithConfirmation *bool) ([]*models.Task, int, error) {
+func (s *stubTaskService) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, statusNot *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64, cronExpression *string, cronExpressionIsNull *bool, requiresConfirmation *bool, excludeCronWithConfirmation *bool, externalProvider *string) ([]*models.Task, int, error) {
 	if s.getAllTasks == nil {
 		panic("unexpected GetAllTasks")
 	}

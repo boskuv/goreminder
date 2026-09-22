@@ -12,6 +12,7 @@ func CreateTaskRequestToModel(req *dto.CreateTaskRequest) *models.Task {
 		Description:            req.Description,
 		UserID:                 req.UserID,
 		MessengerRelatedUserID: req.MessengerRelatedUserID,
+		GroupID:                req.GroupID,
 		StartDate:              req.StartDate,
 		FinishDate:             req.FinishDate,
 		CronExpression:         req.CronExpression,
@@ -40,6 +41,7 @@ func UpdateTaskRequestToModel(req *dto.UpdateTaskRequest) *models.TaskUpdateRequ
 		RequiresConfirmation:   req.RequiresConfirmation,
 		Muted:                  req.Muted,
 		PreRemindBeforeSeconds: req.PreRemindBeforeSeconds,
+		GroupID:                req.GroupID,
 	}
 }
 
@@ -52,6 +54,7 @@ func TaskModelToResponse(task *models.Task) *dto.TaskResponse {
 		UserID:                 task.UserID,
 		MessengerRelatedUserID: task.MessengerRelatedUserID,
 		ParentID:               task.ParentID,
+		GroupID:                task.GroupID,
 		StartDate:              task.StartDate,
 		FinishDate:             task.FinishDate,
 		CronExpression:         task.CronExpression,
@@ -73,6 +76,7 @@ func TaskModelToMarkedDoneResponse(task *models.Task) *dto.TaskMarkedDoneRespons
 		UserID:                 task.UserID,
 		MessengerRelatedUserID: task.MessengerRelatedUserID,
 		ParentID:               task.ParentID,
+		GroupID:                task.GroupID,
 		StartDate:              task.StartDate,
 		FinishDate:             task.FinishDate,
 		CronExpression:         task.CronExpression,
@@ -94,6 +98,7 @@ func TaskModelToDetailResponse(task *models.Task, attachments []dto.AttachmentRe
 		UserID:                 base.UserID,
 		MessengerRelatedUserID: base.MessengerRelatedUserID,
 		ParentID:               base.ParentID,
+		GroupID:                base.GroupID,
 		StartDate:              base.StartDate,
 		FinishDate:             base.FinishDate,
 		CronExpression:         base.CronExpression,

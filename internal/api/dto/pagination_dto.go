@@ -43,3 +43,9 @@ type PaginatedTargetsResponse struct {
 	Data       []TargetResponse   `json:"data"`
 	Pagination PaginationResponse `json:"pagination"`
 }
+
+// PaginatedTaskGroupsResponse represents a paginated response for task groups
+type PaginatedTaskGroupsResponse struct {
+	Data       []TaskGroupResponse `json:"data"`
+	Pagination PaginationResponse  `json:"pagination"`
+}
