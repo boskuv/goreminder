@@ -19,12 +19,17 @@ func schemaTestDBReady(db *sqlx.DB) bool {
 	var n int
 	if err := db.Get(&n, `
 		SELECT count(*)::int FROM information_schema.columns
-		WHERE table_schema = 'public' AND table_name = 'tasks' AND column_name = 'pre_remind_before_seconds'`); err != nil || n == 0 {
+		WHERE table_schema = 'public' AND table_name = 'tasks' AND column_name = 'group_id'`); err != nil || n == 0 {
 		return false
 	}
 	if err := db.Get(&n, `
 		SELECT count(*)::int FROM information_schema.tables
-		WHERE table_schema = 'public' AND table_name = 'backlogs'`); err != nil || n == 0 {
+		WHERE table_schema = 'public' AND table_name = 'task_groups'`); err != nil || n == 0 {
+		return false
+	}
+	if err := db.Get(&n, `
+		SELECT count(*)::int FROM information_schema.tables
+		WHERE table_schema = 'public' AND table_name = 'sync_outbox'`); err != nil || n == 0 {
 		return false
 	}
 	return true
@@ -36,7 +41,7 @@ func TestTableSchemasMatchModels(t *testing.T) {
 			tableName: "tasks",
 			expectedColumns: []string{
 				"id", "title", "description", "user_id", "messenger_related_user_id",
-				"parent_id", "start_date", "finish_date", "cron_expression", "rrule",
+				"parent_id", "group_id", "start_date", "finish_date", "cron_expression", "rrule",
 				"requires_confirmation", "muted", "pre_remind_before_seconds", "status", "created_at", "updated_at", "deleted_at",
 			},
 		},
@@ -87,6 +92,42 @@ func TestTableSchemasMatchModels(t *testing.T) {
 				"created_at", "updated_at", "completed_at", "deleted_at",
 			},
 		},
+		{
+			tableName: "task_groups",
+			expectedColumns: []string{
+				"id", "user_id", "name", "created_at", "updated_at", "deleted_at",
+			},
+		},
+		{
+			tableName: "google_accounts",
+			expectedColumns: []string{
+				"id", "user_id", "google_sub", "email", "access_token_enc", "refresh_token_enc",
+				"token_expiry", "scopes", "revoked_at", "created_at", "updated_at",
+			},
+		},
+		{
+			tableName: "calendar_bindings",
+			expectedColumns: []string{
+				"id", "user_id", "google_account_id", "google_calendar_id", "calendar_summary",
+				"direction", "group_id", "sync_token", "last_synced_at", "last_error", "status",
+				"delete_policy", "created_at", "updated_at", "deleted_at",
+			},
+		},
+		{
+			tableName: "task_sync_links",
+			expectedColumns: []string{
+				"id", "task_id", "provider", "google_calendar_id", "google_event_id", "etag",
+				"google_updated_at", "origin", "sync_enabled", "calendar_binding_id",
+				"duration_seconds", "last_synced_at", "last_error", "created_at", "updated_at",
+			},
+		},
+		{
+			tableName: "sync_outbox",
+			expectedColumns: []string{
+				"id", "kind", "payload", "attempts", "next_retry_at", "last_error",
+				"status", "created_at", "updated_at",
+			},
+		},
 	}
 
 	dsn := os.Getenv("TEST_DATABASE_DSN")
@@ -103,7 +144,7 @@ func TestTableSchemasMatchModels(t *testing.T) {
 	}
 
 	if !schemaTestDBReady(db) {
-		t.Skip("Postgres is reachable but schema is not fully migrated (need public.tasks.rrule and public.backlogs); run goose migrations or set TEST_DATABASE_DSN to a migrated database")
+		t.Skip("Postgres is reachable but schema is not fully migrated (need public.tasks.group_id and calendar sync tables); run goose migrations or set TEST_DATABASE_DSN to a migrated database")
 	}
 
 	for _, tc := range testCases {

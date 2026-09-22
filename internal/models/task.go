@@ -67,6 +67,7 @@ type Task struct {
 	UserID                 int64      `db:"user_id" json:"user_id"`
 	MessengerRelatedUserID *int       `db:"messenger_related_user_id" json:"messenger_related_user_id,omitempty"`
 	ParentID               *int64     `db:"parent_id" json:"parent_id,omitempty"`
+	GroupID                *int64     `db:"group_id" json:"group_id,omitempty"`
 	StartDate              time.Time  `db:"start_date" json:"start_date,omitempty"`
 	FinishDate             *time.Time `db:"finish_date" json:"finish_date,omitempty"`
 	CronExpression         *string    `db:"cron_expression" json:"cron_expression,omitempty"`
@@ -75,10 +76,10 @@ type Task struct {
 	Muted                  bool       `db:"muted" json:"muted,omitempty"`
 	// PreRemindBeforeSeconds is an optional offset before start_date for a preliminary reminder.
 	// nil / omitted means disabled. Worker schedules a separate job at start_date − this value.
-	PreRemindBeforeSeconds *int64 `db:"pre_remind_before_seconds" json:"pre_remind_before_seconds,omitempty"`
-	Status                 string     `db:"status" json:"status"`
-	CreatedAt              time.Time  `db:"created_at" json:"created_at"`
-	DeletedAt              time.Time  `db:"deleted_at" json:"-"`
+	PreRemindBeforeSeconds *int64    `db:"pre_remind_before_seconds" json:"pre_remind_before_seconds,omitempty"`
+	Status                 string    `db:"status" json:"status"`
+	CreatedAt              time.Time `db:"created_at" json:"created_at"`
+	DeletedAt              time.Time `db:"deleted_at" json:"-"`
 }
 
 // ScheduledTask represents the domain model for a task to enqueue
