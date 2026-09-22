@@ -18,6 +18,7 @@
 | **Start here** | [Features](#business-features) · [Prerequisites](#prerequisites) · [Quick start](#setup-instructions) |
 | **Reference** | [Configuration](#configuration) · [API](#api-documentation) · [Filtering](#filtering-and-ordering) |
 | **Domain** | [Muting](#task-muting-muted) · [Pre-remind](#pre-remind-pre_remind_before_seconds) · [Task types](#task-types) · [Schema](#database-schema) |
+| **Integrations** | [Google Calendar](docs/google-calendar.md) |
 | **Dev** | [Testing](#testing) · [Development](#development) · [Architecture](#architecture) |
 
 > Long sections (schema, full config, middleware, curl examples, …) are folded behind **Expand** / summary toggles.
@@ -28,8 +29,9 @@
 - [x] **Backlog Zone**: Tasks without fixed time and confirmation requirements
 - [x] **Targets/Goals Management**: Create and track targets (aims/goals) with completion tracking
 - [x] **Task Muting**: Per-task silence for the worker queue (see [Task muting (`muted`)](#task-muting-muted)).
-- [ ] **Reminder Groups**: Group related tasks together for batch management
+- [x] **Reminder Groups**: Group related tasks together for batch management / calendar sync scope
 - [ ] **ICS Import**: Import tasks from iCalendar (.ics) files
+- [x] **Google Calendar**: Per-user OAuth, multi-calendar import/export of Events (see [docs/google-calendar.md](docs/google-calendar.md))
 - [x] **Advanced Reminders**: Optional preliminary reminder before `start_date` (`pre_remind_before_seconds`; see [Pre-remind](#pre-remind-pre_remind_before_seconds)).
 
 ## Tech Features

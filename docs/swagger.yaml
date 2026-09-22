@@ -73,6 +73,44 @@ definitions:
           type: integer
         type: array
     type: object
+  dto.CalendarBindingResponse:
+    properties:
+      calendar_summary:
+        example: Work
+        type: string
+      created_at:
+        type: string
+      delete_policy:
+        example: soft_delete_imported
+        type: string
+      direction:
+        example: import
+        type: string
+      google_account_id:
+        example: 1
+        type: integer
+      google_calendar_id:
+        example: primary
+        type: string
+      group_id:
+        example: 1
+        type: integer
+      id:
+        example: 1
+        type: integer
+      last_error:
+        type: string
+      last_synced_at:
+        type: string
+      status:
+        example: active
+        type: string
+      updated_at:
+        type: string
+      user_id:
+        example: 1
+        type: integer
+    type: object
   dto.CreateBacklogRequest:
     properties:
       description:
@@ -112,6 +150,34 @@ definitions:
     required:
     - items
     - user_id
+    type: object
+  dto.CreateCalendarBindingRequest:
+    properties:
+      calendar_summary:
+        example: Work
+        type: string
+      delete_policy:
+        enum:
+        - soft_delete_imported
+        - mute_imported
+        - keep
+        example: soft_delete_imported
+        type: string
+      direction:
+        enum:
+        - import
+        - export
+        - both
+        example: import
+        type: string
+      google_calendar_id:
+        example: primary
+        type: string
+      group_id:
+        example: 1
+        type: integer
+    required:
+    - google_calendar_id
     type: object
   dto.CreateDigestSettingsRequest:
     properties:
@@ -189,6 +255,18 @@ definitions:
     - title
     - user_id
     type: object
+  dto.CreateTaskGroupRequest:
+    properties:
+      name:
+        example: Work
+        type: string
+      user_id:
+        example: 1
+        type: integer
+    required:
+    - name
+    - user_id
+    type: object
   dto.CreateTaskRequest:
     properties:
       cron_expression:
@@ -200,6 +278,9 @@ definitions:
       finish_date:
         example: "2024-01-20T18:00:00Z"
         type: string
+      group_id:
+        example: 1
+        type: integer
       messenger_related_user_id:
         example: 123
         type: integer
@@ -336,10 +417,51 @@ definitions:
         example: "2026-05-21T12:30:00Z"
         type: string
     type: object
+  dto.EnableTaskExportRequest:
+    properties:
+      calendar_binding_id:
+        example: 1
+        type: integer
+    required:
+    - calendar_binding_id
+    type: object
   dto.ErrorResponse:
     properties:
       message:
         example: error message
+        type: string
+    type: object
+  dto.GoogleAccountResponse:
+    properties:
+      created_at:
+        type: string
+      email:
+        example: user@gmail.com
+        type: string
+      google_sub:
+        example: "123456789"
+        type: string
+      id:
+        example: 1
+        type: integer
+      revoked_at:
+        type: string
+      scopes:
+        type: string
+      user_id:
+        example: 1
+        type: integer
+    type: object
+  dto.GoogleCalendarListItem:
+    properties:
+      id:
+        example: primary
+        type: string
+      primary:
+        example: true
+        type: boolean
+      summary:
+        example: Work
         type: string
     type: object
   dto.HealthCheckResponse:
@@ -442,6 +564,12 @@ definitions:
         example: telegram
         type: string
     type: object
+  dto.OAuthStartResponse:
+    properties:
+      url:
+        example: https://accounts.google.com/o/oauth2/auth?...
+        type: string
+    type: object
   dto.PaginatedBacklogsResponse:
     properties:
       data:
@@ -483,6 +611,15 @@ definitions:
       data:
         items:
           $ref: '#/definitions/dto.TargetResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/dto.PaginationResponse'
+    type: object
+  dto.PaginatedTaskGroupsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/dto.TaskGroupResponse'
         type: array
       pagination:
         $ref: '#/definitions/dto.PaginationResponse'
@@ -601,9 +738,14 @@ definitions:
       description:
         example: Write comprehensive documentation for the API
         type: string
+      external:
+        $ref: '#/definitions/dto.TaskExternalResponse'
       finish_date:
         example: "2024-01-20T18:00:00Z"
         type: string
+      group_id:
+        example: 1
+        type: integer
       id:
         example: 1
         type: integer
@@ -640,6 +782,51 @@ definitions:
         type: string
       title:
         example: Complete project documentation
+        type: string
+      user_id:
+        example: 1
+        type: integer
+    type: object
+  dto.TaskExternalResponse:
+    properties:
+      calendar_binding_id:
+        type: integer
+      calendar_id:
+        example: primary
+        type: string
+      event_id:
+        example: abc123
+        type: string
+      last_error:
+        type: string
+      last_synced_at:
+        type: string
+      origin:
+        enum:
+        - imported
+        - exported
+        example: imported
+        type: string
+      provider:
+        example: google_calendar
+        type: string
+      sync_enabled:
+        example: true
+        type: boolean
+    type: object
+  dto.TaskGroupResponse:
+    properties:
+      created_at:
+        example: "2024-01-10T08:00:00Z"
+        type: string
+      id:
+        example: 1
+        type: integer
+      name:
+        example: Work
+        type: string
+      updated_at:
+        example: "2024-01-10T08:00:00Z"
         type: string
       user_id:
         example: 1
@@ -691,6 +878,9 @@ definitions:
       finish_date:
         example: "2024-01-20T18:00:00Z"
         type: string
+      group_id:
+        example: 1
+        type: integer
       id:
         example: 1
         type: integer
@@ -733,9 +923,14 @@ definitions:
       description:
         example: Write comprehensive documentation for the API
         type: string
+      external:
+        $ref: '#/definitions/dto.TaskExternalResponse'
       finish_date:
         example: "2024-01-20T18:00:00Z"
         type: string
+      group_id:
+        example: 1
+        type: integer
       id:
         example: 1
         type: integer
@@ -818,6 +1013,12 @@ definitions:
         example: Updated target title
         type: string
     type: object
+  dto.UpdateTaskGroupRequest:
+    properties:
+      name:
+        example: Personal
+        type: string
+    type: object
   dto.UpdateTaskRequest:
     properties:
       cron_expression:
@@ -829,6 +1030,10 @@ definitions:
       finish_date:
         example: "2024-01-20T18:00:00Z"
         type: string
+      group_id:
+        description: 'GroupID: omit = no change; 0 = clear group; >0 = assign to group.'
+        example: 1
+        type: integer
       muted:
         example: false
         type: boolean
@@ -1162,6 +1367,29 @@ paths:
       summary: Create multiple backlog items from batch
       tags:
       - Backlogs
+  /api/v1/calendar/oauth/callback:
+    get:
+      parameters:
+      - description: Authorization code
+        in: query
+        name: code
+        required: true
+        type: string
+      - description: OAuth state (user id)
+        in: query
+        name: state
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.GoogleAccountResponse'
+      summary: Google OAuth callback
+      tags:
+      - Calendar
   /api/v1/digests:
     get:
       description: Generates a digest for a user with statistics and tasks
@@ -1858,6 +2086,174 @@ paths:
       summary: Update target item
       tags:
       - Targets
+  /api/v1/task-groups:
+    get:
+      description: Retrieves all task groups with pagination, ordering, and filtering
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - default: created_at DESC
+        description: Order by
+        in: query
+        name: order_by
+        type: string
+      - description: Filter by user ID
+        in: query
+        name: user_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Paginated task groups
+          schema:
+            $ref: '#/definitions/dto.PaginatedTaskGroupsResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get all task groups
+      tags:
+      - TaskGroups
+    post:
+      consumes:
+      - application/json
+      description: Creates a new task group and associates it with a user
+      parameters:
+      - description: Task group to create
+        in: body
+        name: task_group
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateTaskGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created task group ID
+          schema:
+            $ref: '#/definitions/dto.CreateResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "422":
+          description: Unprocessable entity
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Create a new task group
+      tags:
+      - TaskGroups
+  /api/v1/task-groups/{id}:
+    delete:
+      description: Deletes a task group by its ID (soft delete); tasks.group_id is
+        set to NULL
+      parameters:
+      - description: Task group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Delete task group
+      tags:
+      - TaskGroups
+    get:
+      description: Retrieves a task group by its ID
+      parameters:
+      - description: Task group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task group
+          schema:
+            $ref: '#/definitions/dto.TaskGroupResponse'
+        "404":
+          description: Not found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get task group by ID
+      tags:
+      - TaskGroups
+    put:
+      consumes:
+      - application/json
+      description: Updates a task group by its ID
+      parameters:
+      - description: Task group ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Task group update data
+        in: body
+        name: task_group
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateTaskGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Updated task group
+          schema:
+            $ref: '#/definitions/dto.TaskGroupResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "422":
+          description: Unprocessable entity
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Update task group
+      tags:
+      - TaskGroups
   /api/v1/tasks:
     get:
       description: Retrieves all tasks with pagination, ordering, and filtering (by
@@ -2251,6 +2647,50 @@ paths:
       summary: Get attachment download URL
       tags:
       - Task Attachments
+  /api/v1/tasks/{id}/calendar/export:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Export config
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.EnableTaskExportRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.TaskExternalResponse'
+      summary: Enable export for a single task
+      tags:
+      - Calendar
+  /api/v1/tasks/{id}/calendar/external:
+    get:
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.TaskExternalResponse'
+      summary: Get external sync metadata for a task
+      tags:
+      - Calendar
   /api/v1/tasks/{id}/done:
     post:
       consumes:
@@ -2594,6 +3034,145 @@ paths:
       summary: Update a user
       tags:
       - Users
+  /api/v1/users/{user_id}/calendar/bindings:
+    get:
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.CalendarBindingResponse'
+            type: array
+      summary: List calendar bindings
+      tags:
+      - Calendar
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      - description: Binding
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateCalendarBindingRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.CalendarBindingResponse'
+      summary: Create calendar binding
+      tags:
+      - Calendar
+  /api/v1/users/{user_id}/calendar/bindings/{binding_id}:
+    delete:
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      - description: Binding ID
+        in: path
+        name: binding_id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+      summary: Delete calendar binding
+      tags:
+      - Calendar
+  /api/v1/users/{user_id}/calendar/bindings/{binding_id}/sync:
+    post:
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      - description: Binding ID
+        in: path
+        name: binding_id
+        required: true
+        type: integer
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Force sync a calendar binding
+      tags:
+      - Calendar
+  /api/v1/users/{user_id}/calendar/calendars:
+    get:
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.GoogleCalendarListItem'
+            type: array
+      summary: List Google calendars for connected account
+      tags:
+      - Calendar
+  /api/v1/users/{user_id}/calendar/disconnect:
+    delete:
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+      summary: Disconnect Google account
+      tags:
+      - Calendar
+  /api/v1/users/{user_id}/calendar/oauth/start:
+    get:
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.OAuthStartResponse'
+      summary: Start Google OAuth
+      tags:
+      - Calendar
   /api/v1/users/{user_id}/tasks:
     get:
       description: Retrieves all tasks by userID with pagination, ordering, and filtering

@@ -330,6 +330,41 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/calendar/oauth/callback": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Calendar"
+                ],
+                "summary": "Google OAuth callback",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Authorization code",
+                        "name": "code",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "OAuth state (user id)",
+                        "name": "state",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.GoogleAccountResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/digests": {
             "get": {
                 "description": "Generates a digest for a user with statistics and tasks",
@@ -1374,6 +1409,257 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/task-groups": {
+            "get": {
+                "description": "Retrieves all task groups with pagination, ordering, and filtering",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TaskGroups"
+                ],
+                "summary": "Get all task groups",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "created_at DESC",
+                        "description": "Order by",
+                        "name": "order_by",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by user ID",
+                        "name": "user_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated task groups",
+                        "schema": {
+                            "$ref": "#/definitions/dto.PaginatedTaskGroupsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a new task group and associates it with a user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TaskGroups"
+                ],
+                "summary": "Create a new task group",
+                "parameters": [
+                    {
+                        "description": "Task group to create",
+                        "name": "task_group",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateTaskGroupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created task group ID",
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable entity",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/task-groups/{id}": {
+            "get": {
+                "description": "Retrieves a task group by its ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TaskGroups"
+                ],
+                "summary": "Get task group by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Task group ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Task group",
+                        "schema": {
+                            "$ref": "#/definitions/dto.TaskGroupResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Updates a task group by its ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TaskGroups"
+                ],
+                "summary": "Update task group",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Task group ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Task group update data",
+                        "name": "task_group",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateTaskGroupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated task group",
+                        "schema": {
+                            "$ref": "#/definitions/dto.TaskGroupResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable entity",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Deletes a task group by its ID (soft delete); tasks.group_id is set to NULL",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TaskGroups"
+                ],
+                "summary": "Delete task group",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Task group ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/tasks": {
             "get": {
                 "description": "Retrieves all tasks with pagination, ordering, and filtering (by status, status_not, start_date_from, start_date_to, user_id, cron_expression, cron_expression_is_null, requires_confirmation)",
@@ -2004,6 +2290,74 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/tasks/{id}/calendar/export": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Calendar"
+                ],
+                "summary": "Enable export for a single task",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Export config",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.EnableTaskExportRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.TaskExternalResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/tasks/{id}/calendar/external": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Calendar"
+                ],
+                "summary": "Get external sync metadata for a task",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.TaskExternalResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/tasks/{id}/done": {
             "post": {
                 "description": "Marks a task as done, updates it in the database, and queues worker.delete_task in a transactional manner. If queueing fails, the database update is rolled back. Returns task DTO without status (assumed \"done\") to avoid extra repo fetch.",
@@ -2502,6 +2856,220 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/users/{user_id}/calendar/bindings": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Calendar"
+                ],
+                "summary": "List calendar bindings",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/dto.CalendarBindingResponse"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Calendar"
+                ],
+                "summary": "Create calendar binding",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Binding",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateCalendarBindingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/dto.CalendarBindingResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/users/{user_id}/calendar/bindings/{binding_id}": {
+            "delete": {
+                "tags": [
+                    "Calendar"
+                ],
+                "summary": "Delete calendar binding",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Binding ID",
+                        "name": "binding_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/api/v1/users/{user_id}/calendar/bindings/{binding_id}/sync": {
+            "post": {
+                "tags": [
+                    "Calendar"
+                ],
+                "summary": "Force sync a calendar binding",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Binding ID",
+                        "name": "binding_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/users/{user_id}/calendar/calendars": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Calendar"
+                ],
+                "summary": "List Google calendars for connected account",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/dto.GoogleCalendarListItem"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/users/{user_id}/calendar/disconnect": {
+            "delete": {
+                "tags": [
+                    "Calendar"
+                ],
+                "summary": "Disconnect Google account",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/api/v1/users/{user_id}/calendar/oauth/start": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Calendar"
+                ],
+                "summary": "Start Google OAuth",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.OAuthStartResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users/{user_id}/tasks": {
             "get": {
                 "description": "Retrieves all tasks by userID with pagination, ordering, and filtering (by status, status_not, start_date_from, start_date_to, created_at_from, created_at_to, cron_expression, cron_expression_is_null, requires_confirmation, exclude_cron_with_confirmation, messenger_related_user_id, messenger_user_id)",
@@ -2864,6 +3432,59 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.CalendarBindingResponse": {
+            "type": "object",
+            "properties": {
+                "calendar_summary": {
+                    "type": "string",
+                    "example": "Work"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "delete_policy": {
+                    "type": "string",
+                    "example": "soft_delete_imported"
+                },
+                "direction": {
+                    "type": "string",
+                    "example": "import"
+                },
+                "google_account_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "google_calendar_id": {
+                    "type": "string",
+                    "example": "primary"
+                },
+                "group_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "last_synced_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "active"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
         "dto.CreateBacklogRequest": {
             "type": "object",
             "required": [
@@ -2909,6 +3530,44 @@ const docTemplate = `{
                     "example": "\n"
                 },
                 "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "dto.CreateCalendarBindingRequest": {
+            "type": "object",
+            "required": [
+                "google_calendar_id"
+            ],
+            "properties": {
+                "calendar_summary": {
+                    "type": "string",
+                    "example": "Work"
+                },
+                "delete_policy": {
+                    "type": "string",
+                    "enum": [
+                        "soft_delete_imported",
+                        "mute_imported",
+                        "keep"
+                    ],
+                    "example": "soft_delete_imported"
+                },
+                "direction": {
+                    "type": "string",
+                    "enum": [
+                        "import",
+                        "export",
+                        "both"
+                    ],
+                    "example": "import"
+                },
+                "google_calendar_id": {
+                    "type": "string",
+                    "example": "primary"
+                },
+                "group_id": {
                     "type": "integer",
                     "example": 1
                 }
@@ -3019,6 +3678,23 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.CreateTaskGroupRequest": {
+            "type": "object",
+            "required": [
+                "name",
+                "user_id"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "example": "Work"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
         "dto.CreateTaskRequest": {
             "type": "object",
             "required": [
@@ -3037,6 +3713,10 @@ const docTemplate = `{
                 "finish_date": {
                     "type": "string",
                     "example": "2024-01-20T18:00:00Z"
+                },
+                "group_id": {
+                    "type": "integer",
+                    "example": 1
                 },
                 "messenger_related_user_id": {
                     "type": "integer",
@@ -3218,12 +3898,71 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.EnableTaskExportRequest": {
+            "type": "object",
+            "required": [
+                "calendar_binding_id"
+            ],
+            "properties": {
+                "calendar_binding_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
         "dto.ErrorResponse": {
             "type": "object",
             "properties": {
                 "message": {
                     "type": "string",
                     "example": "error message"
+                }
+            }
+        },
+        "dto.GoogleAccountResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string",
+                    "example": "user@gmail.com"
+                },
+                "google_sub": {
+                    "type": "string",
+                    "example": "123456789"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "revoked_at": {
+                    "type": "string"
+                },
+                "scopes": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "dto.GoogleCalendarListItem": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "example": "primary"
+                },
+                "primary": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "summary": {
+                    "type": "string",
+                    "example": "Work"
                 }
             }
         },
@@ -3367,6 +4106,15 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.OAuthStartResponse": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "example": "https://accounts.google.com/o/oauth2/auth?..."
+                }
+            }
+        },
         "dto.PaginatedBacklogsResponse": {
             "type": "object",
             "properties": {
@@ -3430,6 +4178,20 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/dto.TargetResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/dto.PaginationResponse"
+                }
+            }
+        },
+        "dto.PaginatedTaskGroupsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.TaskGroupResponse"
                     }
                 },
                 "pagination": {
@@ -3597,9 +4359,16 @@ const docTemplate = `{
                     "type": "string",
                     "example": "Write comprehensive documentation for the API"
                 },
+                "external": {
+                    "$ref": "#/definitions/dto.TaskExternalResponse"
+                },
                 "finish_date": {
                     "type": "string",
                     "example": "2024-01-20T18:00:00Z"
+                },
+                "group_id": {
+                    "type": "integer",
+                    "example": 1
                 },
                 "id": {
                     "type": "integer",
@@ -3648,6 +4417,69 @@ const docTemplate = `{
                 "title": {
                     "type": "string",
                     "example": "Complete project documentation"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "dto.TaskExternalResponse": {
+            "type": "object",
+            "properties": {
+                "calendar_binding_id": {
+                    "type": "integer"
+                },
+                "calendar_id": {
+                    "type": "string",
+                    "example": "primary"
+                },
+                "event_id": {
+                    "type": "string",
+                    "example": "abc123"
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "last_synced_at": {
+                    "type": "string"
+                },
+                "origin": {
+                    "type": "string",
+                    "enum": [
+                        "imported",
+                        "exported"
+                    ],
+                    "example": "imported"
+                },
+                "provider": {
+                    "type": "string",
+                    "example": "google_calendar"
+                },
+                "sync_enabled": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "dto.TaskGroupResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Work"
+                },
+                "updated_at": {
+                    "type": "string",
+                    "example": "2024-01-10T08:00:00Z"
                 },
                 "user_id": {
                     "type": "integer",
@@ -3716,6 +4548,10 @@ const docTemplate = `{
                     "type": "string",
                     "example": "2024-01-20T18:00:00Z"
                 },
+                "group_id": {
+                    "type": "integer",
+                    "example": 1
+                },
                 "id": {
                     "type": "integer",
                     "example": 1
@@ -3773,9 +4609,16 @@ const docTemplate = `{
                     "type": "string",
                     "example": "Write comprehensive documentation for the API"
                 },
+                "external": {
+                    "$ref": "#/definitions/dto.TaskExternalResponse"
+                },
                 "finish_date": {
                     "type": "string",
                     "example": "2024-01-20T18:00:00Z"
+                },
+                "group_id": {
+                    "type": "integer",
+                    "example": 1
                 },
                 "id": {
                     "type": "integer",
@@ -3888,6 +4731,15 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.UpdateTaskGroupRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "example": "Personal"
+                }
+            }
+        },
         "dto.UpdateTaskRequest": {
             "type": "object",
             "properties": {
@@ -3902,6 +4754,11 @@ const docTemplate = `{
                 "finish_date": {
                     "type": "string",
                     "example": "2024-01-20T18:00:00Z"
+                },
+                "group_id": {
+                    "description": "GroupID: omit = no change; 0 = clear group; \u003e0 = assign to group.",
+                    "type": "integer",
+                    "example": 1
                 },
                 "muted": {
                     "type": "boolean",
