@@ -109,9 +109,9 @@ func (mr *MockTaskRepositoryMockRecorder) DeleteTaskWithTx(ctx, tx, id interface
 }
 
 // GetAllTasks mocks base method.
-func (m *MockTaskRepository) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status, statusNot *string, startDateFrom, startDateTo *time.Time, userID *int64, cronExpression *string, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation *bool) ([]*models.Task, int, error) {
+func (m *MockTaskRepository) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status, statusNot *string, startDateFrom, startDateTo *time.Time, userID *int64, cronExpression *string, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation *bool, externalProvider *string) ([]*models.Task, int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAllTasks", ctx, page, pageSize, orderBy, status, statusNot, startDateFrom, startDateTo, userID, cronExpression, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation)
+	ret := m.ctrl.Call(m, "GetAllTasks", ctx, page, pageSize, orderBy, status, statusNot, startDateFrom, startDateTo, userID, cronExpression, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation, externalProvider)
 	ret0, _ := ret[0].([]*models.Task)
 	ret1, _ := ret[1].(int)
 	ret2, _ := ret[2].(error)
@@ -119,9 +119,9 @@ func (m *MockTaskRepository) GetAllTasks(ctx context.Context, page, pageSize int
 }
 
 // GetAllTasks indicates an expected call of GetAllTasks.
-func (mr *MockTaskRepositoryMockRecorder) GetAllTasks(ctx, page, pageSize, orderBy, status, statusNot, startDateFrom, startDateTo, userID, cronExpression, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation interface{}) *gomock.Call {
+func (mr *MockTaskRepositoryMockRecorder) GetAllTasks(ctx, page, pageSize, orderBy, status, statusNot, startDateFrom, startDateTo, userID, cronExpression, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation, externalProvider interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllTasks", reflect.TypeOf((*MockTaskRepository)(nil).GetAllTasks), ctx, page, pageSize, orderBy, status, statusNot, startDateFrom, startDateTo, userID, cronExpression, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllTasks", reflect.TypeOf((*MockTaskRepository)(nil).GetAllTasks), ctx, page, pageSize, orderBy, status, statusNot, startDateFrom, startDateTo, userID, cronExpression, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation, externalProvider)
 }
 
 // GetChildTasksByParentID mocks base method.
@@ -199,9 +199,9 @@ func (mr *MockTaskRepositoryMockRecorder) GetTasksByUserID(ctx, userID interface
 }
 
 // GetTasksByUserIDWithPagination mocks base method.
-func (m *MockTaskRepository) GetTasksByUserIDWithPagination(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status, statusNot, cronExpression *string, cronExpressionIsNull, excludeCronWithConfirmation *bool, messengerRelatedUserIDs *[]int) ([]*models.Task, int, error) {
+func (m *MockTaskRepository) GetTasksByUserIDWithPagination(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status, statusNot, cronExpression *string, cronExpressionIsNull, excludeCronWithConfirmation *bool, messengerRelatedUserIDs *[]int, externalProvider *string) ([]*models.Task, int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTasksByUserIDWithPagination", ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserIDs)
+	ret := m.ctrl.Call(m, "GetTasksByUserIDWithPagination", ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserIDs, externalProvider)
 	ret0, _ := ret[0].([]*models.Task)
 	ret1, _ := ret[1].(int)
 	ret2, _ := ret[2].(error)
@@ -209,9 +209,9 @@ func (m *MockTaskRepository) GetTasksByUserIDWithPagination(ctx context.Context,
 }
 
 // GetTasksByUserIDWithPagination indicates an expected call of GetTasksByUserIDWithPagination.
-func (mr *MockTaskRepositoryMockRecorder) GetTasksByUserIDWithPagination(ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserIDs interface{}) *gomock.Call {
+func (mr *MockTaskRepositoryMockRecorder) GetTasksByUserIDWithPagination(ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserIDs, externalProvider interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTasksByUserIDWithPagination", reflect.TypeOf((*MockTaskRepository)(nil).GetTasksByUserIDWithPagination), ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserIDs)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTasksByUserIDWithPagination", reflect.TypeOf((*MockTaskRepository)(nil).GetTasksByUserIDWithPagination), ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserIDs, externalProvider)
 }
 
 // GetTasksNeedingRescheduling mocks base method.

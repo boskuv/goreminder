@@ -267,10 +267,10 @@ func TestTaskService_GetAllTasks_Success(t *testing.T) {
 
 	taskRepo.EXPECT().GetAllTasks(
 		gomock.Any(), 1, 20, "id DESC",
-		&status, nil, nil, nil, nil, nil, nil, nil, nil,
+		&status, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	).Return(expected, 2, nil)
 
-	tasks, total, err := service.GetAllTasks(ctx, 1, 20, "id DESC", &status, nil, nil, nil, nil, nil, nil, nil, nil)
+	tasks, total, err := service.GetAllTasks(ctx, 1, 20, "id DESC", &status, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 2, total)
 	assert.Equal(t, expected, tasks)
@@ -282,10 +282,10 @@ func TestTaskService_GetAllTasks_RepoError(t *testing.T) {
 
 	taskRepo.EXPECT().GetAllTasks(
 		gomock.Any(), 1, 10, "created_at DESC",
-		nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	).Return(nil, 0, errors.New("db error"))
 
-	tasks, total, err := service.GetAllTasks(ctx, 1, 10, "created_at DESC", nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	tasks, total, err := service.GetAllTasks(ctx, 1, 10, "created_at DESC", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.Nil(t, tasks)
 	assert.Equal(t, 0, total)
 	assert.Error(t, err)

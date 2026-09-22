@@ -33,6 +33,7 @@ type TaskService struct {
 	attachments                attachments.Client
 	activity                   ActivityTracker
 	attachmentsPurgeOnTaskDone bool
+	exportHook                 CalendarExportHook
 	tracer                     trace.Tracer
 	logger                     zerolog.Logger
 }
@@ -52,9 +53,26 @@ func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.User
 		attachments:                attClient,
 		activity:                   activity,
 		attachmentsPurgeOnTaskDone: attachmentsPurgeOnTaskDone,
+		exportHook:                 NoopCalendarExportHook{},
 		tracer:                     otel.Tracer("task-service"),
 		logger:                     logger,
 	}
+}
+
+// SetCalendarExportHook sets an optional hook for calendar export after task mutations.
+func (s *TaskService) SetCalendarExportHook(hook CalendarExportHook) {
+	if hook == nil {
+		s.exportHook = NoopCalendarExportHook{}
+		return
+	}
+	s.exportHook = hook
+}
+
+func (s *TaskService) notifyCalendarExport(ctx context.Context, taskID int64, action string) {
+	if s.exportHook == nil {
+		return
+	}
+	s.exportHook.OnTaskChanged(ctx, taskID, action)
 }
 
 func (s *TaskService) getMessengerNameFromRelatedUser(ctx context.Context, messengerRelatedUser *models.MessengerRelatedUser) (string, error) {
@@ -373,6 +391,7 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 			UserID:                 task.UserID,
 			MessengerRelatedUserID: task.MessengerRelatedUserID,
 			ParentID:               &taskID,
+			GroupID:                task.GroupID,
 			StartDate:              task.StartDate,
 			FinishDate:             task.FinishDate,
 			CronExpression:         nil, // Child tasks don't carry parent's recurrence
@@ -408,6 +427,7 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 		Int64("user.id", task.UserID).
 		Msg("task creation completed successfully")
 	touchUserActivity(ctx, s.activity, s.logger, task.UserID)
+	s.notifyCalendarExport(ctx, taskID, "created")
 	span.SetStatus(codes.Ok, "task created successfully")
 	return taskID, childTaskID, nil
 }
@@ -444,7 +464,7 @@ func (s *TaskService) GetTask(ctx context.Context, taskID int64) (*models.Task, 
 }
 
 // GetUserTasks implements BL of retrieving existing tasks by user id with pagination and ordering
-func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool, messengerRelatedUserID *int, messengerUserID *string) ([]*models.Task, int, error) {
+func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool, messengerRelatedUserID *int, messengerUserID *string, externalProvider *string) ([]*models.Task, int, error) {
 	ctx, span := s.tracer.Start(ctx, "task_service.GetUserTasks",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
@@ -522,7 +542,7 @@ func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, page
 		messengerRelatedUserIDs = &ids
 	}
 
-	tasks, totalCount, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserIDs)
+	tasks, totalCount, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserIDs, externalProvider)
 	if err != nil {
 		log.Debug().
 			Err(err).
@@ -640,6 +660,13 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	}
 	if err := applyPreRemindBeforeSecondsUpdate(oldTask, updateRequest.PreRemindBeforeSeconds); err != nil {
 		return nil, errors.Wrap(errs.ErrValidation, err.Error())
+	}
+	if updateRequest.GroupID != nil {
+		if *updateRequest.GroupID == 0 {
+			oldTask.GroupID = nil
+		} else {
+			oldTask.GroupID = updateRequest.GroupID
+		}
 	}
 
 	if err := validateCronExpressionAndRRuleExclusive(oldTask.CronExpression, oldTask.RRule); err != nil {
@@ -1068,6 +1095,11 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					childUpdated = true
 				}
 
+				if updateRequest.GroupID != nil {
+					childTask.GroupID = oldTask.GroupID
+					childUpdated = true
+				}
+
 				// Update title if changed
 				if titleChanged {
 					childTask.Title = oldTask.Title
@@ -1398,6 +1430,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				UserID:                 oldTask.UserID,
 				MessengerRelatedUserID: oldTask.MessengerRelatedUserID,
 				ParentID:               &taskID,
+				GroupID:                oldTask.GroupID,
 				StartDate:              nextTime,
 				FinishDate:             oldTask.FinishDate,
 				CronExpression:         nil,
@@ -1536,7 +1569,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	hasOtherChanges := updateRequest.Title != nil || updateRequest.Description != nil ||
 		updateRequest.StartDate != nil || updateRequest.FinishDate != nil ||
 		updateRequest.CronExpression != nil || updateRequest.RRule != nil || updateRequest.RequiresConfirmation != nil ||
-		updateRequest.Muted != nil || updateRequest.PreRemindBeforeSeconds != nil
+		updateRequest.Muted != nil || updateRequest.PreRemindBeforeSeconds != nil || updateRequest.GroupID != nil
 
 	newTaskMap := s.taskToMap(oldTask)
 	updateChangedFields := changedFieldsFromMaps(oldTaskMap, newTaskMap)
@@ -1580,6 +1613,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	}
 	auditEvent.Msg("task updated successfully")
 	touchUserActivity(ctx, s.activity, s.logger, oldTask.UserID)
+	s.notifyCalendarExport(ctx, taskID, "updated")
 	span.SetStatus(codes.Ok, "task updated successfully")
 	return oldTask, nil
 }
@@ -1665,6 +1699,7 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 		touchUserActivity(ctx, s.activity, s.logger, task.UserID)
 		span.SetStatus(codes.Ok, "task deleted successfully (non-transactional fallback)")
 		s.purgeAttachmentsBestEffort(ctx, log, taskID, nil)
+		s.notifyCalendarExport(ctx, taskID, "deleted")
 		return nil
 	}
 
@@ -1873,6 +1908,7 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID int64) error {
 	touchUserActivity(ctx, s.activity, s.logger, task.UserID)
 	span.SetStatus(codes.Ok, "task deleted successfully")
 	s.purgeAttachmentsBestEffort(ctx, log, taskID, childTaskIDsForPurge)
+	s.notifyCalendarExport(ctx, taskID, "deleted")
 	return nil
 }
 
@@ -2328,6 +2364,7 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 					UserID:                 parentTask.UserID,
 					MessengerRelatedUserID: parentTask.MessengerRelatedUserID,
 					ParentID:               task.ParentID,
+					GroupID:                parentTask.GroupID,
 					StartDate:              nextTime,
 					FinishDate:             parentTask.FinishDate,
 					CronExpression:         nil,
@@ -2764,6 +2801,9 @@ func (s *TaskService) taskToMap(task *models.Task) map[string]interface{} {
 	if task.ParentID != nil {
 		result["parent_id"] = *task.ParentID
 	}
+	if task.GroupID != nil {
+		result["group_id"] = *task.GroupID
+	}
 	if task.PreRemindBeforeSeconds != nil {
 		result["pre_remind_before_seconds"] = *task.PreRemindBeforeSeconds
 	}
@@ -3142,7 +3182,7 @@ func (s *TaskService) RescheduleCronTasks(ctx context.Context, tasks []*models.T
 }
 
 // GetAllTasks implements BL of retrieving all tasks with pagination, ordering, and filtering
-func (s *TaskService) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, statusNot *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64, cronExpression *string, cronExpressionIsNull *bool, requiresConfirmation *bool, excludeCronWithConfirmation *bool) ([]*models.Task, int, error) {
+func (s *TaskService) GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, statusNot *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64, cronExpression *string, cronExpressionIsNull *bool, requiresConfirmation *bool, excludeCronWithConfirmation *bool, externalProvider *string) ([]*models.Task, int, error) {
 	ctx, span := s.tracer.Start(ctx, "task_service.GetAllTasks",
 		trace.WithAttributes(
 			attribute.Int("page", page),
@@ -3195,7 +3235,7 @@ func (s *TaskService) GetAllTasks(ctx context.Context, page, pageSize int, order
 		log = log.With().Bool("filter.exclude_cron_with_confirmation", *excludeCronWithConfirmation).Logger()
 	}
 
-	tasks, totalCount, err := s.taskRepo.GetAllTasks(ctx, page, pageSize, orderBy, status, statusNot, startDateFrom, startDateTo, userID, cronExpression, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation)
+	tasks, totalCount, err := s.taskRepo.GetAllTasks(ctx, page, pageSize, orderBy, status, statusNot, startDateFrom, startDateTo, userID, cronExpression, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation, externalProvider)
 	if err != nil {
 		log.Debug().
 			Err(err).
