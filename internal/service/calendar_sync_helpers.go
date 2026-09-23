@@ -173,6 +173,12 @@ func ApplyDeletePolicy(policy models.CalendarDeletePolicy, task *models.Task) (s
 	}
 }
 
+// bindingAllowsTaskExport reports whether local task changes may be pushed to Google for this binding.
+func bindingAllowsTaskExport(direction models.CalendarBindingDirection) bool {
+	return direction == models.CalendarBindingDirectionExport ||
+		direction == models.CalendarBindingDirectionBoth
+}
+
 // ShouldExportTask reports whether a task is eligible for calendar export.
 // Confirmation children (parent_id set) are not exported separately.
 func ShouldExportTask(task *models.Task) bool {

@@ -749,7 +749,8 @@ func (s *CalendarSyncService) OnTaskChanged(ctx context.Context, taskID int64, a
 }
 
 // EnqueueExport queues an export upsert/delete when an export/both binding exists
-// or the task has an explicit sync_enabled link to a binding.
+// or the task has an explicit sync_enabled link to an export/both binding.
+// Import-only bindings never receive local→Google pushes (even if the task was imported via that link).
 func (s *CalendarSyncService) EnqueueExport(ctx context.Context, taskID int64, action string) error {
 	task, err := s.tasks.GetTaskByIDWithoutStatusFilter(ctx, taskID)
 	if err != nil {
@@ -769,7 +770,9 @@ func (s *CalendarSyncService) EnqueueExport(ctx context.Context, taskID int64, a
 
 	if link, err := s.syncLinks.GetByTaskID(ctx, taskID); err == nil &&
 		link.SyncEnabled && link.CalendarBindingID != nil {
-		bindingIDs[*link.CalendarBindingID] = struct{}{}
+		if b, bErr := s.bindings.GetByID(ctx, *link.CalendarBindingID); bErr == nil && bindingAllowsTaskExport(b.Direction) {
+			bindingIDs[b.ID] = struct{}{}
+		}
 	}
 
 	bindings, err := s.bindings.ListByUserID(ctx, task.UserID)
@@ -777,7 +780,7 @@ func (s *CalendarSyncService) EnqueueExport(ctx context.Context, taskID int64, a
 		return errors.WithStack(err)
 	}
 	for _, b := range bindings {
-		if b.Direction != models.CalendarBindingDirectionExport && b.Direction != models.CalendarBindingDirectionBoth {
+		if !bindingAllowsTaskExport(b.Direction) {
 			continue
 		}
 		if b.GroupID != nil {
@@ -845,7 +848,7 @@ func (s *CalendarSyncService) EnableTaskExport(ctx context.Context, taskID, bind
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
-	if binding.Direction != models.CalendarBindingDirectionExport && binding.Direction != models.CalendarBindingDirectionBoth {
+	if !bindingAllowsTaskExport(binding.Direction) {
 		err = errors.Wrap(errs.ErrValidation, "binding direction must be export or both")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -972,6 +975,9 @@ func (s *CalendarSyncService) exportUpsert(ctx context.Context, payload outboxPa
 	binding, err := s.bindings.GetByID(ctx, payload.BindingID)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+	if !bindingAllowsTaskExport(binding.Direction) {
+		return nil
 	}
 	client, _, err := s.clientForAccountID(ctx, binding.GoogleAccountID)
 	if err != nil {

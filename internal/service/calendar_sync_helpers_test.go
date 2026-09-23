@@ -113,6 +113,13 @@ func TestShouldExportTask(t *testing.T) {
 	assert.False(t, ShouldExportTask(nil))
 }
 
+func TestBindingAllowsTaskExport(t *testing.T) {
+	assert.False(t, bindingAllowsTaskExport(models.CalendarBindingDirectionImport))
+	assert.True(t, bindingAllowsTaskExport(models.CalendarBindingDirectionExport))
+	assert.True(t, bindingAllowsTaskExport(models.CalendarBindingDirectionBoth))
+	assert.False(t, bindingAllowsTaskExport(""))
+}
+
 func TestBuildExportEvent(t *testing.T) {
 	start := time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
 	rrule := "FREQ=WEEKLY"

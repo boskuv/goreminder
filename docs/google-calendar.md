@@ -120,7 +120,7 @@ Content-Type: application/json
 
 | Field | Values |
 |--------|--------|
-| `direction` | `import` — Google → tasks; `export` — tasks → Google; `both` |
+| `direction` | `import` — Google → tasks only (bot edits stay local; next sync may overwrite from Google); `export` — tasks → Google; `both` — bidirectional |
 | `group_id` | Optional task group: imported tasks go there; for export, only tasks in that group are pushed (if set). If `group_id` is omitted on an **export** binding, eligible tasks for that user may be exported. |
 | `messenger_related_user_id` | Optional. When set on an **import**/**both** binding, imported tasks get this `mru` and future occurrences are published to the messenger worker (`schedule_task`). Omit to keep calendar-only tasks (DB mirror, no chat reminders). Must belong to the same user. |
 | `delete_policy` | On unbind/cancel: `soft_delete_imported` (default), `mute_imported`, `keep` |
@@ -134,6 +134,7 @@ Repeat `POST .../bindings` for additional calendars.
 - **Worker**: only if the binding has `messenger_related_user_id`. The queue payload still uses `cron_expression` (worker has no RRULE arg) — so each publish is a **one-shot** at the current `start_date`. After the time passes, the next calendar sync advances `start_date` again and republishes (not autoreschedule day-by-day).
 - **Status after the event**: one-shot past events become `done` (with `finish_date`) on the next sync; recurring stay `scheduled` on the next occurrence. Cancel in Google still follows `delete_policy`.
 - Cancel/delete in Google (or unbind with soft-delete/mute) sends `delete_task` when a messenger was set.
+- **Local edits → Google**: only for bindings with `direction` `export` or `both`. An `import`-only link never enqueues calendar export, even if the task has a sync link.
 
 ### 3.4 Force sync / list / disconnect
 
