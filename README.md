@@ -18,7 +18,7 @@
 | **Start here** | [Features](#business-features) · [Prerequisites](#prerequisites) · [Quick start](#setup-instructions) |
 | **Reference** | [Configuration](#configuration) · [API](#api-documentation) · [Filtering](#filtering-and-ordering) |
 | **Domain** | [Muting](#task-muting-muted) · [Pre-remind](#pre-remind-pre_remind_before_seconds) · [Task types](#task-types) · [Schema](#database-schema) |
-| **Integrations** | [Google Calendar](docs/google-calendar.md) |
+| **Integrations** | [Google Calendar](docs/google-calendar.md) (see [behavior matrix](docs/google-calendar.md#behavior-matrix-direction--task-type): import / export / both × task types) |
 | **Dev** | [Testing](#testing) · [Development](#development) · [Architecture](#architecture) |
 
 > Long sections (schema, full config, middleware, curl examples, …) are folded behind **Expand** / summary toggles.

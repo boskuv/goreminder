@@ -127,14 +127,82 @@ Content-Type: application/json
 
 Repeat `POST .../bindings` for additional calendars.
 
-### Import vs autoreschedule / worker
+### Behavior matrix: direction × task type
 
-- **Imported** tasks (`origin=imported`) are **excluded from autoreschedule**. Google does not mark past events “done”; we must not +24h them like overdue reminders.
-- **One event / one series → one task** (not expanded instances). Recurring Google events store `rrule` on that task; if DTSTART is already past, import advances `start_date` to the **next** occurrence.
-- **Worker**: only if the binding has `messenger_related_user_id`. The queue payload still uses `cron_expression` (worker has no RRULE arg) — so each publish is a **one-shot** at the current `start_date`. After the time passes, the next calendar sync advances `start_date` again and republishes (not autoreschedule day-by-day).
-- **Status after the event**: one-shot past events become `done` (with `finish_date`) on the next sync; recurring stay `scheduled` on the next occurrence. Cancel in Google still follows `delete_policy`.
-- Cancel/delete in Google (or unbind with soft-delete/mute) sends `delete_task` when a messenger was set.
-- **Local edits → Google**: only for bindings with `direction` `export` or `both`. An `import`-only link never enqueues calendar export, even if the task has a sync link.
+This is the product contract for Google Calendar sync. “Bot / API edit” means `CreateTask` / `UpdateTask` / `DeleteTask` (and per-task export). **Autoreschedule never calls the calendar export hook** — it only updates the DB (and the messenger queue for one-shots).
+
+#### Directions (what each binding does)
+
+| | Google → GoReminder | GoReminder → Google | Notes |
+|--|--|--|--|
+| **`import`** | Periodic sync (`syncToken`) | **No** (even if the task has a sync link) | Local edits stay local until the next import overwrites calendar fields from Google |
+| **`export`** | **No** (`SyncBinding` skips) | Outbox on create/update/delete (and `POST .../calendar/export`) | Scope: optional `group_id`, or all top-level tasks if `group_id` omitted, or per-task opt-in |
+| **`both`** | Same as import | Same as export | Anti-loop via private `goreminder_task_id` on exported events |
+
+`messenger_related_user_id` on the binding is orthogonal: it only controls whether **imported** tasks get a messenger and `worker.schedule_task`. Native (export-origin) tasks use whatever `mru` they already have on the task row.
+
+#### Task types
+
+**A. One-shot** (no `cron_expression`, no `rrule`, no `parent_id`)
+
+| Direction | Behavior |
+|--|--|
+| **import** | One Google event → one task. Future → `scheduled`; after start passes → next sync sets `done` + `finish_date`. Not in autoreschedule. With binding `mru` → schedule once; when past → `delete_task` on sync. |
+| **export** | Task create/update → Create/Patch event; delete → DeleteEvent. Autoreschedule +24h **does not** update Google (event keeps old start until a normal API update). |
+| **both** | Import + export rules above. Prefer not to fight yourself: edits in Google and in the bot can overwrite each other on the next cycle. |
+
+**B. Recurring without confirmation** (`rrule` **or** `cron_expression`, `requires_confirmation=false`)
+
+| Direction | Behavior |
+|--|--|
+| **import** | One Google series → one task with `rrule` (instances are not expanded). Past DTSTART is advanced to the **next** occurrence → stays `scheduled`. Excluded from autoreschedule; next occurrence / worker republish come from calendar sync when `mru` is set. Worker payload has no RRULE — each publish is a one-shot at current `start_date`. |
+| **export** | One task → one Google event. `rrule` → Recurrence as-is. `cron_expression` only → mapped to RRULE when possible (`0 9 * * *` → `FREQ=DAILY`; weekly/monthly/yearly patterns similarly); unsupported cron → single timed event. Autoreschedule advancing `start_date` **does not** Patch Google (series DTSTART should stay; Google already expands RRULE). |
+| **both** | Same combination. Google series ↔ one GoReminder row with `rrule`. |
+
+**C. Recurring with confirmation** (parent has `rrule`/`cron` + `requires_confirmation=true`; children have `parent_id`)
+
+| Direction | Behavior |
+|--|--|
+| **import** | Same as B: Google has no confirmation tree — import creates a **top-level** task (no auto children). If you later set `requires_confirmation` via API, normal GoReminder parent/child rules apply; that is outside calendar import. |
+| **export** | Only the **parent** is eligible (`ShouldExportTask` skips children). Parent → one Google series (`rrule` or cron→RRULE). Child create/done/autoreschedule **do not** export. Deleting the parent can delete the Google event. |
+| **both** | Parent syncs both ways as in B; children remain GoReminder-only. |
+
+#### Cross-cutting rules
+
+| Topic | Rule |
+|--|--|
+| **Confirmation children** | Never exported; never created by import. |
+| **Autoreschedule** | Skips `origin=imported`. For native tasks: updates DB (+ worker for one-shots); **no** calendar outbox. |
+| **Mute** | DB flag; MuteTask does not enqueue calendar export. With `mru`, mute/unmute still talk to the messenger worker as usual. |
+| **Past imported one-shot** | → `done` on sync (with or without `mru`). |
+| **Cancel in Google / unbind** | `delete_policy`: `soft_delete_imported` / `mute_imported` / `keep`. Export-origin links are not soft-deleted by import cancel of unrelated events. |
+| **Task history (import)** | Import create/update/done/cancel writes `task_history` with existing actions (`created` / `updated` / `status_changed` / `deleted`) and `source: "google_calendar_import"` in old/new value. Best-effort (sync does not fail if history insert fails). Export via normal API already records history as usual. |
+| **Export without `group_id`** | Every eligible top-level task of that user can be pushed — usually set a group unless that is intentional. |
+
+#### Which API changes hit Google Calendar?
+
+Export outbox runs only when `notifyCalendarExport` fires **and** a matching `export`/`both` binding applies. Import-only bindings never get local→Google pushes.
+
+| Action / field | Enqueues calendar export? | What changes in Google (if enqueued) |
+|--|--|--|
+| **Create** task | yes (`created`) | CreateEvent |
+| **Delete** task (`DeleteTask`) | yes (`deleted`) | DeleteEvent |
+| **PUT** `title`, `description` | yes (`updated`) | Patch summary / description |
+| **PUT** `start_date` | yes | Patch event start/end |
+| **PUT** `finish_date` | yes | May change event **duration** (end = start + duration; if `finish_date` > start it is used as duration hint) — not “completion” in Google |
+| **PUT** `rrule` / `cron_expression` | yes | Patch Recurrence (`rrule` as-is; cron mapped when possible) |
+| **PUT** `status` (e.g. `done`) | yes (`updated`, not delete) | Patch only (event **stays** in Google). Prefer `DeleteTask` to remove the event |
+| **PUT** `muted` | yes | Outbox may run, but **muted is not** in the event payload → calendar looks unchanged |
+| **PUT** `pre_remind_before_seconds` | yes | Same — **not** mapped to Google reminders |
+| **PUT** `requires_confirmation` | yes | Not in event payload; may affect children locally only |
+| **PUT** `group_id` | yes | Not in event payload; can change **whether** future exports match a group-scoped binding |
+| **POST** `/mute`, `/unmute` | **no** | Messenger worker only |
+| **POST** mark done | **no** | Event stays in Google |
+| **Autoreschedule** | **no** | DB (+ worker for one-shots); Google unchanged |
+
+Mapped into the Google event body: `title`, `description`, `start_date`, duration (`finish_date` / link duration / default 30m), `rrule` or cron→RRULE, plus private `goreminder_task_id`.
+
+Not mapped: `muted`, `pre_remind_before_seconds`, `status`, `requires_confirmation`, `messenger_related_user_id`, attachments, etc.
 
 ### 3.4 Force sync / list / disconnect
 
@@ -160,7 +228,7 @@ Content-Type: application/json
 { "calendar_binding_id": 1 }
 ```
 
-Confirmation **child** tasks are not exported separately; the parent / logical series is.
+Confirmation **child** tasks are not exported separately; the parent / logical series is. Full matrix (import / export / both × one-shot / recurring / confirmation): see [Behavior matrix](#behavior-matrix-direction--task-type) above.
 
 ---
 

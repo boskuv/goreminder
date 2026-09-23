@@ -3472,6 +3472,10 @@ const docTemplate = `{
                 "last_synced_at": {
                     "type": "string"
                 },
+                "messenger_related_user_id": {
+                    "type": "integer",
+                    "example": 1
+                },
                 "status": {
                     "type": "string",
                     "example": "active"
@@ -3568,6 +3572,10 @@ const docTemplate = `{
                     "example": "primary"
                 },
                 "group_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "messenger_related_user_id": {
                     "type": "integer",
                     "example": 1
                 }

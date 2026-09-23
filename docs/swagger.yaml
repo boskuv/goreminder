@@ -102,6 +102,9 @@ definitions:
         type: string
       last_synced_at:
         type: string
+      messenger_related_user_id:
+        example: 1
+        type: integer
       status:
         example: active
         type: string
@@ -174,6 +177,9 @@ definitions:
         example: primary
         type: string
       group_id:
+        example: 1
+        type: integer
+      messenger_related_user_id:
         example: 1
         type: integer
     required:

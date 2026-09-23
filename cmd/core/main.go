@@ -244,6 +244,7 @@ func main() {
 			taskRepo,
 			userRepo,
 			messengerRepo,
+			taskHistoryRepo,
 			log,
 		)
 		taskService.SetCalendarExportHook(calendarSyncService)
