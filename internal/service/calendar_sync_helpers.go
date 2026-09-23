@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/robfig/cron/v3"
+
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/pkg/googlecalendar"
 )
@@ -111,6 +113,194 @@ func RRuleToRecurrence(rrule *string) []string {
 	return []string{"RRULE:" + rule}
 }
 
+// CronExpressionToRRule maps a standard 5-field cron (min hour dom month dow) to an
+// iCalendar RRULE body (without "RRULE:" prefix) for Google Calendar export.
+// Event time-of-day comes from DTSTART; this encodes frequency / weekday / month-day.
+// Returns nil when the expression cannot be represented safely as RRULE.
+func CronExpressionToRRule(cronExpr string) *string {
+	cronExpr = strings.TrimSpace(cronExpr)
+	if cronExpr == "" {
+		return nil
+	}
+	// Validate with the same parser the API uses.
+	if _, err := cron.ParseStandard(cronExpr); err != nil {
+		return nil
+	}
+	fields := strings.Fields(cronExpr)
+	if len(fields) != 5 {
+		return nil
+	}
+	minute, hour, dom, month, dow := fields[0], fields[1], fields[2], fields[3], fields[4]
+
+	// Time-of-day is taken from DTSTART; reject odd step patterns on minute/hour that
+	// would need MINUTELY/HOURLY series mismatched with a timed DTSTART.
+	if strings.HasPrefix(minute, "*/") || strings.HasPrefix(hour, "*/") {
+		return nil
+	}
+	if strings.ContainsAny(minute, "-,") || strings.ContainsAny(hour, "-,") {
+		return nil
+	}
+
+	var rule string
+	switch {
+	case dom == "*" && month == "*" && dow == "*":
+		rule = "FREQ=DAILY"
+	case dom == "*" && month == "*" && dow != "*":
+		byday, ok := cronDowToByDay(dow)
+		if !ok {
+			return nil
+		}
+		rule = "FREQ=WEEKLY;BYDAY=" + byday
+	case dom != "*" && month == "*" && dow == "*":
+		byMonthDay, ok := cronFieldToCSV(dom, 1, 31)
+		if !ok {
+			return nil
+		}
+		rule = "FREQ=MONTHLY;BYMONTHDAY=" + byMonthDay
+	case dom != "*" && month != "*" && dow == "*":
+		byMonthDay, ok := cronFieldToCSV(dom, 1, 31)
+		if !ok {
+			return nil
+		}
+		byMonth, ok := cronFieldToCSV(month, 1, 12)
+		if !ok {
+			return nil
+		}
+		rule = "FREQ=YEARLY;BYMONTH=" + byMonth + ";BYMONTHDAY=" + byMonthDay
+	default:
+		// Combined DOM+DOW (cron OR semantics) and other mixes are not mapped.
+		return nil
+	}
+	return &rule
+}
+
+func cronFieldToCSV(field string, min, max int) (string, bool) {
+	parts, ok := expandCronIntList(field, min, max)
+	if !ok || len(parts) == 0 {
+		return "", false
+	}
+	out := make([]string, len(parts))
+	for i, n := range parts {
+		out[i] = strconv.Itoa(n)
+	}
+	return strings.Join(out, ","), true
+}
+
+func expandCronIntList(field string, min, max int) ([]int, bool) {
+	if field == "*" || strings.HasPrefix(field, "*/") {
+		return nil, false
+	}
+	var result []int
+	for _, piece := range strings.Split(field, ",") {
+		piece = strings.TrimSpace(piece)
+		if piece == "" {
+			return nil, false
+		}
+		if strings.Contains(piece, "-") {
+			bounds := strings.Split(piece, "-")
+			if len(bounds) != 2 {
+				return nil, false
+			}
+			lo, err1 := strconv.Atoi(strings.TrimSpace(bounds[0]))
+			hi, err2 := strconv.Atoi(strings.TrimSpace(bounds[1]))
+			if err1 != nil || err2 != nil || lo > hi || lo < min || hi > max {
+				return nil, false
+			}
+			for n := lo; n <= hi; n++ {
+				result = append(result, n)
+			}
+			continue
+		}
+		n, err := strconv.Atoi(piece)
+		if err != nil || n < min || n > max {
+			return nil, false
+		}
+		result = append(result, n)
+	}
+	return result, true
+}
+
+// cronDowToByDay converts cron day-of-week (0-7, names, lists, ranges) to Google BYDAY.
+func cronDowToByDay(field string) (string, bool) {
+	if field == "*" || strings.HasPrefix(field, "*/") {
+		return "", false
+	}
+	var nums []int
+	for _, piece := range strings.Split(field, ",") {
+		piece = strings.TrimSpace(piece)
+		if piece == "" {
+			return "", false
+		}
+		if strings.Contains(piece, "-") {
+			bounds := strings.Split(piece, "-")
+			if len(bounds) != 2 {
+				return "", false
+			}
+			lo, ok1 := cronDowTokenToNumber(bounds[0])
+			hi, ok2 := cronDowTokenToNumber(bounds[1])
+			if !ok1 || !ok2 || lo > hi {
+				return "", false
+			}
+			for n := lo; n <= hi; n++ {
+				nums = append(nums, n)
+			}
+			continue
+		}
+		n, ok := cronDowTokenToNumber(piece)
+		if !ok {
+			return "", false
+		}
+		nums = append(nums, n)
+	}
+	if len(nums) == 0 {
+		return "", false
+	}
+	names := make([]string, 0, len(nums))
+	seen := map[string]struct{}{}
+	for _, n := range nums {
+		if n == 7 {
+			n = 0
+		}
+		if n < 0 || n > 6 {
+			return "", false
+		}
+		name := cronDowByDay[n]
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	return strings.Join(names, ","), true
+}
+
+var cronDowByDay = []string{"SU", "MO", "TU", "WE", "TH", "FR", "SA"}
+
+func cronDowTokenToNumber(tok string) (int, bool) {
+	tok = strings.ToLower(strings.TrimSpace(tok))
+	switch tok {
+	case "0", "7", "sun", "sunday":
+		return 0, true
+	case "1", "mon", "monday":
+		return 1, true
+	case "2", "tue", "tuesday":
+		return 2, true
+	case "3", "wed", "wednesday":
+		return 3, true
+	case "4", "thu", "thursday":
+		return 4, true
+	case "5", "fri", "friday":
+		return 5, true
+	case "6", "sat", "saturday":
+		return 6, true
+	}
+	n, err := strconv.Atoi(tok)
+	if err != nil || n < 0 || n > 7 {
+		return 0, false
+	}
+	return n, true
+}
+
 // MapEventToTaskFields maps a Google event onto task fields for import upsert.
 // messengerRelatedUserID is copied from the binding when set (needed for worker reminders).
 // Recurring series with a past DTSTART advance start_date to the next occurrence so the task
@@ -208,6 +398,7 @@ func TaskIDFromExtendedProperties(props map[string]string) (int64, bool) {
 }
 
 // BuildExportEvent builds a Google event payload from a task.
+// Recurrence prefers task.RRule; if unset, cron_expression is mapped to RRULE when possible.
 func BuildExportEvent(task *models.Task, durationMinutes int, existingDurationSeconds *int) *googlecalendar.Event {
 	if durationMinutes <= 0 {
 		durationMinutes = 30
@@ -220,12 +411,18 @@ func BuildExportEvent(task *models.Task, durationMinutes int, existingDurationSe
 		dur = task.FinishDate.Sub(start)
 	}
 	end := start.Add(dur)
+
+	rrule := task.RRule
+	if !recurrenceFieldSet(rrule) && recurrenceFieldSet(task.CronExpression) {
+		rrule = CronExpressionToRRule(*task.CronExpression)
+	}
+
 	ev := &googlecalendar.Event{
 		Summary:     task.Title,
 		Description: task.Description,
 		Start:       googlecalendar.EventDateTime{DateTime: &start},
 		End:         googlecalendar.EventDateTime{DateTime: &end},
-		Recurrence:  RRuleToRecurrence(task.RRule),
+		Recurrence:  RRuleToRecurrence(rrule),
 		ExtendedProperties: map[string]string{
 			googlecalendar.PrivateExtendedPropertyTaskID: strconv.FormatInt(task.ID, 10),
 		},

@@ -132,6 +132,38 @@ func TestBuildExportEvent(t *testing.T) {
 	assert.Equal(t, "77", ev.ExtendedProperties[googlecalendar.PrivateExtendedPropertyTaskID])
 }
 
+func TestBuildExportEvent_CronMapsToRRule(t *testing.T) {
+	start := time.Date(2026, 9, 21, 9, 0, 0, 0, time.UTC)
+	cronExpr := "0 9 * * *"
+	task := &models.Task{ID: 1, Title: "Daily", StartDate: start, CronExpression: &cronExpr}
+	ev := BuildExportEvent(task, 30, nil)
+	assert.Equal(t, []string{"RRULE:FREQ=DAILY"}, ev.Recurrence)
+}
+
+func TestCronExpressionToRRule(t *testing.T) {
+	cases := []struct {
+		cron string
+		want string
+	}{
+		{"0 9 * * *", "FREQ=DAILY"},
+		{"30 8 * * 1", "FREQ=WEEKLY;BYDAY=MO"},
+		{"0 9 * * 1,3,5", "FREQ=WEEKLY;BYDAY=MO,WE,FR"},
+		{"0 9 * * 1-5", "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"},
+		{"0 12 15 * *", "FREQ=MONTHLY;BYMONTHDAY=15"},
+		{"0 12 1 1 *", "FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.cron, func(t *testing.T) {
+			got := CronExpressionToRRule(tc.cron)
+			require.NotNil(t, got)
+			assert.Equal(t, tc.want, *got)
+		})
+	}
+	assert.Nil(t, CronExpressionToRRule("*/5 * * * *"))
+	assert.Nil(t, CronExpressionToRRule("0 9 1 * 1")) // DOM+DOW combined
+	assert.Nil(t, CronExpressionToRRule(""))
+}
+
 func TestTaskIDFromExtendedProperties(t *testing.T) {
 	id, ok := TaskIDFromExtendedProperties(map[string]string{googlecalendar.PrivateExtendedPropertyTaskID: "123"})
 	assert.True(t, ok)
