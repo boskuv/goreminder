@@ -68,6 +68,28 @@ func (s *TaskService) SetCalendarExportHook(hook CalendarExportHook) {
 	s.exportHook = hook
 }
 
+// PublishImportedTaskSchedule sends worker.schedule_task for a calendar-imported task when it has
+// a messenger and is eligible (future start, or recurrence). Best-effort: logs and returns nil-path errors
+// are returned so the caller can decide; missing messenger is a no-op.
+func (s *TaskService) PublishImportedTaskSchedule(ctx context.Context, task *models.Task) error {
+	if task == nil || task.MessengerRelatedUserID == nil {
+		return nil
+	}
+	return s.publishScheduleTaskEvent(ctx, nil, task, false)
+}
+
+// PublishImportedTaskDelete sends worker.delete_task for a calendar-imported task when it has a messenger.
+func (s *TaskService) PublishImportedTaskDelete(ctx context.Context, task *models.Task) error {
+	if task == nil || task.MessengerRelatedUserID == nil {
+		return nil
+	}
+	ev, err := s.buildDeleteTaskEvent(ctx, task)
+	if err != nil {
+		return err
+	}
+	return s.publishTaskEvent(ctx, task, ev)
+}
+
 func (s *TaskService) notifyCalendarExport(ctx context.Context, taskID int64, action string) {
 	if s.exportHook == nil {
 		return

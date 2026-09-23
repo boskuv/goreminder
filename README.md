@@ -416,6 +416,7 @@ The `autoreschedule` option controls whether the task scheduler should run autom
 - Finds tasks that need rescheduling (tasks with `startDate` in the past that require confirmation)
 - Finds parent tasks with a recurrence rule (`cron_expression` or `rrule`) that need their `startDate` updated
 - Automatically reschedules these tasks
+- **Skips** tasks imported from Google Calendar (`task_sync_links.origin = imported`); those are advanced/republished by calendar sync when a binding `messenger_related_user_id` is set (see [docs/google-calendar.md](docs/google-calendar.md))
 
 **Use Cases:**
 - Enable autoreschedule to automatically handle tasks that have passed their scheduled time

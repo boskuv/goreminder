@@ -38,14 +38,31 @@ type NoopCalendarExportHook struct{}
 
 func (NoopCalendarExportHook) OnTaskChanged(context.Context, int64, string) {}
 
+// ImportedTaskScheduler publishes messenger worker events for calendar-imported tasks.
+type ImportedTaskScheduler interface {
+	PublishImportedTaskSchedule(ctx context.Context, task *models.Task) error
+	PublishImportedTaskDelete(ctx context.Context, task *models.Task) error
+}
+
+// NoopImportedTaskScheduler is used when the queue/worker path is unavailable.
+type NoopImportedTaskScheduler struct{}
+
+func (NoopImportedTaskScheduler) PublishImportedTaskSchedule(context.Context, *models.Task) error {
+	return nil
+}
+func (NoopImportedTaskScheduler) PublishImportedTaskDelete(context.Context, *models.Task) error {
+	return nil
+}
+
 // CreateBindingRequest holds parameters for creating a calendar binding.
 type CreateBindingRequest struct {
-	UserID           int64
-	GoogleCalendarID string
-	CalendarSummary  *string
-	Direction        models.CalendarBindingDirection
-	GroupID          *int64
-	DeletePolicy     models.CalendarDeletePolicy
+	UserID                   int64
+	GoogleCalendarID         string
+	CalendarSummary          *string
+	Direction                models.CalendarBindingDirection
+	GroupID                  *int64
+	MessengerRelatedUserID   *int
+	DeletePolicy             models.CalendarDeletePolicy
 }
 
 type googleUserInfo struct {
@@ -65,6 +82,8 @@ type CalendarSyncService struct {
 	outbox              repository.SyncOutboxRepository
 	tasks               repository.TaskRepository
 	users               repository.UserRepository
+	messengers          repository.MessengerRepository
+	importedScheduler   ImportedTaskScheduler
 	httpClient          *http.Client
 	tracer              trace.Tracer
 	logger              zerolog.Logger
@@ -82,23 +101,35 @@ func NewCalendarSyncService(
 	outbox repository.SyncOutboxRepository,
 	tasks repository.TaskRepository,
 	users repository.UserRepository,
+	messengers repository.MessengerRepository,
 	logger zerolog.Logger,
 ) *CalendarSyncService {
 	return &CalendarSyncService{
-		cfg:            cfg,
-		oauthCfg:       oauthCfg,
-		cipher:         cipher,
-		clientFactory:  clientFactory,
-		googleAccounts: googleAccounts,
-		bindings:       bindings,
-		syncLinks:      syncLinks,
-		outbox:         outbox,
-		tasks:          tasks,
-		users:          users,
-		httpClient:     http.DefaultClient,
-		tracer:         otel.Tracer("calendar-sync-service"),
-		logger:         logger,
+		cfg:               cfg,
+		oauthCfg:          oauthCfg,
+		cipher:            cipher,
+		clientFactory:     clientFactory,
+		googleAccounts:    googleAccounts,
+		bindings:          bindings,
+		syncLinks:         syncLinks,
+		outbox:            outbox,
+		tasks:             tasks,
+		users:             users,
+		messengers:        messengers,
+		importedScheduler: NoopImportedTaskScheduler{},
+		httpClient:        http.DefaultClient,
+		tracer:            otel.Tracer("calendar-sync-service"),
+		logger:            logger,
 	}
+}
+
+// SetImportedTaskScheduler wires messenger worker publishing for imported tasks (call from main after TaskService is ready).
+func (s *CalendarSyncService) SetImportedTaskScheduler(scheduler ImportedTaskScheduler) {
+	if scheduler == nil {
+		s.importedScheduler = NoopImportedTaskScheduler{}
+		return
+	}
+	s.importedScheduler = scheduler
 }
 
 // StartOAuth returns the Google consent URL with state=userID.
@@ -266,15 +297,34 @@ func (s *CalendarSyncService) CreateBinding(ctx context.Context, req CreateBindi
 		policy = models.CalendarDeletePolicySoftDeleteImported
 	}
 
+	if req.MessengerRelatedUserID != nil {
+		mru, err := s.messengers.GetMessengerRelatedUserByID(ctx, *req.MessengerRelatedUserID)
+		if err != nil {
+			if errors.Is(err, errs.ErrNotFound) {
+				err = errors.Wrap(errs.ErrUnprocessableEntity, "messenger_related_user_id not found")
+			}
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, errors.WithStack(err)
+		}
+		if mru.UserID == nil || *mru.UserID != req.UserID {
+			err = errors.Wrap(errs.ErrValidation, "messenger_related_user_id does not belong to user")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
+		}
+	}
+
 	binding := &models.CalendarBinding{
-		UserID:           req.UserID,
-		GoogleAccountID:  account.ID,
-		GoogleCalendarID: req.GoogleCalendarID,
-		CalendarSummary:  req.CalendarSummary,
-		Direction:        direction,
-		GroupID:          req.GroupID,
-		Status:           models.CalendarBindingStatusActive,
-		DeletePolicy:     policy,
+		UserID:                 req.UserID,
+		GoogleAccountID:        account.ID,
+		GoogleCalendarID:       req.GoogleCalendarID,
+		CalendarSummary:        req.CalendarSummary,
+		Direction:              direction,
+		GroupID:                req.GroupID,
+		MessengerRelatedUserID: req.MessengerRelatedUserID,
+		Status:                 models.CalendarBindingStatusActive,
+		DeletePolicy:           policy,
 	}
 	id, err := s.bindings.Create(ctx, binding)
 	if err != nil {
@@ -326,10 +376,12 @@ func (s *CalendarSyncService) DeleteBinding(ctx context.Context, bindingID int64
 		}
 		softDelete, mute := ApplyDeletePolicy(binding.DeletePolicy, task)
 		if softDelete {
+			_ = s.importedScheduler.PublishImportedTaskDelete(ctx, task)
 			if err := s.tasks.DeleteTask(ctx, task.ID); err != nil {
 				return errors.WithStack(err)
 			}
 		} else if mute && !task.Muted {
+			_ = s.importedScheduler.PublishImportedTaskDelete(ctx, task)
 			task.Muted = true
 			if err := s.tasks.UpdateTask(ctx, task); err != nil {
 				return errors.WithStack(err)
@@ -539,7 +591,7 @@ func (s *CalendarSyncService) upsertImportedEvent(ctx context.Context, binding *
 		}
 	}
 
-	fields, err := MapEventToTaskFields(ev, binding.UserID, binding.GroupID)
+	fields, err := MapEventToTaskFields(ev, binding.UserID, binding.GroupID, binding.MessengerRelatedUserID)
 	if err != nil {
 		return errors.Wrap(err, "map event to task")
 	}
@@ -554,6 +606,7 @@ func (s *CalendarSyncService) upsertImportedEvent(ctx context.Context, binding *
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		fields.ID = taskID
 		bindingID := binding.ID
 		link = &models.TaskSyncLink{
 			TaskID:            taskID,
@@ -568,8 +621,14 @@ func (s *CalendarSyncService) upsertImportedEvent(ctx context.Context, binding *
 			DurationSeconds:   dur,
 			LastSyncedAt:      &now,
 		}
-		_, err = s.syncLinks.Create(ctx, link)
-		return errors.WithStack(err)
+		if _, err = s.syncLinks.Create(ctx, link); err != nil {
+			return errors.WithStack(err)
+		}
+		if err := s.importedScheduler.PublishImportedTaskSchedule(ctx, fields); err != nil {
+			log := logger.WithTraceContext(ctx, s.logger)
+			log.Warn().Err(err).Int64("task.id", taskID).Msg("failed to publish schedule for imported calendar task")
+		}
+		return nil
 	}
 
 	task, err := s.tasks.GetTaskByIDWithoutStatusFilter(ctx, link.TaskID)
@@ -579,18 +638,54 @@ func (s *CalendarSyncService) upsertImportedEvent(ctx context.Context, binding *
 			if err != nil {
 				return errors.WithStack(err)
 			}
+			fields.ID = taskID
 			link.TaskID = taskID
+			if err := s.importedScheduler.PublishImportedTaskSchedule(ctx, fields); err != nil {
+				log := logger.WithTraceContext(ctx, s.logger)
+				log.Warn().Err(err).Int64("task.id", taskID).Msg("failed to publish schedule for recreated imported calendar task")
+			}
 		} else {
 			return errors.WithStack(err)
 		}
 	} else {
+		scheduleChanged := !task.StartDate.Equal(fields.StartDate) ||
+			!recurrencePtrsEqual(task.RRule, fields.RRule) ||
+			task.Title != fields.Title ||
+			task.Description != fields.Description
+		wasScheduled := task.Status == string(models.TaskStatusScheduled) ||
+			task.Status == string(models.TaskStatusRescheduled) ||
+			task.Status == string(models.TaskStatusPostponed)
+
 		task.Title = fields.Title
 		task.Description = fields.Description
 		task.StartDate = fields.StartDate
 		task.RRule = fields.RRule
 		task.GroupID = fields.GroupID
+		if fields.MessengerRelatedUserID != nil {
+			task.MessengerRelatedUserID = fields.MessengerRelatedUserID
+		}
+		task.Status = fields.Status
+		if fields.Status == string(models.TaskStatusDone) {
+			task.FinishDate = fields.FinishDate
+		} else if fields.Status == string(models.TaskStatusScheduled) {
+			task.FinishDate = nil
+		}
 		if err := s.tasks.UpdateTask(ctx, task); err != nil {
 			return errors.WithStack(err)
+		}
+
+		if task.MessengerRelatedUserID != nil {
+			if fields.Status == string(models.TaskStatusScheduled) && (scheduleChanged || !wasScheduled) {
+				if err := s.importedScheduler.PublishImportedTaskSchedule(ctx, task); err != nil {
+					log := logger.WithTraceContext(ctx, s.logger)
+					log.Warn().Err(err).Int64("task.id", task.ID).Msg("failed to republish schedule for imported calendar task")
+				}
+			} else if wasScheduled && fields.Status != string(models.TaskStatusScheduled) {
+				if err := s.importedScheduler.PublishImportedTaskDelete(ctx, task); err != nil {
+					log := logger.WithTraceContext(ctx, s.logger)
+					log.Warn().Err(err).Int64("task.id", task.ID).Msg("failed to delete worker job for past imported calendar task")
+				}
+			}
 		}
 	}
 
@@ -604,6 +699,16 @@ func (s *CalendarSyncService) upsertImportedEvent(ctx context.Context, binding *
 	return errors.WithStack(s.syncLinks.Update(ctx, link))
 }
 
+func recurrencePtrsEqual(a, b *string) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
+}
+
 func (s *CalendarSyncService) applyCancelledEvent(ctx context.Context, binding *models.CalendarBinding, link *models.TaskSyncLink) error {
 	task, err := s.tasks.GetTaskByIDWithoutStatusFilter(ctx, link.TaskID)
 	if err != nil {
@@ -614,10 +719,12 @@ func (s *CalendarSyncService) applyCancelledEvent(ctx context.Context, binding *
 	}
 	softDelete, mute := ApplyDeletePolicy(binding.DeletePolicy, task)
 	if softDelete {
+		_ = s.importedScheduler.PublishImportedTaskDelete(ctx, task)
 		if err := s.tasks.DeleteTask(ctx, task.ID); err != nil {
 			return errors.WithStack(err)
 		}
 	} else if mute && !task.Muted {
+		_ = s.importedScheduler.PublishImportedTaskDelete(ctx, task)
 		task.Muted = true
 		if err := s.tasks.UpdateTask(ctx, task); err != nil {
 			return errors.WithStack(err)

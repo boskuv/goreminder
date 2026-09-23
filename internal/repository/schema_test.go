@@ -109,8 +109,8 @@ func TestTableSchemasMatchModels(t *testing.T) {
 			tableName: "calendar_bindings",
 			expectedColumns: []string{
 				"id", "user_id", "google_account_id", "google_calendar_id", "calendar_summary",
-				"direction", "group_id", "sync_token", "last_synced_at", "last_error", "status",
-				"delete_policy", "created_at", "updated_at", "deleted_at",
+				"direction", "group_id", "messenger_related_user_id", "sync_token", "last_synced_at",
+				"last_error", "status", "delete_policy", "created_at", "updated_at", "deleted_at",
 			},
 		},
 		{

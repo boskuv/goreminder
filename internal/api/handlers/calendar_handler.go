@@ -155,12 +155,13 @@ func (h *CalendarHandler) CreateBinding(c *gin.Context) {
 	}
 
 	binding, err := h.service.CreateBinding(ctx, service.CreateBindingRequest{
-		UserID:           userID,
-		GoogleCalendarID: req.GoogleCalendarID,
-		CalendarSummary:  req.CalendarSummary,
-		Direction:        direction,
-		GroupID:          req.GroupID,
-		DeletePolicy:     policy,
+		UserID:                 userID,
+		GoogleCalendarID:       req.GoogleCalendarID,
+		CalendarSummary:        req.CalendarSummary,
+		Direction:              direction,
+		GroupID:                req.GroupID,
+		MessengerRelatedUserID: req.MessengerRelatedUserID,
+		DeletePolicy:           policy,
 	})
 	if err != nil {
 		log.Error().Err(err).Int64("user.id", userID).Msg("failed to create calendar binding")

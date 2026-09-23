@@ -113,6 +113,7 @@ Content-Type: application/json
   "calendar_summary": "Personal",
   "direction": "import",
   "group_id": 1,
+  "messenger_related_user_id": 1,
   "delete_policy": "soft_delete_imported"
 }
 ```
@@ -121,9 +122,18 @@ Content-Type: application/json
 |--------|--------|
 | `direction` | `import` — Google → tasks; `export` — tasks → Google; `both` |
 | `group_id` | Optional task group: imported tasks go there; for export, only tasks in that group are pushed (if set). If `group_id` is omitted on an **export** binding, eligible tasks for that user may be exported. |
+| `messenger_related_user_id` | Optional. When set on an **import**/**both** binding, imported tasks get this `mru` and future occurrences are published to the messenger worker (`schedule_task`). Omit to keep calendar-only tasks (DB mirror, no chat reminders). Must belong to the same user. |
 | `delete_policy` | On unbind/cancel: `soft_delete_imported` (default), `mute_imported`, `keep` |
 
 Repeat `POST .../bindings` for additional calendars.
+
+### Import vs autoreschedule / worker
+
+- **Imported** tasks (`origin=imported`) are **excluded from autoreschedule**. Google does not mark past events “done”; we must not +24h them like overdue reminders.
+- **One event / one series → one task** (not expanded instances). Recurring Google events store `rrule` on that task; if DTSTART is already past, import advances `start_date` to the **next** occurrence.
+- **Worker**: only if the binding has `messenger_related_user_id`. The queue payload still uses `cron_expression` (worker has no RRULE arg) — so each publish is a **one-shot** at the current `start_date`. After the time passes, the next calendar sync advances `start_date` again and republishes (not autoreschedule day-by-day).
+- **Status after the event**: one-shot past events become `done` (with `finish_date`) on the next sync; recurring stay `scheduled` on the next occurrence. Cancel in Google still follows `delete_policy`.
+- Cancel/delete in Google (or unbind with soft-delete/mute) sends `delete_task` when a messenger was set.
 
 ### 3.4 Force sync / list / disconnect
 

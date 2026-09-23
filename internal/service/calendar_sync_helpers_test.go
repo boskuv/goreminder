@@ -31,12 +31,14 @@ func TestMapEventToTaskFields(t *testing.T) {
 		Recurrence:  []string{"RRULE:FREQ=DAILY;COUNT=3"},
 	}
 	groupID := int64(9)
-	task, err := MapEventToTaskFields(ev, 42, &groupID)
+	mru := 3
+	task, err := MapEventToTaskFields(ev, 42, &groupID, &mru)
 	require.NoError(t, err)
 	assert.Equal(t, "Meet", task.Title)
 	assert.Equal(t, "desc", task.Description)
 	assert.Equal(t, int64(42), task.UserID)
 	assert.Equal(t, &groupID, task.GroupID)
+	assert.Equal(t, &mru, task.MessengerRelatedUserID)
 	assert.Equal(t, start.UTC(), task.StartDate)
 	assert.Nil(t, task.FinishDate)
 	require.NotNil(t, task.RRule)
@@ -50,10 +52,43 @@ func TestMapEventToTaskFields_AllDay(t *testing.T) {
 		Start:   googlecalendar.EventDateTime{Date: "2026-09-21"},
 		End:     googlecalendar.EventDateTime{Date: "2026-09-22"},
 	}
-	task, err := MapEventToTaskFields(ev, 1, nil)
+	task, err := MapEventToTaskFields(ev, 1, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "(untitled event)", task.Title)
 	assert.Equal(t, time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC), task.StartDate)
+	assert.Equal(t, string(models.TaskStatusDone), task.Status)
+	require.NotNil(t, task.FinishDate)
+}
+
+func TestMapEventToTaskFields_RecurringPastAdvances(t *testing.T) {
+	// Past DTSTART with daily RRULE → start_date should jump to a future occurrence.
+	start := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Second)
+	ev := googlecalendar.Event{
+		Summary:    "Daily stand-up",
+		Start:      googlecalendar.EventDateTime{DateTime: &start},
+		Recurrence: []string{"RRULE:FREQ=DAILY"},
+	}
+	task, err := MapEventToTaskFields(ev, 1, nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, task.RRule)
+	assert.True(t, task.StartDate.After(time.Now().UTC()), "expected next occurrence in the future, got %s", task.StartDate)
+	assert.Equal(t, string(models.TaskStatusScheduled), task.Status)
+	assert.Nil(t, task.FinishDate)
+}
+
+func TestMapEventToTaskFields_PastOneShotDone(t *testing.T) {
+	start := time.Now().UTC().Add(-2 * time.Hour)
+	end := start.Add(30 * time.Minute)
+	ev := googlecalendar.Event{
+		Summary: "Past meeting",
+		Start:   googlecalendar.EventDateTime{DateTime: &start},
+		End:     googlecalendar.EventDateTime{DateTime: &end},
+	}
+	task, err := MapEventToTaskFields(ev, 1, nil, nil)
+	require.NoError(t, err)
+	assert.Equal(t, string(models.TaskStatusDone), task.Status)
+	require.NotNil(t, task.FinishDate)
+	assert.Equal(t, end.UTC(), task.FinishDate.UTC())
 }
 
 func TestApplyDeletePolicy(t *testing.T) {

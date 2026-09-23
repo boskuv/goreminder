@@ -112,7 +112,11 @@ func RRuleToRecurrence(rrule *string) []string {
 }
 
 // MapEventToTaskFields maps a Google event onto task fields for import upsert.
-func MapEventToTaskFields(ev googlecalendar.Event, userID int64, groupID *int64) (*models.Task, error) {
+// messengerRelatedUserID is copied from the binding when set (needed for worker reminders).
+// Recurring series with a past DTSTART advance start_date to the next occurrence so the task
+// stays useful without autoreschedule (imported tasks are excluded from that job).
+// One-shot events whose start is already past become status=done (Google does not "complete" them).
+func MapEventToTaskFields(ev googlecalendar.Event, userID int64, groupID *int64, messengerRelatedUserID *int) (*models.Task, error) {
 	start, err := EventStartTime(ev)
 	if err != nil {
 		return nil, err
@@ -121,19 +125,38 @@ func MapEventToTaskFields(ev googlecalendar.Event, userID int64, groupID *int64)
 	if title == "" {
 		title = "(untitled event)"
 	}
-	status := string(models.TaskStatusPending)
-	if !start.Before(time.Now().UTC()) {
-		status = string(models.TaskStatusScheduled)
+	rrule := RecurrenceToRRule(ev.Recurrence)
+	now := time.Now().UTC()
+	if rrule != nil && !start.After(now) {
+		next, nextErr := nextStartFromRRule(now, *rrule, start)
+		if nextErr == nil {
+			start = next
+		}
+		// If the series has no future occurrence (COUNT/UNTIL exhausted), keep past start → done below.
 	}
+
 	task := &models.Task{
-		Title:       title,
-		Description: ev.Description,
-		UserID:      userID,
-		GroupID:     groupID,
-		StartDate:   start,
+		Title:                  title,
+		Description:            ev.Description,
+		UserID:                 userID,
+		GroupID:                groupID,
+		MessengerRelatedUserID: messengerRelatedUserID,
+		StartDate:              start,
 		// FinishDate is completion time in GoReminder — duration lives on task_sync_links.
-		RRule:  RecurrenceToRRule(ev.Recurrence),
-		Status: status,
+		RRule: rrule,
+	}
+	if start.After(now) {
+		task.Status = string(models.TaskStatusScheduled)
+	} else {
+		// Past one-shot (or exhausted series): treat as completed, not overdue scheduled.
+		task.Status = string(models.TaskStatusDone)
+		finish := now
+		if end := EventEndTime(ev); end != nil && !end.After(now) {
+			finish = end.UTC()
+		} else if !start.After(now) {
+			finish = start
+		}
+		task.FinishDate = &finish
 	}
 	return task, nil
 }

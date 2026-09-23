@@ -28,19 +28,20 @@ func CalendarBindingToResponse(b *models.CalendarBinding) *dto.CalendarBindingRe
 		return nil
 	}
 	return &dto.CalendarBindingResponse{
-		ID:               b.ID,
-		UserID:           b.UserID,
-		GoogleAccountID:  b.GoogleAccountID,
-		GoogleCalendarID: b.GoogleCalendarID,
-		CalendarSummary:  b.CalendarSummary,
-		Direction:        string(b.Direction),
-		GroupID:          b.GroupID,
-		LastSyncedAt:     b.LastSyncedAt,
-		LastError:        b.LastError,
-		Status:           string(b.Status),
-		DeletePolicy:     string(b.DeletePolicy),
-		CreatedAt:        b.CreatedAt,
-		UpdatedAt:        b.UpdatedAt,
+		ID:                     b.ID,
+		UserID:                 b.UserID,
+		GoogleAccountID:        b.GoogleAccountID,
+		GoogleCalendarID:       b.GoogleCalendarID,
+		CalendarSummary:        b.CalendarSummary,
+		Direction:              string(b.Direction),
+		GroupID:                b.GroupID,
+		MessengerRelatedUserID: b.MessengerRelatedUserID,
+		LastSyncedAt:           b.LastSyncedAt,
+		LastError:              b.LastError,
+		Status:                 string(b.Status),
+		DeletePolicy:           string(b.DeletePolicy),
+		CreatedAt:              b.CreatedAt,
+		UpdatedAt:              b.UpdatedAt,
 	}
 }
 

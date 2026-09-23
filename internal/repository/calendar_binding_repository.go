@@ -44,7 +44,7 @@ func NewCalendarBindingRepository(db *sqlx.DB, logger zerolog.Logger) CalendarBi
 	}
 }
 
-const calendarBindingColumns = "id, user_id, google_account_id, google_calendar_id, calendar_summary, direction, group_id, sync_token, last_synced_at, last_error, status, delete_policy, created_at, updated_at"
+const calendarBindingColumns = "id, user_id, google_account_id, google_calendar_id, calendar_summary, direction, group_id, messenger_related_user_id, sync_token, last_synced_at, last_error, status, delete_policy, created_at, updated_at"
 
 func (r *calendarBindingRepository) Create(ctx context.Context, binding *models.CalendarBinding) (int64, error) {
 	ctx, span := r.tracer.Start(ctx, "calendar_binding_repository.Create",
@@ -62,8 +62,8 @@ func (r *calendarBindingRepository) Create(ctx context.Context, binding *models.
 	}
 
 	query, args, err := r.sb.Insert("calendar_bindings").
-		Columns("user_id", "google_account_id", "google_calendar_id", "calendar_summary", "direction", "group_id", "status", "delete_policy").
-		Values(binding.UserID, binding.GoogleAccountID, binding.GoogleCalendarID, binding.CalendarSummary, binding.Direction, binding.GroupID, binding.Status, binding.DeletePolicy).
+		Columns("user_id", "google_account_id", "google_calendar_id", "calendar_summary", "direction", "group_id", "messenger_related_user_id", "status", "delete_policy").
+		Values(binding.UserID, binding.GoogleAccountID, binding.GoogleCalendarID, binding.CalendarSummary, binding.Direction, binding.GroupID, binding.MessengerRelatedUserID, binding.Status, binding.DeletePolicy).
 		Suffix("RETURNING id").
 		ToSql()
 	if err != nil {
@@ -152,6 +152,7 @@ func (r *calendarBindingRepository) Update(ctx context.Context, binding *models.
 		Set("calendar_summary", binding.CalendarSummary).
 		Set("direction", binding.Direction).
 		Set("group_id", binding.GroupID).
+		Set("messenger_related_user_id", binding.MessengerRelatedUserID).
 		Set("sync_token", binding.SyncToken).
 		Set("last_synced_at", binding.LastSyncedAt).
 		Set("last_error", binding.LastError).

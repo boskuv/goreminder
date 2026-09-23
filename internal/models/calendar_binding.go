@@ -37,13 +37,14 @@ type CalendarBinding struct {
 	GoogleCalendarID string                   `db:"google_calendar_id" json:"google_calendar_id"`
 	CalendarSummary  *string                  `db:"calendar_summary" json:"calendar_summary,omitempty"`
 	Direction        CalendarBindingDirection `db:"direction" json:"direction"`
-	GroupID          *int64                   `db:"group_id" json:"group_id,omitempty"`
-	SyncToken        *string                  `db:"sync_token" json:"-"`
-	LastSyncedAt     *time.Time               `db:"last_synced_at" json:"last_synced_at,omitempty"`
-	LastError        *string                  `db:"last_error" json:"last_error,omitempty"`
-	Status           CalendarBindingStatus    `db:"status" json:"status"`
-	DeletePolicy     CalendarDeletePolicy     `db:"delete_policy" json:"delete_policy"`
-	CreatedAt        time.Time                `db:"created_at" json:"created_at"`
-	UpdatedAt        time.Time                `db:"updated_at" json:"updated_at"`
-	DeletedAt        time.Time                `db:"deleted_at" json:"-"`
+	GroupID                  *int64                   `db:"group_id" json:"group_id,omitempty"`
+	MessengerRelatedUserID   *int                     `db:"messenger_related_user_id" json:"messenger_related_user_id,omitempty"`
+	SyncToken                *string                  `db:"sync_token" json:"-"`
+	LastSyncedAt             *time.Time               `db:"last_synced_at" json:"last_synced_at,omitempty"`
+	LastError                *string                  `db:"last_error" json:"last_error,omitempty"`
+	Status                   CalendarBindingStatus    `db:"status" json:"status"`
+	DeletePolicy             CalendarDeletePolicy     `db:"delete_policy" json:"delete_policy"`
+	CreatedAt                time.Time                `db:"created_at" json:"created_at"`
+	UpdatedAt                time.Time                `db:"updated_at" json:"updated_at"`
+	DeletedAt                time.Time                `db:"deleted_at" json:"-"`
 }

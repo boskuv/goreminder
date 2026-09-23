@@ -819,6 +819,7 @@ func (r *taskRepository) DeleteChildTasksWithTx(ctx context.Context, tx *sqlx.Tx
 // - no recurrence on the row itself (cron_expression IS NULL AND rrule IS NULL), or the task is a child (parent_id IS NOT NULL)
 // - status is 'scheduled'
 // - start_date has passed (start_date < NOW())
+// - not imported from an external calendar (those are event mirrors, not +24h reminders)
 // Includes muted tasks so start_date stays current in DB; the service skips queue publish for muted rows.
 func (r *taskRepository) GetTasksNeedingRescheduling(ctx context.Context) ([]*models.Task, error) {
 	ctx, span := r.tracer.Start(ctx, "task_repository.GetTasksNeedingRescheduling")
@@ -844,6 +845,10 @@ func (r *taskRepository) GetTasksNeedingRescheduling(ctx context.Context) ([]*mo
 			squirrel.NotEq{"parent_id": nil},
 		}).
 		Where(squirrel.Lt{"start_date": time.Now().UTC()}).
+		Where(squirrel.Expr(
+			"NOT EXISTS (SELECT 1 FROM task_sync_links tsl WHERE tsl.task_id = tasks.id AND tsl.origin = ?)",
+			string(models.TaskSyncLinkOriginImported),
+		)).
 		ToSql()
 	if err != nil {
 		span.RecordError(err)
@@ -875,6 +880,7 @@ func (r *taskRepository) GetTasksNeedingRescheduling(ctx context.Context) ([]*mo
 // - requires_confirmation = false
 // - status is 'scheduled'
 // - start_date has passed (start_date < NOW())
+// - not imported from an external calendar (next occurrence is advanced on calendar sync / worker schedule)
 // Includes muted tasks so start_date stays current in DB (this path does not publish to the queue).
 func (r *taskRepository) GetTasksWithCronNeedingRescheduling(ctx context.Context) ([]*models.Task, error) {
 	ctx, span := r.tracer.Start(ctx, "task_repository.GetTasksWithCronNeedingRescheduling")
@@ -894,6 +900,10 @@ func (r *taskRepository) GetTasksWithCronNeedingRescheduling(ctx context.Context
 		}).
 		Where(squirrel.Eq{"requires_confirmation": false}).
 		Where(squirrel.Lt{"start_date": time.Now().UTC()}).
+		Where(squirrel.Expr(
+			"NOT EXISTS (SELECT 1 FROM task_sync_links tsl WHERE tsl.task_id = tasks.id AND tsl.origin = ?)",
+			string(models.TaskSyncLinkOriginImported),
+		)).
 		ToSql()
 	if err != nil {
 		span.RecordError(err)

@@ -243,9 +243,11 @@ func main() {
 			syncOutboxRepo,
 			taskRepo,
 			userRepo,
+			messengerRepo,
 			log,
 		)
 		taskService.SetCalendarExportHook(calendarSyncService)
+		calendarSyncService.SetImportedTaskScheduler(taskService)
 		calendarHandler = handlers.NewCalendarHandler(calendarSyncService, log)
 		log.Info().Msg("google calendar integration enabled")
 	} else {

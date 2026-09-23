@@ -16,28 +16,30 @@ type GoogleCalendarListItem struct {
 
 // CreateCalendarBindingRequest creates a sync binding for a Google calendar.
 type CreateCalendarBindingRequest struct {
-	GoogleCalendarID string  `json:"google_calendar_id" binding:"required" example:"primary"`
-	CalendarSummary  *string `json:"calendar_summary,omitempty" example:"Work"`
-	Direction        string  `json:"direction,omitempty" example:"import" enums:"import,export,both"`
-	GroupID          *int64  `json:"group_id,omitempty" example:"1"`
-	DeletePolicy     string  `json:"delete_policy,omitempty" example:"soft_delete_imported" enums:"soft_delete_imported,mute_imported,keep"`
+	GoogleCalendarID         string  `json:"google_calendar_id" binding:"required" example:"primary"`
+	CalendarSummary          *string `json:"calendar_summary,omitempty" example:"Work"`
+	Direction                string  `json:"direction,omitempty" example:"import" enums:"import,export,both"`
+	GroupID                  *int64  `json:"group_id,omitempty" example:"1"`
+	MessengerRelatedUserID   *int    `json:"messenger_related_user_id,omitempty" example:"1"`
+	DeletePolicy             string  `json:"delete_policy,omitempty" example:"soft_delete_imported" enums:"soft_delete_imported,mute_imported,keep"`
 }
 
 // CalendarBindingResponse is the API representation of a calendar binding.
 type CalendarBindingResponse struct {
-	ID               int64      `json:"id" example:"1"`
-	UserID           int64      `json:"user_id" example:"1"`
-	GoogleAccountID  int64      `json:"google_account_id" example:"1"`
-	GoogleCalendarID string     `json:"google_calendar_id" example:"primary"`
-	CalendarSummary  *string    `json:"calendar_summary,omitempty" example:"Work"`
-	Direction        string     `json:"direction" example:"import"`
-	GroupID          *int64     `json:"group_id,omitempty" example:"1"`
-	LastSyncedAt     *time.Time `json:"last_synced_at,omitempty"`
-	LastError        *string    `json:"last_error,omitempty"`
-	Status           string     `json:"status" example:"active"`
-	DeletePolicy     string     `json:"delete_policy" example:"soft_delete_imported"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
+	ID                       int64      `json:"id" example:"1"`
+	UserID                   int64      `json:"user_id" example:"1"`
+	GoogleAccountID          int64      `json:"google_account_id" example:"1"`
+	GoogleCalendarID         string     `json:"google_calendar_id" example:"primary"`
+	CalendarSummary          *string    `json:"calendar_summary,omitempty" example:"Work"`
+	Direction                string     `json:"direction" example:"import"`
+	GroupID                  *int64     `json:"group_id,omitempty" example:"1"`
+	MessengerRelatedUserID   *int       `json:"messenger_related_user_id,omitempty" example:"1"`
+	LastSyncedAt             *time.Time `json:"last_synced_at,omitempty"`
+	LastError                *string    `json:"last_error,omitempty"`
+	Status                   string     `json:"status" example:"active"`
+	DeletePolicy             string     `json:"delete_policy" example:"soft_delete_imported"`
+	CreatedAt                time.Time  `json:"created_at"`
+	UpdatedAt                time.Time  `json:"updated_at"`
 }
 
 // GoogleAccountResponse is a safe view of a connected Google account (no tokens).
