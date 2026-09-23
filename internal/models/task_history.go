@@ -16,6 +16,12 @@ const (
 	TaskHistoryActionAttachmentRemoved  TaskHistoryAction = "attachment_removed"
 )
 
+// Task history new_value/old_value keys used by calendar import to mark provenance without a new action enum.
+const (
+	TaskHistorySourceKey            = "source"
+	TaskHistorySourceGoogleCalendar = "google_calendar_import"
+)
+
 // TaskHistory represents the history entry for a task
 type TaskHistory struct {
 	ID        int64                  `db:"id" json:"id"`

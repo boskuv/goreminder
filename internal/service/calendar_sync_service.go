@@ -83,6 +83,7 @@ type CalendarSyncService struct {
 	tasks               repository.TaskRepository
 	users               repository.UserRepository
 	messengers          repository.MessengerRepository
+	taskHistory         repository.TaskHistoryRepository
 	importedScheduler   ImportedTaskScheduler
 	httpClient          *http.Client
 	tracer              trace.Tracer
@@ -102,6 +103,7 @@ func NewCalendarSyncService(
 	tasks repository.TaskRepository,
 	users repository.UserRepository,
 	messengers repository.MessengerRepository,
+	taskHistory repository.TaskHistoryRepository,
 	logger zerolog.Logger,
 ) *CalendarSyncService {
 	return &CalendarSyncService{
@@ -116,6 +118,7 @@ func NewCalendarSyncService(
 		tasks:             tasks,
 		users:             users,
 		messengers:        messengers,
+		taskHistory:       taskHistory,
 		importedScheduler: NoopImportedTaskScheduler{},
 		httpClient:        http.DefaultClient,
 		tracer:            otel.Tracer("calendar-sync-service"),
@@ -374,18 +377,8 @@ func (s *CalendarSyncService) DeleteBinding(ctx context.Context, bindingID int64
 			}
 			return errors.WithStack(err)
 		}
-		softDelete, mute := ApplyDeletePolicy(binding.DeletePolicy, task)
-		if softDelete {
-			_ = s.importedScheduler.PublishImportedTaskDelete(ctx, task)
-			if err := s.tasks.DeleteTask(ctx, task.ID); err != nil {
-				return errors.WithStack(err)
-			}
-		} else if mute && !task.Muted {
-			_ = s.importedScheduler.PublishImportedTaskDelete(ctx, task)
-			task.Muted = true
-			if err := s.tasks.UpdateTask(ctx, task); err != nil {
-				return errors.WithStack(err)
-			}
+		if err := s.applyImportedDeletePolicy(ctx, binding.DeletePolicy, task); err != nil {
+			return err
 		}
 	}
 
@@ -607,6 +600,7 @@ func (s *CalendarSyncService) upsertImportedEvent(ctx context.Context, binding *
 			return errors.WithStack(err)
 		}
 		fields.ID = taskID
+		s.recordImportedTaskHistory(ctx, models.TaskHistoryActionCreated, fields, nil, calendarTaskHistoryMap(fields))
 		bindingID := binding.ID
 		link = &models.TaskSyncLink{
 			TaskID:            taskID,
@@ -640,6 +634,7 @@ func (s *CalendarSyncService) upsertImportedEvent(ctx context.Context, binding *
 			}
 			fields.ID = taskID
 			link.TaskID = taskID
+			s.recordImportedTaskHistory(ctx, models.TaskHistoryActionCreated, fields, nil, calendarTaskHistoryMap(fields))
 			if err := s.importedScheduler.PublishImportedTaskSchedule(ctx, fields); err != nil {
 				log := logger.WithTraceContext(ctx, s.logger)
 				log.Warn().Err(err).Int64("task.id", taskID).Msg("failed to publish schedule for recreated imported calendar task")
@@ -648,6 +643,10 @@ func (s *CalendarSyncService) upsertImportedEvent(ctx context.Context, binding *
 			return errors.WithStack(err)
 		}
 	} else {
+		oldSnapshot := *task
+		oldHistoryMap := calendarTaskHistoryMap(&oldSnapshot)
+		oldStatus := task.Status
+
 		scheduleChanged := !task.StartDate.Equal(fields.StartDate) ||
 			!recurrencePtrsEqual(task.RRule, fields.RRule) ||
 			task.Title != fields.Title ||
@@ -670,8 +669,34 @@ func (s *CalendarSyncService) upsertImportedEvent(ctx context.Context, binding *
 		} else if fields.Status == string(models.TaskStatusScheduled) {
 			task.FinishDate = nil
 		}
-		if err := s.tasks.UpdateTask(ctx, task); err != nil {
-			return errors.WithStack(err)
+
+		if calendarImportedFieldsChanged(&oldSnapshot, task) {
+			if err := s.tasks.UpdateTask(ctx, task); err != nil {
+				return errors.WithStack(err)
+			}
+			newHistoryMap := calendarTaskHistoryMap(task)
+			if oldStatus != task.Status {
+				s.recordImportedTaskHistory(ctx, models.TaskHistoryActionStatusChanged, task,
+					map[string]interface{}{"status": oldStatus},
+					map[string]interface{}{"status": task.Status},
+				)
+			}
+			// Full snapshot when non-status fields changed, or always as updated companion when only status?
+			// Record updated when title/start/rrule/group/mru/finish/muted-relevant fields changed.
+			nonStatusChanged := oldSnapshot.Title != task.Title ||
+				oldSnapshot.Description != task.Description ||
+				!oldSnapshot.StartDate.Equal(task.StartDate) ||
+				!recurrencePtrsEqual(oldSnapshot.RRule, task.RRule) ||
+				(oldSnapshot.GroupID == nil) != (task.GroupID == nil) ||
+				(oldSnapshot.GroupID != nil && task.GroupID != nil && *oldSnapshot.GroupID != *task.GroupID) ||
+				(oldSnapshot.MessengerRelatedUserID == nil) != (task.MessengerRelatedUserID == nil) ||
+				(oldSnapshot.MessengerRelatedUserID != nil && task.MessengerRelatedUserID != nil &&
+					*oldSnapshot.MessengerRelatedUserID != *task.MessengerRelatedUserID) ||
+				(oldSnapshot.FinishDate == nil) != (task.FinishDate == nil) ||
+				(oldSnapshot.FinishDate != nil && task.FinishDate != nil && !oldSnapshot.FinishDate.Equal(*task.FinishDate))
+			if nonStatusChanged || oldStatus == task.Status {
+				s.recordImportedTaskHistory(ctx, models.TaskHistoryActionUpdated, task, oldHistoryMap, newHistoryMap)
+			}
 		}
 
 		if task.MessengerRelatedUserID != nil {
@@ -717,18 +742,31 @@ func (s *CalendarSyncService) applyCancelledEvent(ctx context.Context, binding *
 		}
 		return errors.WithStack(err)
 	}
-	softDelete, mute := ApplyDeletePolicy(binding.DeletePolicy, task)
+	return s.applyImportedDeletePolicy(ctx, binding.DeletePolicy, task)
+}
+
+// applyImportedDeletePolicy applies binding delete_policy to an imported task and records history.
+func (s *CalendarSyncService) applyImportedDeletePolicy(ctx context.Context, policy models.CalendarDeletePolicy, task *models.Task) error {
+	softDelete, mute := ApplyDeletePolicy(policy, task)
 	if softDelete {
 		_ = s.importedScheduler.PublishImportedTaskDelete(ctx, task)
+		oldMap := calendarTaskHistoryMap(task)
 		if err := s.tasks.DeleteTask(ctx, task.ID); err != nil {
 			return errors.WithStack(err)
 		}
-	} else if mute && !task.Muted {
+		s.recordImportedTaskHistory(ctx, models.TaskHistoryActionDeleted, task, oldMap, map[string]interface{}{
+			"status": string(models.TaskStatusDeleted),
+		})
+		return nil
+	}
+	if mute && !task.Muted {
 		_ = s.importedScheduler.PublishImportedTaskDelete(ctx, task)
+		oldMap := calendarTaskHistoryMap(task)
 		task.Muted = true
 		if err := s.tasks.UpdateTask(ctx, task); err != nil {
 			return errors.WithStack(err)
 		}
+		s.recordImportedTaskHistory(ctx, models.TaskHistoryActionUpdated, task, oldMap, calendarTaskHistoryMap(task))
 	}
 	return nil
 }
