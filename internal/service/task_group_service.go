@@ -20,19 +20,28 @@ import (
 type TaskGroupService struct {
 	taskGroupRepo repository.TaskGroupRepository
 	userRepo      repository.UserRepository
+	bindings      repository.CalendarBindingRepository // optional; nil skips calendar binding checks
 	activity      ActivityTracker
 	tracer        trace.Tracer
 	logger        zerolog.Logger
 }
 
-// NewTaskGroupService creates a new TaskGroupService
-func NewTaskGroupService(taskGroupRepo repository.TaskGroupRepository, userRepo repository.UserRepository, activity ActivityTracker, logger zerolog.Logger) *TaskGroupService {
+// NewTaskGroupService creates a new TaskGroupService.
+// Pass a non-nil bindings repo to block deleting groups that are referenced by calendar bindings.
+func NewTaskGroupService(
+	taskGroupRepo repository.TaskGroupRepository,
+	userRepo repository.UserRepository,
+	activity ActivityTracker,
+	logger zerolog.Logger,
+	bindings repository.CalendarBindingRepository,
+) *TaskGroupService {
 	if activity == nil {
 		activity = NoopActivityTracker{}
 	}
 	return &TaskGroupService{
 		taskGroupRepo: taskGroupRepo,
 		userRepo:      userRepo,
+		bindings:      bindings,
 		activity:      activity,
 		tracer:        otel.Tracer("task-group-service"),
 		logger:        logger,
@@ -239,7 +248,8 @@ func (s *TaskGroupService) UpdateTaskGroup(ctx context.Context, id int64, update
 	return oldGroup, nil
 }
 
-// DeleteTaskGroup implements BL of soft-deleting a task group
+// DeleteTaskGroup implements BL of soft-deleting a task group.
+// Deletion is blocked (conflict) while any non-deleted calendar binding references the group.
 func (s *TaskGroupService) DeleteTaskGroup(ctx context.Context, id int64) error {
 	ctx, span := s.tracer.Start(ctx, "task_group_service.DeleteTaskGroup",
 		trace.WithAttributes(
@@ -261,6 +271,27 @@ func (s *TaskGroupService) DeleteTaskGroup(ctx context.Context, id int64) error 
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
+	}
+
+	if s.bindings != nil {
+		n, err := s.bindings.CountByGroupID(ctx, id)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return errors.WithStack(err)
+		}
+		if n > 0 {
+			err := errors.Wrap(errs.ErrConflict,
+				"cannot delete task group while calendar bindings reference it; delete or reassign those bindings first")
+			log.Info().
+				Err(err).
+				Int64("task_group.id", id).
+				Int("calendar_bindings.count", n).
+				Msg("task group delete blocked by calendar bindings")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return err
+		}
 	}
 
 	err = s.taskGroupRepo.DeleteTaskGroup(ctx, id)

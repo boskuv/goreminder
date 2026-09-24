@@ -26,6 +26,7 @@ type CalendarBindingRepository interface {
 	SoftDelete(ctx context.Context, id int64) error
 	ListActiveForSync(ctx context.Context) ([]*models.CalendarBinding, error)
 	ListDueForSync(ctx context.Context, now time.Time, maxAttempts int) ([]*models.CalendarBinding, error)
+	CountByGroupID(ctx context.Context, groupID int64) (int, error)
 	ClearSyncToken(ctx context.Context, id int64) error
 }
 
@@ -142,6 +143,34 @@ func (r *calendarBindingRepository) ListByUserID(ctx context.Context, userID int
 	}
 	span.SetStatus(codes.Ok, "listed")
 	return bindings, nil
+}
+
+// CountByGroupID returns non-deleted calendar bindings scoped to the given task group.
+func (r *calendarBindingRepository) CountByGroupID(ctx context.Context, groupID int64) (int, error) {
+	ctx, span := r.tracer.Start(ctx, "calendar_binding_repository.CountByGroupID",
+		trace.WithAttributes(attribute.Int64("task_group.id", groupID)))
+	defer span.End()
+
+	query, args, err := r.sb.Select("COUNT(*)").
+		From("calendar_bindings").
+		Where(squirrel.Eq{"group_id": groupID}).
+		Where(squirrel.Eq{"deleted_at": nil}).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, errors.Wrap(err, "failed to build count bindings by group query")
+	}
+
+	var count int
+	if err := r.db.GetContext(ctx, &count, query, args...); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, errors.Wrap(err, "failed to count bindings by group")
+	}
+	span.SetAttributes(attribute.Int("bindings.count", count))
+	span.SetStatus(codes.Ok, "counted")
+	return count, nil
 }
 
 func (r *calendarBindingRepository) Update(ctx context.Context, binding *models.CalendarBinding) error {

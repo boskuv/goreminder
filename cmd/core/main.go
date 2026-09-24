@@ -217,7 +217,7 @@ func main() {
 	messengerService := service.NewMessengerService(messengerRepo, userRepo, activityTracker, log)
 	backlogService := service.NewBacklogService(backlogRepo, userRepo, messengerRepo, activityTracker, log)
 	targetService := service.NewTargetService(targetRepo, userRepo, messengerRepo, activityTracker, log)
-	taskGroupService := service.NewTaskGroupService(taskGroupRepo, userRepo, activityTracker, log)
+	taskGroupService := service.NewTaskGroupService(taskGroupRepo, userRepo, activityTracker, log, calendarBindingRepo)
 	digestService := service.NewDigestService(digestSettingsRepo, backlogRepo, targetRepo, taskRepo, userRepo, messengerRepo, publisher, activityTracker, log)
 
 	var calendarSyncService *service.CalendarSyncService

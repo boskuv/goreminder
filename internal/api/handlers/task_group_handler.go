@@ -336,12 +336,13 @@ func (h *TaskGroupHandler) UpdateTaskGroup(c *gin.Context) {
 }
 
 // @Summary Delete task group
-// @Description Deletes a task group by its ID (soft delete); tasks.group_id is set to NULL
+// @Description Soft-deletes a task group. Blocked with 409 if any calendar binding still references the group.
 // @Tags TaskGroups
 // @Produce json
 // @Param id path int true "Task group ID"
 // @Success 204 "No Content"
 // @Failure 404 {object} dto.ErrorResponse "Not found"
+// @Failure 409 {object} dto.ErrorResponse "Calendar bindings still reference this group"
 // @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/task-groups/{id} [delete]
 func (h *TaskGroupHandler) DeleteTaskGroup(c *gin.Context) {
@@ -377,6 +378,10 @@ func (h *TaskGroupHandler) DeleteTaskGroup(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": fmt.Sprintf("task group with id `%d` not found", id),
 			})
+			return
+		}
+		if errors.Is(err, errs.ErrConflict) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
 

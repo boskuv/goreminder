@@ -70,6 +70,7 @@ func (s *stubBindingRepo) ListActiveForSync(context.Context) ([]*models.Calendar
 func (s *stubBindingRepo) ListDueForSync(context.Context, time.Time, int) ([]*models.CalendarBinding, error) {
 	return nil, nil
 }
+func (s *stubBindingRepo) CountByGroupID(context.Context, int64) (int, error) { return 0, nil }
 func (s *stubBindingRepo) ClearSyncToken(context.Context, int64) error { return nil }
 
 type stubOutboxRepo struct {
