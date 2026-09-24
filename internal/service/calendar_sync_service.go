@@ -478,11 +478,7 @@ func (s *CalendarSyncService) SyncBinding(ctx context.Context, bindingID int64) 
 		return err
 	}
 
-	now := time.Now().UTC()
-	binding.LastSyncedAt = &now
-	binding.LastError = nil
-	binding.Status = models.CalendarBindingStatusActive
-	_ = s.bindings.Update(ctx, binding)
+	s.markBindingSynced(ctx, binding)
 	observability.CalendarSyncSuccess.Inc()
 	span.SetStatus(codes.Ok, "synced")
 	return nil
@@ -775,6 +771,19 @@ func (s *CalendarSyncService) markBindingError(ctx context.Context, binding *mod
 	msg := err.Error()
 	binding.LastError = &msg
 	binding.Status = models.CalendarBindingStatusError
+	binding.SyncAttempts++
+	next := time.Now().UTC().Add(BindingSyncBackoff(binding.SyncAttempts))
+	binding.NextRetryAt = &next
+	_ = s.bindings.Update(ctx, binding)
+}
+
+func (s *CalendarSyncService) markBindingSynced(ctx context.Context, binding *models.CalendarBinding) {
+	now := time.Now().UTC()
+	binding.LastSyncedAt = &now
+	binding.LastError = nil
+	binding.Status = models.CalendarBindingStatusActive
+	binding.SyncAttempts = 0
+	binding.NextRetryAt = nil
 	_ = s.bindings.Update(ctx, binding)
 }
 
@@ -1195,6 +1204,60 @@ func (s *CalendarSyncService) exportDelete(ctx context.Context, payload outboxPa
 // GetTaskExternal returns sync link info for a task.
 func (s *CalendarSyncService) GetTaskExternal(ctx context.Context, taskID int64) (*models.TaskSyncLink, error) {
 	return s.syncLinks.GetByTaskID(ctx, taskID)
+}
+
+// CalendarOutboxCounts holds open/failed export outbox counts for a user.
+type CalendarOutboxCounts struct {
+	Pending    int
+	Processing int
+	Failed     int
+}
+
+// CalendarSyncStatus is a user-facing snapshot of bindings + export outbox health.
+type CalendarSyncStatus struct {
+	Bindings []*models.CalendarBinding
+	Outbox   CalendarOutboxCounts
+}
+
+// GetSyncStatus returns bindings (with last_synced_at / last_error / retry fields)
+// and export outbox counts for the user's tasks.
+func (s *CalendarSyncService) GetSyncStatus(ctx context.Context, userID int64) (*CalendarSyncStatus, error) {
+	ctx, span := s.tracer.Start(ctx, "calendar_sync_service.GetSyncStatus",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
+	if _, err := s.users.GetUserByID(ctx, userID); err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			err = errors.Wrap(errs.ErrUnprocessableEntity, err.Error())
+		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.WithStack(err)
+	}
+
+	bindings, err := s.bindings.ListByUserID(ctx, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.WithStack(err)
+	}
+
+	pending, processing, failed, err := s.outbox.CountByUserID(ctx, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.WithStack(err)
+	}
+
+	span.SetStatus(codes.Ok, "ok")
+	return &CalendarSyncStatus{
+		Bindings: bindings,
+		Outbox: CalendarOutboxCounts{
+			Pending:    pending,
+			Processing: processing,
+			Failed:     failed,
+		},
+	}, nil
 }
 
 func (s *CalendarSyncService) clientForUser(ctx context.Context, userID int64) (googlecalendar.CalendarClient, *models.GoogleAccount, error) {

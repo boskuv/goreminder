@@ -288,6 +288,40 @@ func (h *CalendarHandler) ForceSync(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"status": "synced"})
 }
 
+// @Summary Calendar sync status for a user
+// @Description Bindings (last_synced_at, last_error, sync_attempts, next_retry_at) plus export outbox counts
+// @Tags Calendar
+// @Produce json
+// @Param user_id path int true "User ID"
+// @Success 200 {object} dto.CalendarSyncStatusResponse
+// @Router /api/v1/users/{user_id}/calendar/sync-status [get]
+func (h *CalendarHandler) GetSyncStatus(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
+	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	if err != nil || userID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
+		return
+	}
+
+	status, err := h.service.GetSyncStatus(ctx, userID)
+	if err != nil {
+		log.Error().Err(err).Int64("user.id", userID).Msg("failed to get calendar sync status")
+		h.writeErr(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.CalendarSyncStatusResponse{
+		Bindings: mapper.CalendarBindingsToResponse(status.Bindings),
+		Outbox: dto.CalendarOutboxSummary{
+			Pending:    status.Outbox.Pending,
+			Processing: status.Outbox.Processing,
+			Failed:     status.Outbox.Failed,
+		},
+	})
+}
+
 // @Summary Disconnect Google account
 // @Tags Calendar
 // @Param user_id path int true "User ID"

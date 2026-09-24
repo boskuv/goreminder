@@ -20,5 +20,6 @@ type CalendarService interface {
 	SyncBinding(ctx context.Context, bindingID int64) error
 	EnableTaskExport(ctx context.Context, taskID, bindingID int64) (*models.TaskSyncLink, error)
 	GetTaskExternal(ctx context.Context, taskID int64) (*models.TaskSyncLink, error)
+	GetSyncStatus(ctx context.Context, userID int64) (*service.CalendarSyncStatus, error)
 	ListTaskIDsByProvider(ctx context.Context, userID int64, provider string) ([]int64, error)
 }

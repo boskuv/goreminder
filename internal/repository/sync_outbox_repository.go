@@ -25,6 +25,7 @@ type SyncOutboxRepository interface {
 	MarkRetry(ctx context.Context, id int64, attempts int, nextRetryAt time.Time, lastError string) error
 	MarkFailed(ctx context.Context, id int64, lastError string) error
 	CountPending(ctx context.Context) (int, error)
+	CountByUserID(ctx context.Context, userID int64) (pending, processing, failed int, err error)
 }
 
 type syncOutboxRepository struct {
@@ -249,4 +250,52 @@ func (r *syncOutboxRepository) CountPending(ctx context.Context) (int, error) {
 	}
 	span.SetStatus(codes.Ok, "counted")
 	return count, nil
+}
+
+// CountByUserID returns open/failed export outbox rows whose payload.task_id belongs to userID.
+func (r *syncOutboxRepository) CountByUserID(ctx context.Context, userID int64) (pending, processing, failed int, err error) {
+	ctx, span := r.tracer.Start(ctx, "sync_outbox_repository.CountByUserID",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
+	const q = `
+SELECT so.status, COUNT(*)::int
+FROM sync_outbox so
+INNER JOIN tasks t ON t.id = (so.payload->>'task_id')::bigint
+WHERE t.user_id = $1
+  AND so.status IN ('pending', 'processing', 'failed')
+GROUP BY so.status`
+
+	rows, err := r.db.QueryxContext(ctx, q, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, 0, 0, errors.Wrap(err, "failed to count outbox by user")
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var status string
+		var count int
+		if scanErr := rows.Scan(&status, &count); scanErr != nil {
+			span.RecordError(scanErr)
+			span.SetStatus(codes.Error, scanErr.Error())
+			return 0, 0, 0, errors.Wrap(scanErr, "failed to scan outbox counts")
+		}
+		switch models.SyncOutboxStatus(status) {
+		case models.SyncOutboxStatusPending:
+			pending = count
+		case models.SyncOutboxStatusProcessing:
+			processing = count
+		case models.SyncOutboxStatusFailed:
+			failed = count
+		}
+	}
+	if err := rows.Err(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, 0, 0, errors.Wrap(err, "failed iterating outbox counts")
+	}
+	span.SetStatus(codes.Ok, "counted")
+	return pending, processing, failed, nil
 }

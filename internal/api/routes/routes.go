@@ -89,6 +89,7 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 			api.POST("/users/:user_id/calendar/bindings", calendarHandler.CreateBinding)
 			api.DELETE("/users/:user_id/calendar/bindings/:binding_id", calendarHandler.DeleteBinding)
 			api.POST("/users/:user_id/calendar/bindings/:binding_id/sync", calendarHandler.ForceSync)
+			api.GET("/users/:user_id/calendar/sync-status", calendarHandler.GetSyncStatus)
 			api.DELETE("/users/:user_id/calendar/disconnect", calendarHandler.Disconnect)
 			api.POST("/tasks/:id/calendar/export", calendarHandler.EnableTaskExport)
 			api.GET("/tasks/:id/calendar/external", calendarHandler.GetTaskExternal)
