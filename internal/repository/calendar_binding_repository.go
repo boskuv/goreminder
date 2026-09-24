@@ -25,6 +25,7 @@ type CalendarBindingRepository interface {
 	Update(ctx context.Context, binding *models.CalendarBinding) error
 	SoftDelete(ctx context.Context, id int64) error
 	ListActiveForSync(ctx context.Context) ([]*models.CalendarBinding, error)
+	ListDueForSync(ctx context.Context, now time.Time, maxAttempts int) ([]*models.CalendarBinding, error)
 	ClearSyncToken(ctx context.Context, id int64) error
 }
 
@@ -44,7 +45,7 @@ func NewCalendarBindingRepository(db *sqlx.DB, logger zerolog.Logger) CalendarBi
 	}
 }
 
-const calendarBindingColumns = "id, user_id, google_account_id, google_calendar_id, calendar_summary, direction, group_id, messenger_related_user_id, sync_token, last_synced_at, last_error, status, delete_policy, created_at, updated_at"
+const calendarBindingColumns = "id, user_id, google_account_id, google_calendar_id, calendar_summary, direction, group_id, messenger_related_user_id, sync_token, last_synced_at, last_error, status, delete_policy, sync_attempts, next_retry_at, created_at, updated_at"
 
 func (r *calendarBindingRepository) Create(ctx context.Context, binding *models.CalendarBinding) (int64, error) {
 	ctx, span := r.tracer.Start(ctx, "calendar_binding_repository.Create",
@@ -158,6 +159,8 @@ func (r *calendarBindingRepository) Update(ctx context.Context, binding *models.
 		Set("last_error", binding.LastError).
 		Set("status", binding.Status).
 		Set("delete_policy", binding.DeletePolicy).
+		Set("sync_attempts", binding.SyncAttempts).
+		Set("next_retry_at", binding.NextRetryAt).
 		Set("updated_at", time.Now().UTC()).
 		Where(squirrel.Eq{"id": binding.ID}).
 		Where(squirrel.Eq{"deleted_at": nil}).
@@ -245,6 +248,55 @@ func (r *calendarBindingRepository) ListActiveForSync(ctx context.Context) ([]*m
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.Wrap(err, "failed to list active bindings")
 	}
+	span.SetStatus(codes.Ok, "listed")
+	return bindings, nil
+}
+
+// ListDueForSync returns import/both bindings that should be polled now:
+// active bindings, plus error bindings whose next_retry_at has passed and
+// sync_attempts is still below maxAttempts (automatic backoff retries).
+func (r *calendarBindingRepository) ListDueForSync(ctx context.Context, now time.Time, maxAttempts int) ([]*models.CalendarBinding, error) {
+	ctx, span := r.tracer.Start(ctx, "calendar_binding_repository.ListDueForSync")
+	defer span.End()
+
+	if maxAttempts <= 0 {
+		maxAttempts = 8
+	}
+	now = now.UTC()
+
+	query, args, err := r.sb.Select(calendarBindingColumns).
+		From("calendar_bindings").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		Where(squirrel.Eq{"direction": []string{
+			string(models.CalendarBindingDirectionImport),
+			string(models.CalendarBindingDirectionBoth),
+		}}).
+		Where(squirrel.Or{
+			squirrel.Eq{"status": models.CalendarBindingStatusActive},
+			squirrel.And{
+				squirrel.Eq{"status": models.CalendarBindingStatusError},
+				squirrel.Lt{"sync_attempts": maxAttempts},
+				squirrel.Or{
+					squirrel.Eq{"next_retry_at": nil},
+					squirrel.LtOrEq{"next_retry_at": now},
+				},
+			},
+		}).
+		OrderBy("id ASC").
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to build list due bindings query")
+	}
+
+	var bindings []*models.CalendarBinding
+	if err := r.db.SelectContext(ctx, &bindings, query, args...); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to list due bindings")
+	}
+	span.SetAttributes(attribute.Int("bindings.count", len(bindings)))
 	span.SetStatus(codes.Ok, "listed")
 	return bindings, nil
 }

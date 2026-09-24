@@ -40,6 +40,8 @@ func CalendarBindingToResponse(b *models.CalendarBinding) *dto.CalendarBindingRe
 		LastError:              b.LastError,
 		Status:                 string(b.Status),
 		DeletePolicy:           string(b.DeletePolicy),
+		SyncAttempts:           b.SyncAttempts,
+		NextRetryAt:            b.NextRetryAt,
 		CreatedAt:              b.CreatedAt,
 		UpdatedAt:              b.UpdatedAt,
 	}

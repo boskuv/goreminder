@@ -17,6 +17,9 @@ const (
 	OutboxKindExportDelete = "export_delete"
 
 	maxOutboxAttempts = 8
+	// MaxBindingSyncAttempts caps automatic import retries for status=error bindings.
+	// Force sync still runs regardless; success resets the counter.
+	MaxBindingSyncAttempts = 8
 )
 
 var outboxBackoffSteps = []time.Duration{
@@ -36,6 +39,12 @@ func OutboxBackoff(attempts int) time.Duration {
 		return outboxBackoffSteps[len(outboxBackoffSteps)-1]
 	}
 	return outboxBackoffSteps[idx]
+}
+
+// BindingSyncBackoff returns the delay before the next automatic import sync retry.
+// Same schedule as OutboxBackoff (1m → 5m → 30m → 2h).
+func BindingSyncBackoff(attempts int) time.Duration {
+	return OutboxBackoff(attempts)
 }
 
 // EventStartTime extracts the start instant from a Google event.

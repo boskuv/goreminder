@@ -38,8 +38,23 @@ type CalendarBindingResponse struct {
 	LastError                *string    `json:"last_error,omitempty"`
 	Status                   string     `json:"status" example:"active"`
 	DeletePolicy             string     `json:"delete_policy" example:"soft_delete_imported"`
+	SyncAttempts             int        `json:"sync_attempts" example:"0"`
+	NextRetryAt              *time.Time `json:"next_retry_at,omitempty"`
 	CreatedAt                time.Time  `json:"created_at"`
 	UpdatedAt                time.Time  `json:"updated_at"`
+}
+
+// CalendarOutboxSummary counts export outbox rows for a user's tasks.
+type CalendarOutboxSummary struct {
+	Pending    int `json:"pending" example:"2"`
+	Processing int `json:"processing" example:"0"`
+	Failed     int `json:"failed" example:"0"`
+}
+
+// CalendarSyncStatusResponse is a user-facing snapshot of calendar sync health.
+type CalendarSyncStatusResponse struct {
+	Bindings []*CalendarBindingResponse `json:"bindings"`
+	Outbox   CalendarOutboxSummary      `json:"outbox"`
 }
 
 // GoogleAccountResponse is a safe view of a connected Google account (no tokens).

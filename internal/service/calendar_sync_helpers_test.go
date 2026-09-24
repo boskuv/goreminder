@@ -20,6 +20,12 @@ func TestOutboxBackoff(t *testing.T) {
 	assert.Equal(t, 1*time.Minute, OutboxBackoff(0))
 }
 
+func TestBindingSyncBackoff(t *testing.T) {
+	assert.Equal(t, OutboxBackoff(1), BindingSyncBackoff(1))
+	assert.Equal(t, OutboxBackoff(3), BindingSyncBackoff(3))
+	assert.Equal(t, MaxBindingSyncAttempts, 8)
+}
+
 func TestMapEventToTaskFields(t *testing.T) {
 	start := time.Now().UTC().Add(2 * time.Hour)
 	end := start.Add(45 * time.Minute)

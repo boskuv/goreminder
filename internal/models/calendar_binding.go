@@ -44,6 +44,8 @@ type CalendarBinding struct {
 	LastError                *string                  `db:"last_error" json:"last_error,omitempty"`
 	Status                   CalendarBindingStatus    `db:"status" json:"status"`
 	DeletePolicy             CalendarDeletePolicy     `db:"delete_policy" json:"delete_policy"`
+	SyncAttempts             int                      `db:"sync_attempts" json:"sync_attempts"`
+	NextRetryAt              *time.Time               `db:"next_retry_at" json:"next_retry_at,omitempty"`
 	CreatedAt                time.Time                `db:"created_at" json:"created_at"`
 	UpdatedAt                time.Time                `db:"updated_at" json:"updated_at"`
 	DeletedAt                time.Time                `db:"deleted_at" json:"-"`

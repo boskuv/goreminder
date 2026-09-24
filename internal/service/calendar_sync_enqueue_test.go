@@ -67,6 +67,9 @@ func (s *stubBindingRepo) SoftDelete(context.Context, int64) error              
 func (s *stubBindingRepo) ListActiveForSync(context.Context) ([]*models.CalendarBinding, error) {
 	return nil, nil
 }
+func (s *stubBindingRepo) ListDueForSync(context.Context, time.Time, int) ([]*models.CalendarBinding, error) {
+	return nil, nil
+}
 func (s *stubBindingRepo) ClearSyncToken(context.Context, int64) error { return nil }
 
 type stubOutboxRepo struct {
@@ -86,6 +89,9 @@ func (s *stubOutboxRepo) MarkRetry(context.Context, int64, int, time.Time, strin
 }
 func (s *stubOutboxRepo) MarkFailed(context.Context, int64, string) error { return nil }
 func (s *stubOutboxRepo) CountPending(context.Context) (int, error)       { return 0, nil }
+func (s *stubOutboxRepo) CountByUserID(context.Context, int64) (int, int, int, error) {
+	return 0, 0, 0, nil
+}
 
 func TestEnqueueExport_DeletedAfterSoftDelete_UsesSyncLink(t *testing.T) {
 	ctrl := gomock.NewController(t)

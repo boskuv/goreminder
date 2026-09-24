@@ -46,7 +46,7 @@ func (s *CalendarSyncScheduler) Start(ctx context.Context) {
 }
 
 func (s *CalendarSyncScheduler) runOnce(ctx context.Context) {
-	bindings, err := s.syncService.bindings.ListActiveForSync(ctx)
+	bindings, err := s.syncService.bindings.ListDueForSync(ctx, time.Now().UTC(), MaxBindingSyncAttempts)
 	if err != nil {
 		s.logger.Error().Err(err).Msg("failed to list calendar bindings for sync")
 	} else {
