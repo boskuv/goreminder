@@ -399,6 +399,8 @@ func TaskIDFromExtendedProperties(props map[string]string) (int64, bool) {
 
 // BuildExportEvent builds a Google event payload from a task.
 // Recurrence prefers task.RRule; if unset, cron_expression is mapped to RRULE when possible.
+// Start/end always use timeZone UTC (task times are stored in UTC); Google requires timeZone
+// especially for recurring events (400 Missing time zone definition otherwise).
 func BuildExportEvent(task *models.Task, durationMinutes int, existingDurationSeconds *int) *googlecalendar.Event {
 	if durationMinutes <= 0 {
 		durationMinutes = 30
@@ -417,11 +419,12 @@ func BuildExportEvent(task *models.Task, durationMinutes int, existingDurationSe
 		rrule = CronExpressionToRRule(*task.CronExpression)
 	}
 
+	const exportTimeZone = "UTC"
 	ev := &googlecalendar.Event{
 		Summary:     task.Title,
 		Description: task.Description,
-		Start:       googlecalendar.EventDateTime{DateTime: &start},
-		End:         googlecalendar.EventDateTime{DateTime: &end},
+		Start:       googlecalendar.EventDateTime{DateTime: &start, TimeZone: exportTimeZone},
+		End:         googlecalendar.EventDateTime{DateTime: &end, TimeZone: exportTimeZone},
 		Recurrence:  RRuleToRecurrence(rrule),
 		ExtendedProperties: map[string]string{
 			googlecalendar.PrivateExtendedPropertyTaskID: strconv.FormatInt(task.ID, 10),

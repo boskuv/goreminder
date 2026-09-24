@@ -128,6 +128,8 @@ func TestBuildExportEvent(t *testing.T) {
 	require.NotNil(t, ev.Start.DateTime)
 	require.NotNil(t, ev.End.DateTime)
 	assert.Equal(t, start.Add(30*time.Minute), *ev.End.DateTime)
+	assert.Equal(t, "UTC", ev.Start.TimeZone)
+	assert.Equal(t, "UTC", ev.End.TimeZone)
 	assert.Equal(t, []string{"RRULE:FREQ=WEEKLY"}, ev.Recurrence)
 	assert.Equal(t, "77", ev.ExtendedProperties[googlecalendar.PrivateExtendedPropertyTaskID])
 }
