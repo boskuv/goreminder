@@ -792,6 +792,11 @@ func (s *CalendarSyncService) OnTaskChanged(ctx context.Context, taskID int64, a
 func (s *CalendarSyncService) EnqueueExport(ctx context.Context, taskID int64, action string) error {
 	task, err := s.tasks.GetTaskByIDWithoutStatusFilter(ctx, taskID)
 	if err != nil {
+		// DeleteTask soft-deletes first, then notifies export. GetTask* filters deleted_at,
+		// so fall back to sync-link delete — same outcomes as the live-task path for Google.
+		if action == "deleted" && errors.Is(err, errs.ErrNotFound) {
+			return s.enqueueExportDeleteForGoneTask(ctx, taskID)
+		}
 		return errors.WithStack(err)
 	}
 	if !ShouldExportTask(task) {
@@ -843,13 +848,57 @@ func (s *CalendarSyncService) EnqueueExport(ctx context.Context, taskID int64, a
 
 	// Also enqueue delete if an existing exported link exists without matching binding filter
 	if !enqueued && action == "deleted" {
-		if link, err := s.syncLinks.GetByTaskID(ctx, taskID); err == nil && link.Origin == models.TaskSyncLinkOriginExported {
-			payload, _ := json.Marshal(map[string]any{"task_id": taskID, "link_id": link.ID})
+		return s.enqueueExportDeleteByExportedLink(ctx, taskID)
+	}
+	return nil
+}
+
+// enqueueExportDeleteForGoneTask handles action=deleted after the task row is soft-deleted
+// (GetTaskByIDWithoutStatusFilter returns NotFound). Uses sync link only — no Google event
+// exists without a link, and import-only bindings still do not get a local→Google delete.
+func (s *CalendarSyncService) enqueueExportDeleteForGoneTask(ctx context.Context, taskID int64) error {
+	link, err := s.syncLinks.GetByTaskID(ctx, taskID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			return nil
+		}
+		return errors.WithStack(err)
+	}
+
+	if link.SyncEnabled && link.CalendarBindingID != nil {
+		if b, bErr := s.bindings.GetByID(ctx, *link.CalendarBindingID); bErr == nil && bindingAllowsTaskExport(b.Direction) {
+			payload, _ := json.Marshal(map[string]any{
+				"task_id":    taskID,
+				"binding_id": b.ID,
+				"action":     "deleted",
+			})
 			_, err := s.outbox.Enqueue(ctx, OutboxKindExportDelete, payload)
 			return errors.WithStack(err)
 		}
 	}
-	return nil
+
+	if link.Origin != models.TaskSyncLinkOriginExported {
+		return nil
+	}
+	payload, _ := json.Marshal(map[string]any{"task_id": taskID, "link_id": link.ID})
+	_, err = s.outbox.Enqueue(ctx, OutboxKindExportDelete, payload)
+	return errors.WithStack(err)
+}
+
+func (s *CalendarSyncService) enqueueExportDeleteByExportedLink(ctx context.Context, taskID int64) error {
+	link, err := s.syncLinks.GetByTaskID(ctx, taskID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			return nil
+		}
+		return errors.WithStack(err)
+	}
+	if link.Origin != models.TaskSyncLinkOriginExported {
+		return nil
+	}
+	payload, _ := json.Marshal(map[string]any{"task_id": taskID, "link_id": link.ID})
+	_, err = s.outbox.Enqueue(ctx, OutboxKindExportDelete, payload)
+	return errors.WithStack(err)
 }
 
 // EnableTaskExport opts a single task into export for the given binding (even without a group).
