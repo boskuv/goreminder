@@ -47,19 +47,34 @@ func (s *stubSyncLinkRepo) Delete(context.Context, int64) error                 
 func (s *stubSyncLinkRepo) SetSyncEnabled(context.Context, int64, bool) error  { return nil }
 
 type stubBindingRepo struct {
-	binding *models.CalendarBinding
+	binding  *models.CalendarBinding
+	bindings []*models.CalendarBinding
 }
 
 func (s *stubBindingRepo) Create(context.Context, *models.CalendarBinding) (int64, error) {
 	return 0, nil
 }
-func (s *stubBindingRepo) GetByID(context.Context, int64) (*models.CalendarBinding, error) {
-	if s.binding == nil {
-		return nil, errs.ErrNotFound
+func (s *stubBindingRepo) GetByID(_ context.Context, id int64) (*models.CalendarBinding, error) {
+	if s.binding != nil && s.binding.ID == id {
+		return s.binding, nil
 	}
-	return s.binding, nil
+	for _, b := range s.bindings {
+		if b.ID == id {
+			return b, nil
+		}
+	}
+	if s.binding != nil {
+		return s.binding, nil
+	}
+	return nil, errs.ErrNotFound
 }
 func (s *stubBindingRepo) ListByUserID(context.Context, int64) ([]*models.CalendarBinding, error) {
+	if s.bindings != nil {
+		return s.bindings, nil
+	}
+	if s.binding != nil {
+		return []*models.CalendarBinding{s.binding}, nil
+	}
 	return nil, nil
 }
 func (s *stubBindingRepo) Update(context.Context, *models.CalendarBinding) error { return nil }
@@ -157,4 +172,76 @@ func TestEnqueueExport_DeletedAfterSoftDelete_ImportOnlyNoEnqueue(t *testing.T) 
 	err := svc.EnqueueExport(context.Background(), 99, "deleted")
 	require.NoError(t, err)
 	assert.Empty(t, outbox.kinds)
+}
+
+func TestEnqueueExport_LeaveGroupWithoutOptIn_EnqueuesDelete(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	tasks := mock_repository.NewMockTaskRepository(ctrl)
+	exportGroup := int64(3)
+	bindingID := int64(7)
+	tasks.EXPECT().
+		GetTaskByIDWithoutStatusFilter(gomock.Any(), int64(42)).
+		Return(&models.Task{ID: 42, UserID: 1, GroupID: nil}, nil) // left group
+
+	binding := &models.CalendarBinding{
+		ID:        bindingID,
+		UserID:    1,
+		Direction: models.CalendarBindingDirectionExport,
+		GroupID:   &exportGroup,
+	}
+	outbox := &stubOutboxRepo{}
+	svc := &CalendarSyncService{
+		tasks: tasks,
+		syncLinks: &stubSyncLinkRepo{link: &models.TaskSyncLink{
+			TaskID:            42,
+			Origin:            models.TaskSyncLinkOriginExported,
+			SyncEnabled:       true,
+			ExportOptIn:       false,
+			CalendarBindingID: &bindingID,
+		}},
+		bindings: &stubBindingRepo{binding: binding, bindings: []*models.CalendarBinding{binding}},
+		outbox:   outbox,
+		logger:   zerolog.Nop(),
+	}
+
+	err := svc.EnqueueExport(context.Background(), 42, "updated")
+	require.NoError(t, err)
+	require.Len(t, outbox.kinds, 1)
+	assert.Equal(t, OutboxKindExportDelete, outbox.kinds[0])
+}
+
+func TestEnqueueExport_LeaveGroupWithOptIn_StillUpserts(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	tasks := mock_repository.NewMockTaskRepository(ctrl)
+	exportGroup := int64(3)
+	bindingID := int64(7)
+	tasks.EXPECT().
+		GetTaskByIDWithoutStatusFilter(gomock.Any(), int64(43)).
+		Return(&models.Task{ID: 43, UserID: 1, GroupID: nil}, nil)
+
+	binding := &models.CalendarBinding{
+		ID:        bindingID,
+		UserID:    1,
+		Direction: models.CalendarBindingDirectionExport,
+		GroupID:   &exportGroup,
+	}
+	outbox := &stubOutboxRepo{}
+	svc := &CalendarSyncService{
+		tasks: tasks,
+		syncLinks: &stubSyncLinkRepo{link: &models.TaskSyncLink{
+			TaskID:            43,
+			Origin:            models.TaskSyncLinkOriginExported,
+			SyncEnabled:       true,
+			ExportOptIn:       true,
+			CalendarBindingID: &bindingID,
+		}},
+		bindings: &stubBindingRepo{binding: binding, bindings: []*models.CalendarBinding{binding}},
+		outbox:   outbox,
+		logger:   zerolog.Nop(),
+	}
+
+	err := svc.EnqueueExport(context.Background(), 43, "updated")
+	require.NoError(t, err)
+	require.Len(t, outbox.kinds, 1)
+	assert.Equal(t, OutboxKindExportUpsert, outbox.kinds[0])
 }

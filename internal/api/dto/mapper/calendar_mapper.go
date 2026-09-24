@@ -80,6 +80,7 @@ func TaskSyncLinkToExternalResponse(link *models.TaskSyncLink) *dto.TaskExternal
 		EventID:           link.GoogleEventID,
 		Origin:            string(link.Origin),
 		SyncEnabled:       link.SyncEnabled,
+		ExportOptIn:       link.ExportOptIn,
 		LastSyncedAt:      link.LastSyncedAt,
 		LastError:         link.LastError,
 		CalendarBindingID: link.CalendarBindingID,

@@ -46,7 +46,7 @@ func NewTaskSyncLinkRepository(db *sqlx.DB, logger zerolog.Logger) TaskSyncLinkR
 	}
 }
 
-const taskSyncLinkColumns = "id, task_id, provider, google_calendar_id, google_event_id, etag, google_updated_at, origin, sync_enabled, calendar_binding_id, duration_seconds, last_synced_at, last_error, created_at, updated_at"
+const taskSyncLinkColumns = "id, task_id, provider, google_calendar_id, google_event_id, etag, google_updated_at, origin, sync_enabled, export_opt_in, calendar_binding_id, duration_seconds, last_synced_at, last_error, created_at, updated_at"
 
 func (r *taskSyncLinkRepository) Create(ctx context.Context, link *models.TaskSyncLink) (int64, error) {
 	ctx, span := r.tracer.Start(ctx, "task_sync_link_repository.Create",
@@ -58,8 +58,8 @@ func (r *taskSyncLinkRepository) Create(ctx context.Context, link *models.TaskSy
 	}
 
 	query, args, err := r.sb.Insert("task_sync_links").
-		Columns("task_id", "provider", "google_calendar_id", "google_event_id", "etag", "google_updated_at", "origin", "sync_enabled", "calendar_binding_id", "duration_seconds", "last_synced_at", "last_error").
-		Values(link.TaskID, link.Provider, link.GoogleCalendarID, link.GoogleEventID, link.ETag, link.GoogleUpdatedAt, link.Origin, link.SyncEnabled, link.CalendarBindingID, link.DurationSeconds, link.LastSyncedAt, link.LastError).
+		Columns("task_id", "provider", "google_calendar_id", "google_event_id", "etag", "google_updated_at", "origin", "sync_enabled", "export_opt_in", "calendar_binding_id", "duration_seconds", "last_synced_at", "last_error").
+		Values(link.TaskID, link.Provider, link.GoogleCalendarID, link.GoogleEventID, link.ETag, link.GoogleUpdatedAt, link.Origin, link.SyncEnabled, link.ExportOptIn, link.CalendarBindingID, link.DurationSeconds, link.LastSyncedAt, link.LastError).
 		Suffix("RETURNING id").
 		ToSql()
 	if err != nil {
@@ -231,6 +231,7 @@ func (r *taskSyncLinkRepository) Update(ctx context.Context, link *models.TaskSy
 		Set("google_updated_at", link.GoogleUpdatedAt).
 		Set("origin", link.Origin).
 		Set("sync_enabled", link.SyncEnabled).
+		Set("export_opt_in", link.ExportOptIn).
 		Set("calendar_binding_id", link.CalendarBindingID).
 		Set("duration_seconds", link.DurationSeconds).
 		Set("last_synced_at", link.LastSyncedAt).

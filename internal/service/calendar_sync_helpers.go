@@ -390,6 +390,18 @@ func ShouldExportTask(task *models.Task) bool {
 	return true
 }
 
+// taskMatchesExportBindingGroup reports whether a task is in scope for a binding's optional group filter.
+// Bindings without group_id match all eligible tasks.
+func taskMatchesExportBindingGroup(task *models.Task, b *models.CalendarBinding) bool {
+	if b == nil || task == nil {
+		return false
+	}
+	if b.GroupID == nil {
+		return true
+	}
+	return task.GroupID != nil && *task.GroupID == *b.GroupID
+}
+
 // TaskIDFromExtendedProperties reads goreminder_task_id from private extended properties.
 func TaskIDFromExtendedProperties(props map[string]string) (int64, bool) {
 	if props == nil {

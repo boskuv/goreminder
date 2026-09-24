@@ -798,6 +798,10 @@ func (s *CalendarSyncService) OnTaskChanged(ctx context.Context, taskID int64, a
 // EnqueueExport queues an export upsert/delete when an export/both binding exists
 // or the task has an explicit sync_enabled link to an export/both binding.
 // Import-only bindings never receive local→Google pushes (even if the task was imported via that link).
+//
+// Group-scoped exports (export_opt_in=false): if the task leaves the binding's group on
+// create/update, a delete is enqueued instead of an upsert. Per-task opt-in links keep syncing
+// even outside the binding group.
 func (s *CalendarSyncService) EnqueueExport(ctx context.Context, taskID int64, action string) error {
 	task, err := s.tasks.GetTaskByIDWithoutStatusFilter(ctx, taskID)
 	if err != nil {
@@ -812,18 +816,21 @@ func (s *CalendarSyncService) EnqueueExport(ctx context.Context, taskID int64, a
 		return nil
 	}
 
-	kind := OutboxKindExportUpsert
-	if action == "deleted" {
-		kind = OutboxKindExportDelete
-	}
-
-	enqueued := false
-	bindingIDs := map[int64]struct{}{}
+	upsertIDs := map[int64]struct{}{}
+	deleteIDs := map[int64]struct{}{}
 
 	if link, err := s.syncLinks.GetByTaskID(ctx, taskID); err == nil &&
 		link.SyncEnabled && link.CalendarBindingID != nil {
 		if b, bErr := s.bindings.GetByID(ctx, *link.CalendarBindingID); bErr == nil && bindingAllowsTaskExport(b.Direction) {
-			bindingIDs[b.ID] = struct{}{}
+			switch {
+			case action == "deleted":
+				deleteIDs[b.ID] = struct{}{}
+			case !taskMatchesExportBindingGroup(task, b) && !link.ExportOptIn:
+				// Left group-scoped export without per-task opt-in → remove Google event.
+				deleteIDs[b.ID] = struct{}{}
+			default:
+				upsertIDs[b.ID] = struct{}{}
+			}
 		}
 	}
 
@@ -835,21 +842,40 @@ func (s *CalendarSyncService) EnqueueExport(ctx context.Context, taskID int64, a
 		if !bindingAllowsTaskExport(b.Direction) {
 			continue
 		}
-		if b.GroupID != nil {
-			if task.GroupID == nil || *task.GroupID != *b.GroupID {
-				continue
-			}
+		if !taskMatchesExportBindingGroup(task, b) {
+			continue
 		}
-		bindingIDs[b.ID] = struct{}{}
+		if action == "deleted" {
+			deleteIDs[b.ID] = struct{}{}
+		} else {
+			upsertIDs[b.ID] = struct{}{}
+		}
 	}
 
-	for bindingID := range bindingIDs {
+	// Prefer delete over upsert for the same binding (e.g. left group via link path).
+	for id := range deleteIDs {
+		delete(upsertIDs, id)
+	}
+
+	enqueued := false
+	for bindingID := range upsertIDs {
 		payload, _ := json.Marshal(map[string]any{
 			"task_id":    taskID,
 			"binding_id": bindingID,
 			"action":     action,
 		})
-		if _, err := s.outbox.Enqueue(ctx, kind, payload); err != nil {
+		if _, err := s.outbox.Enqueue(ctx, OutboxKindExportUpsert, payload); err != nil {
+			return errors.WithStack(err)
+		}
+		enqueued = true
+	}
+	for bindingID := range deleteIDs {
+		payload, _ := json.Marshal(map[string]any{
+			"task_id":    taskID,
+			"binding_id": bindingID,
+			"action":     "deleted",
+		})
+		if _, err := s.outbox.Enqueue(ctx, OutboxKindExportDelete, payload); err != nil {
 			return errors.WithStack(err)
 		}
 		enqueued = true
@@ -963,6 +989,7 @@ func (s *CalendarSyncService) EnableTaskExport(ctx context.Context, taskID, bind
 			GoogleEventID:     fmt.Sprintf("pending-%d", taskID),
 			Origin:            models.TaskSyncLinkOriginExported,
 			SyncEnabled:       true,
+			ExportOptIn:       true,
 			CalendarBindingID: &bindingID,
 		}
 		id, err := s.syncLinks.Create(ctx, link)
@@ -974,6 +1001,7 @@ func (s *CalendarSyncService) EnableTaskExport(ctx context.Context, taskID, bind
 		link.ID = id
 	} else {
 		link.SyncEnabled = true
+		link.ExportOptIn = true
 		link.CalendarBindingID = &bindingID
 		link.GoogleCalendarID = binding.GoogleCalendarID
 		if link.Origin == "" {

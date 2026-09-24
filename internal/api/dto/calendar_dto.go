@@ -75,12 +75,13 @@ type EnableTaskExportRequest struct {
 
 // TaskExternalResponse marks a task as linked to an external calendar event.
 type TaskExternalResponse struct {
-	Provider         string     `json:"provider" example:"google_calendar"`
-	CalendarID       string     `json:"calendar_id" example:"primary"`
-	EventID          string     `json:"event_id" example:"abc123"`
-	Origin           string     `json:"origin" example:"imported" enums:"imported,exported"`
-	SyncEnabled      bool       `json:"sync_enabled" example:"true"`
-	LastSyncedAt     *time.Time `json:"last_synced_at,omitempty"`
-	LastError        *string    `json:"last_error,omitempty"`
-	CalendarBindingID *int64    `json:"calendar_binding_id,omitempty"`
+	Provider          string     `json:"provider" example:"google_calendar"`
+	CalendarID        string     `json:"calendar_id" example:"primary"`
+	EventID           string     `json:"event_id" example:"abc123"`
+	Origin            string     `json:"origin" example:"imported" enums:"imported,exported"`
+	SyncEnabled       bool       `json:"sync_enabled" example:"true"`
+	ExportOptIn       bool       `json:"export_opt_in" example:"false"`
+	LastSyncedAt      *time.Time `json:"last_synced_at,omitempty"`
+	LastError         *string    `json:"last_error,omitempty"`
+	CalendarBindingID *int64     `json:"calendar_binding_id,omitempty"`
 }

@@ -119,6 +119,27 @@ func TestShouldExportTask(t *testing.T) {
 	assert.False(t, ShouldExportTask(nil))
 }
 
+func TestTaskMatchesExportBindingGroup(t *testing.T) {
+	groupA := int64(1)
+	groupB := int64(2)
+	assert.True(t, taskMatchesExportBindingGroup(
+		&models.Task{GroupID: &groupA},
+		&models.CalendarBinding{GroupID: nil},
+	))
+	assert.True(t, taskMatchesExportBindingGroup(
+		&models.Task{GroupID: &groupA},
+		&models.CalendarBinding{GroupID: &groupA},
+	))
+	assert.False(t, taskMatchesExportBindingGroup(
+		&models.Task{GroupID: &groupB},
+		&models.CalendarBinding{GroupID: &groupA},
+	))
+	assert.False(t, taskMatchesExportBindingGroup(
+		&models.Task{GroupID: nil},
+		&models.CalendarBinding{GroupID: &groupA},
+	))
+}
+
 func TestBindingAllowsTaskExport(t *testing.T) {
 	assert.False(t, bindingAllowsTaskExport(models.CalendarBindingDirectionImport))
 	assert.True(t, bindingAllowsTaskExport(models.CalendarBindingDirectionExport))

@@ -23,6 +23,10 @@ type TaskSyncLink struct {
 	GoogleUpdatedAt   *time.Time         `db:"google_updated_at" json:"google_updated_at,omitempty"`
 	Origin            TaskSyncLinkOrigin `db:"origin" json:"origin"`
 	SyncEnabled       bool               `db:"sync_enabled" json:"sync_enabled"`
+	// ExportOptIn is true when the user explicitly opted the task into export via
+	// POST /tasks/{id}/calendar/export. Group-scoped exports leave this false so that
+	// leaving the binding's group removes the Google event.
+	ExportOptIn       bool               `db:"export_opt_in" json:"export_opt_in"`
 	CalendarBindingID *int64             `db:"calendar_binding_id" json:"calendar_binding_id,omitempty"`
 	DurationSeconds   *int               `db:"duration_seconds" json:"duration_seconds,omitempty"`
 	LastSyncedAt      *time.Time         `db:"last_synced_at" json:"last_synced_at,omitempty"`
