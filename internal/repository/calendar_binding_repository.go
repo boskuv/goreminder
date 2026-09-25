@@ -66,7 +66,7 @@ func (r *calendarBindingRepository) Create(ctx context.Context, binding *models.
 	query, args, err := r.sb.Insert("calendar_bindings").
 		Columns("user_id", "google_account_id", "google_calendar_id", "calendar_summary", "direction", "group_id", "messenger_related_user_id", "status", "delete_policy").
 		Values(binding.UserID, binding.GoogleAccountID, binding.GoogleCalendarID, binding.CalendarSummary, binding.Direction, binding.GroupID, binding.MessengerRelatedUserID, binding.Status, binding.DeletePolicy).
-		Suffix("RETURNING id").
+		Suffix("RETURNING id, created_at, updated_at").
 		ToSql()
 	if err != nil {
 		span.RecordError(err)
@@ -75,11 +75,14 @@ func (r *calendarBindingRepository) Create(ctx context.Context, binding *models.
 	}
 
 	var id int64
-	if err := r.db.QueryRowContext(ctx, query, args...).Scan(&id); err != nil {
+	var createdAt, updatedAt time.Time
+	if err := r.db.QueryRowContext(ctx, query, args...).Scan(&id, &createdAt, &updatedAt); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return 0, errors.Wrap(err, "failed to create calendar binding")
 	}
+	binding.CreatedAt = createdAt
+	binding.UpdatedAt = updatedAt
 	span.SetAttributes(attribute.Int64("calendar_binding.id", id))
 	span.SetStatus(codes.Ok, "created")
 	return id, nil

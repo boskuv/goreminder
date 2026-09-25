@@ -118,7 +118,7 @@ func TestTableSchemasMatchModels(t *testing.T) {
 			tableName: "task_sync_links",
 			expectedColumns: []string{
 				"id", "task_id", "provider", "google_calendar_id", "google_event_id", "etag",
-				"google_updated_at", "origin", "sync_enabled", "calendar_binding_id",
+				"google_updated_at", "origin", "sync_enabled", "export_opt_in", "calendar_binding_id",
 				"duration_seconds", "last_synced_at", "last_error", "created_at", "updated_at",
 			},
 		},

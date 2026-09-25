@@ -60,18 +60,21 @@ ON CONFLICT (user_id, google_sub) DO UPDATE SET
   scopes = EXCLUDED.scopes,
   revoked_at = NULL,
   updated_at = EXCLUDED.updated_at
-RETURNING id`
+RETURNING id, created_at, updated_at`
 
 	var id int64
+	var createdAt, updatedAt time.Time
 	err := r.db.QueryRowContext(ctx, query,
 		account.UserID, account.GoogleSub, account.Email,
 		account.AccessTokenEnc, account.RefreshTokenEnc, account.TokenExpiry, account.Scopes, now,
-	).Scan(&id)
+	).Scan(&id, &createdAt, &updatedAt)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return 0, errors.Wrap(err, "failed to upsert google account")
 	}
+	account.CreatedAt = createdAt
+	account.UpdatedAt = updatedAt
 	span.SetAttributes(attribute.Int64("google_account.id", id))
 	span.SetStatus(codes.Ok, "upserted")
 	return id, nil
