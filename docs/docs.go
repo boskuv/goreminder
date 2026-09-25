@@ -1624,7 +1624,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Deletes a task group by its ID (soft delete); tasks.group_id is set to NULL",
+                "description": "Soft-deletes a task group. Blocked with 409 if any calendar binding still references the group.",
                 "produces": [
                     "application/json"
                 ],
@@ -1647,6 +1647,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Calendar bindings still reference this group",
                         "schema": {
                             "$ref": "#/definitions/dto.ErrorResponse"
                         }
@@ -3070,6 +3076,35 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/users/{user_id}/calendar/sync-status": {
+            "get": {
+                "description": "Bindings (last_synced_at, last_error, sync_attempts, next_retry_at) plus export outbox counts",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Calendar"
+                ],
+                "summary": "Calendar sync status for a user",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.CalendarSyncStatusResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users/{user_id}/tasks": {
             "get": {
                 "description": "Retrieves all tasks by userID with pagination, ordering, and filtering (by status, status_not, start_date_from, start_date_to, created_at_from, created_at_to, cron_expression, cron_expression_is_null, requires_confirmation, exclude_cron_with_confirmation, messenger_related_user_id, messenger_user_id)",
@@ -3476,9 +3511,16 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 1
                 },
+                "next_retry_at": {
+                    "type": "string"
+                },
                 "status": {
                     "type": "string",
                     "example": "active"
+                },
+                "sync_attempts": {
+                    "type": "integer",
+                    "example": 0
                 },
                 "updated_at": {
                     "type": "string"
@@ -3486,6 +3528,37 @@ const docTemplate = `{
                 "user_id": {
                     "type": "integer",
                     "example": 1
+                }
+            }
+        },
+        "dto.CalendarOutboxSummary": {
+            "type": "object",
+            "properties": {
+                "failed": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "pending": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "processing": {
+                    "type": "integer",
+                    "example": 0
+                }
+            }
+        },
+        "dto.CalendarSyncStatusResponse": {
+            "type": "object",
+            "properties": {
+                "bindings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.CalendarBindingResponse"
+                    }
+                },
+                "outbox": {
+                    "$ref": "#/definitions/dto.CalendarOutboxSummary"
                 }
             }
         },
@@ -4445,6 +4518,10 @@ const docTemplate = `{
                 "event_id": {
                     "type": "string",
                     "example": "abc123"
+                },
+                "export_opt_in": {
+                    "type": "boolean",
+                    "example": false
                 },
                 "last_error": {
                     "type": "string"

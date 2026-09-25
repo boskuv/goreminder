@@ -105,14 +105,40 @@ definitions:
       messenger_related_user_id:
         example: 1
         type: integer
+      next_retry_at:
+        type: string
       status:
         example: active
         type: string
+      sync_attempts:
+        example: 0
+        type: integer
       updated_at:
         type: string
       user_id:
         example: 1
         type: integer
+    type: object
+  dto.CalendarOutboxSummary:
+    properties:
+      failed:
+        example: 0
+        type: integer
+      pending:
+        example: 2
+        type: integer
+      processing:
+        example: 0
+        type: integer
+    type: object
+  dto.CalendarSyncStatusResponse:
+    properties:
+      bindings:
+        items:
+          $ref: '#/definitions/dto.CalendarBindingResponse'
+        type: array
+      outbox:
+        $ref: '#/definitions/dto.CalendarOutboxSummary'
     type: object
   dto.CreateBacklogRequest:
     properties:
@@ -803,6 +829,9 @@ definitions:
       event_id:
         example: abc123
         type: string
+      export_opt_in:
+        example: false
+        type: boolean
       last_error:
         type: string
       last_synced_at:
@@ -2168,8 +2197,8 @@ paths:
       - TaskGroups
   /api/v1/task-groups/{id}:
     delete:
-      description: Deletes a task group by its ID (soft delete); tasks.group_id is
-        set to NULL
+      description: Soft-deletes a task group. Blocked with 409 if any calendar binding
+        still references the group.
       parameters:
       - description: Task group ID
         in: path
@@ -2183,6 +2212,10 @@ paths:
           description: No Content
         "404":
           description: Not found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "409":
+          description: Calendar bindings still reference this group
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
         "500":
@@ -3177,6 +3210,26 @@ paths:
           schema:
             $ref: '#/definitions/dto.OAuthStartResponse'
       summary: Start Google OAuth
+      tags:
+      - Calendar
+  /api/v1/users/{user_id}/calendar/sync-status:
+    get:
+      description: Bindings (last_synced_at, last_error, sync_attempts, next_retry_at)
+        plus export outbox counts
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.CalendarSyncStatusResponse'
+      summary: Calendar sync status for a user
       tags:
       - Calendar
   /api/v1/users/{user_id}/tasks:
