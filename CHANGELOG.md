@@ -7,11 +7,37 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [v0.3.0] - 2026-09-29
+
 ### Added
-- **Tasks — pre-remind (`pre_remind_before_seconds`)**: optional offset (seconds before `start_date`) for a preliminary reminder (migration `20260920220000_add_column_pre_remind_before_seconds_to_tasks_table.sql`). **API**: optional on create/update (`POST/PUT /api/v1/tasks`); `0` on update clears the option (max 30 days). Propagates to recurrence children. **Queue**: 9th `worker.schedule_task` arg (`null` when unset). **Worker** (`examples/worker`): schedules a second job `{messenger}_{task_id}_pre`; `delete_task` / mute removes both; pre webhook has no done/later buttons. Mute still suppresses all schedule publishes for the task.
-- **Users — last activity**: column `users.last_activity_at` (migration `20260918190000_add_column_last_activity_at_to_users_table.sql`). Best-effort `ActivityTracker` updates it on successful user-driven mutations (tasks CRUD / mute / unmute / done / queue / attachments, user create/update, backlogs, targets, digest settings, messenger-related user create). Autoreschedule/scheduler and GET requests do not touch activity. **API**: `GET /api/v1/users/activity?limit=` (default/max 100) returns `[{user_id, name, last_activity_at}]`; optional `last_activity_at` on `UserResponse` when set.
-- **Examples — sample worker**: `examples/worker` consumes Celery-style `{task, args}` from RabbitMQ (`worker.schedule_task` / `worker.delete_task`), stores due times in a Redis ZSET, and POSTs the production-compatible `/send_message` webhook payload.
-- **Examples — telegram-bot webhook**: `examples/telegram-bot` listens on `POST /send_message` (default `:8001`) and handles `done:` / `later:` inline callbacks so the sample worker can deliver end-to-end.
+- **Google Calendar sync** (Events, not Google Tasks) — full integration docs: [docs/google-calendar.md](docs/google-calendar.md), bot playbook [docs/google-calendar-bot.md](docs/google-calendar-bot.md), API test plan [docs/google-calendar-test-plan.md](docs/google-calendar-test-plan.md).
+  - **Per-user OAuth**: connect Google account; tokens AES-GCM encrypted at rest (`googleCalendar.tokenEncryptionKey`); scopes calendar events + readonly + userinfo.
+  - **Bindings** (`import` / `export` / `both`): multi-calendar; optional `group_id`, `messenger_related_user_id` (import → messenger worker), `delete_policy`.
+  - **Import**: syncToken poll, force sync, past one-shot → `done`, recurring → advance `start_date`; imported tasks skipped by autoreschedule; optional `mru` → `schedule_task` / `delete_task`.
+  - **Export**: transactional **`sync_outbox`** with retries (backoff `1m → 5m → 30m → 2h`, up to 8 attempts); group-scoped and per-task `POST /tasks/{id}/calendar/export` (`export_opt_in`); leave-group without opt-in → DeleteEvent; soft-delete uses sync link for Google delete.
+  - **Anti-loop**: private extended property `goreminder_task_id` on exported events.
+  - **External badge**: `task.external` / `GET .../calendar/external`; list filter `external_provider=google_calendar`.
+  - **Sync health**: `GET .../calendar/sync-status` (bindings + export outbox counts); import binding `status=error` auto-retry via `next_retry_at` / `sync_attempts` (export outbox independent — `status=error` does not pause export).
+  - **Task history** on import mutations with `source: google_calendar_import`.
+  - **Config** (`googleCalendar.*`): `enabled`, `clientID`, `clientSecret`, `redirectURL`, `tokenEncryptionKey`, `syncInterval` (prod recommend `5m`), `defaultEventDurationMinutes`, `initialSyncWindowDays`, optional `apiKeyEnabled` / `apiKey` (`X-API-Key`).
+  - Migrations: `20260921100000_add_task_groups_and_calendar_sync.sql`, `20260923120000_…_messenger_related_user_id…`, `20260924160000_…_sync_retry`, `20260924170000_…_export_opt_in…`.
+- **Task groups** (`/api/v1/task-groups`): CRUD; `group_id` on tasks; calendar export/import scoping. **DELETE group → HTTP 409** while a calendar binding still references that `group_id`.
+- **Tasks — pre-remind (`pre_remind_before_seconds`)**: optional offset (seconds before `start_date`) for a preliminary reminder (migration `20260920220000_…`). **API**: optional on create/update; `0` on update clears (max 30 days). Propagates to recurrence children. **Queue**: 9th `worker.schedule_task` arg. Independent of Google event reminders (not mapped).
+- **Users — last activity**: column `users.last_activity_at` (migration `20260918190000_…`). Best-effort on user-driven mutations. **API**: `GET /api/v1/users/activity?limit=`; optional `last_activity_at` on `UserResponse`.
+- **Examples — sample worker**: `examples/worker` (RabbitMQ → Redis ZSET → `/send_message` webhook; pre-remind job support).
+- **Examples — telegram-bot webhook**: `examples/telegram-bot` (`POST /send_message`, `done:` / `later:` callbacks).
+
+### Changed
+- **Autoreschedule**: skips `task_sync_links.origin = imported` (calendar sync owns advancement / worker republish when binding has `mru`).
+- **Calendar export mapping**: start/end always sent with `timeZone: UTC` (required by Google for recurring events); `rrule` preferred, else cron→RRULE when mappable.
+- **Create calendar binding / OAuth account responses**: `created_at` / `updated_at` returned from DB (`RETURNING`), no longer zero-time placeholders.
+
+### Fixed
+- Soft-delete → calendar export delete: after task soft-delete, enqueue uses **sync link** (not `GetTask`), so Google events are removed reliably.
+- Leaving a group-scoped export binding without `export_opt_in` enqueues DeleteEvent; per-task opt-in keeps the event.
+
+### Docs
+- Behavior matrix (import/export/both × one-shot / recurring / confirmation), binding `status`, reminders vs Google, mark-done vs delete, calendar deleted in Google, group delete 409, prod OAuth HTTPS checklist, sync-status / outbox guidance for bots.
 
 ## [v0.2.0] - 2026-09-15
 
@@ -24,7 +50,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   - **GET /api/v1/tasks/{id}**: `TaskDetailResponse` with optional `attachments` when `attachments.enabled` is true (field omitted when empty); list/create/update/mark-done responses use `TaskResponse` without attachments.
   - **Task history**: `attachment_added` when an attachment becomes `ready` (`UploadDirect`, `CompleteUpload`); `attachment_removed` on `DELETE .../attachments/{id}` (metadata in `old_value` / `new_value`; presigned `InitUpload` pending is not logged).
   - **gRPC client** (`pkg/attachments`): `InitUpload`, `UploadDirect`, `CompleteUpload`, `ListAttachments`, `GetDownloadURL`, `DownloadDirect`, `DeleteAttachment`, `PurgeByTask`, `PurgeByUser`; noop client when disabled.
-  - **Purge on delete**: soft-delete task/user triggers `PurgeByTask` / `PurgeByUser` (best-effort); S3 object removal is asynchronous in the attachment service (transactional outbox).
+  - **Purge on delete**: soft-delete task/user triggers `PurgeByTask` / `PurgeByUser` (best-effort); S3 object removal is asynchronous in the attachment service (`attachment_outbox`).
   - **Core config** (`attachments.*`): `enabled`, `grpcAddr`, `timeout`, `directUploadMaxBytes`, `proxyDownloadEnabled`, `proxyDownloadMaxBytes`, `purgeOnTaskDone` (optional purge after `POST .../done`; default `false`).
   - When `attachments.enabled` is `false`, all `/api/v1/tasks/{id}/attachments*` endpoints return **503** with `error: attachments_disabled`; task/user delete still succeeds (noop purge).
   - **Contract in repo**: `api/proto/attachments/v1/attachments.proto` + generated `api/gen/attachments/v1/*.pb.go` and `*_grpc.pb.go`.
@@ -71,6 +97,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Enhanced `/version` endpoint with build metadata
 
 <!-- links -->
-[Unreleased]: https://github.com/boskuv/goreminder/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/boskuv/goreminder/compare/v0.3.0...HEAD
+[v0.3.0]: https://github.com/boskuv/goreminder/compare/v0.2.0...v0.3.0
 [v0.2.0]: https://github.com/boskuv/goreminder/compare/v0.1.0...v0.2.0
 [v0.1.0]: https://github.com/boskuv/goreminder/releases/tag/v0.1.0
