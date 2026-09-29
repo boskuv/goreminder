@@ -8,7 +8,7 @@
 | `gen/attachments/v1/attachments.pb.go` | Generated message types (`Attachment`, `InitUploadRequest`, …) — `protoc-gen-go` |
 | `gen/attachments/v1/attachments_grpc.pb.go` | Generated gRPC client/server (`AttachmentServiceClient`, `AttachmentServiceServer`) — `protoc-gen-go-grpc` |
 
-The monorepo ships **contract + client stubs** only. The attachment **service implementation** (S3, attachment DB, outbox worker) lives in a separate repository.
+The monorepo ships **contract + client stubs** only. The attachment **service implementation** (S3, attachment DB, `attachment_outbox` worker) lives in a separate repository.
 
 ### Regenerate
 
