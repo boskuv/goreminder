@@ -272,7 +272,7 @@ GROUP BY so.status`
 		span.SetStatus(codes.Error, err.Error())
 		return 0, 0, 0, errors.Wrap(err, "failed to count outbox by user")
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var status string

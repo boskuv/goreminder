@@ -1006,6 +1006,13 @@ func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, or
 		countBuilder = countBuilder.Where(squirrel.Expr("((cron_expression IS NULL AND rrule IS NULL) OR requires_confirmation = false)"))
 		span.SetAttributes(attribute.Bool("filter.exclude_cron_with_confirmation", true))
 	}
+	if externalProvider != nil && *externalProvider != "" {
+		countBuilder = countBuilder.Where(squirrel.Expr(
+			"EXISTS (SELECT 1 FROM task_sync_links tsl WHERE tsl.task_id = tasks.id AND tsl.provider = ?)",
+			*externalProvider,
+		))
+		span.SetAttributes(attribute.String("filter.external_provider", *externalProvider))
+	}
 
 	countQuery, countArgs, err := countBuilder.ToSql()
 	if err != nil {
@@ -1059,6 +1066,12 @@ func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, or
 	// Exclude tasks where (cron_expression OR rrule) IS NOT NULL AND requires_confirmation == True
 	if excludeCronWithConfirmation != nil && *excludeCronWithConfirmation {
 		dataBuilder = dataBuilder.Where(squirrel.Expr("((cron_expression IS NULL AND rrule IS NULL) OR requires_confirmation = false)"))
+	}
+	if externalProvider != nil && *externalProvider != "" {
+		dataBuilder = dataBuilder.Where(squirrel.Expr(
+			"EXISTS (SELECT 1 FROM task_sync_links tsl WHERE tsl.task_id = tasks.id AND tsl.provider = ?)",
+			*externalProvider,
+		))
 	}
 
 	query, args, err := dataBuilder.

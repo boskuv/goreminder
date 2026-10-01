@@ -230,7 +230,7 @@ func (s *CalendarSyncService) fetchUserInfo(ctx context.Context, token *oauth2.T
 	if err != nil {
 		return nil, errors.Wrap(err, "fetch userinfo")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "read userinfo body")
@@ -439,7 +439,7 @@ func (s *CalendarSyncService) revokeRemoteToken(ctx context.Context, accessToken
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return nil
 }
 
@@ -497,10 +497,10 @@ func (s *CalendarSyncService) importEvents(ctx context.Context, client googlecal
 			opts.SyncToken = *binding.SyncToken
 		} else {
 			now := time.Now().UTC()
-			min := now.AddDate(0, 0, -windowDays)
-			max := now.AddDate(0, 0, windowDays)
-			opts.TimeMin = &min
-			opts.TimeMax = &max
+			timeMin := now.AddDate(0, 0, -windowDays)
+			timeMax := now.AddDate(0, 0, windowDays)
+			opts.TimeMin = &timeMin
+			opts.TimeMax = &timeMax
 		}
 
 		result, err := client.ListEvents(ctx, binding.GoogleCalendarID, opts)

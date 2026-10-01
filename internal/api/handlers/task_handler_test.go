@@ -42,7 +42,7 @@ type stubTaskService struct {
 	muteTask       func(ctx context.Context, taskID int64) (*models.Task, error)
 	unmuteTask     func(ctx context.Context, taskID int64) (*models.Task, error)
 	markTaskAsDone func(ctx context.Context, taskID int64) (*models.Task, error)
-	getAllTasks    func(ctx context.Context, page, pageSize int, orderBy string, status *string, statusNot *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64, cronExpression *string, cronExpressionIsNull *bool, requiresConfirmation *bool, excludeCronWithConfirmation *bool) ([]*models.Task, int, error)
+	getAllTasks    func(ctx context.Context, page, pageSize int, orderBy string, status *string, statusNot *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64, cronExpression *string, cronExpressionIsNull *bool, requiresConfirmation *bool, excludeCronWithConfirmation *bool, externalProvider *string) ([]*models.Task, int, error)
 }
 
 func (s *stubTaskService) CreateTask(ctx context.Context, task *models.Task) (int64, int64, error) {
@@ -103,7 +103,7 @@ func (s *stubTaskService) GetAllTasks(ctx context.Context, page, pageSize int, o
 	if s.getAllTasks == nil {
 		panic("unexpected GetAllTasks")
 	}
-	return s.getAllTasks(ctx, page, pageSize, orderBy, status, statusNot, startDateFrom, startDateTo, userID, cronExpression, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation)
+	return s.getAllTasks(ctx, page, pageSize, orderBy, status, statusNot, startDateFrom, startDateTo, userID, cronExpression, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation, externalProvider)
 }
 
 func sampleTask(id int64, title string) *models.Task {
@@ -334,7 +334,7 @@ func TestTaskHandler_MarkTaskAsDone_NotFound(t *testing.T) {
 
 func TestTaskHandler_GetAllTasks_PassesFilters(t *testing.T) {
 	svc := &stubTaskService{
-		getAllTasks: func(_ context.Context, page, pageSize int, orderBy string, status *string, _ *string, _ *time.Time, _ *time.Time, userID *int64, _ *string, _ *bool, _ *bool, _ *bool) ([]*models.Task, int, error) {
+		getAllTasks: func(_ context.Context, page, pageSize int, orderBy string, status *string, _ *string, _ *time.Time, _ *time.Time, userID *int64, _ *string, _ *bool, _ *bool, _ *bool, _ *string) ([]*models.Task, int, error) {
 			assert.Equal(t, 2, page)
 			assert.Equal(t, 10, pageSize)
 			assert.Equal(t, "id DESC", orderBy)

@@ -183,8 +183,8 @@ func CronExpressionToRRule(cronExpr string) *string {
 	return &rule
 }
 
-func cronFieldToCSV(field string, min, max int) (string, bool) {
-	parts, ok := expandCronIntList(field, min, max)
+func cronFieldToCSV(field string, lo, hi int) (string, bool) {
+	parts, ok := expandCronIntList(field, lo, hi)
 	if !ok || len(parts) == 0 {
 		return "", false
 	}
@@ -195,7 +195,7 @@ func cronFieldToCSV(field string, min, max int) (string, bool) {
 	return strings.Join(out, ","), true
 }
 
-func expandCronIntList(field string, min, max int) ([]int, bool) {
+func expandCronIntList(field string, lo, hi int) ([]int, bool) {
 	if field == "*" || strings.HasPrefix(field, "*/") {
 		return nil, false
 	}
@@ -210,18 +210,18 @@ func expandCronIntList(field string, min, max int) ([]int, bool) {
 			if len(bounds) != 2 {
 				return nil, false
 			}
-			lo, err1 := strconv.Atoi(strings.TrimSpace(bounds[0]))
-			hi, err2 := strconv.Atoi(strings.TrimSpace(bounds[1]))
-			if err1 != nil || err2 != nil || lo > hi || lo < min || hi > max {
+			rangeLo, err1 := strconv.Atoi(strings.TrimSpace(bounds[0]))
+			rangeHi, err2 := strconv.Atoi(strings.TrimSpace(bounds[1]))
+			if err1 != nil || err2 != nil || rangeLo > rangeHi || rangeLo < lo || rangeHi > hi {
 				return nil, false
 			}
-			for n := lo; n <= hi; n++ {
+			for n := rangeLo; n <= rangeHi; n++ {
 				result = append(result, n)
 			}
 			continue
 		}
 		n, err := strconv.Atoi(piece)
-		if err != nil || n < min || n > max {
+		if err != nil || n < lo || n > hi {
 			return nil, false
 		}
 		result = append(result, n)
@@ -361,7 +361,7 @@ func MapEventToTaskFields(ev googlecalendar.Event, userID int64, groupID *int64,
 }
 
 // ApplyDeletePolicy applies binding delete_policy to an imported task.
-func ApplyDeletePolicy(policy models.CalendarDeletePolicy, task *models.Task) (softDelete bool, mute bool) {
+func ApplyDeletePolicy(policy models.CalendarDeletePolicy, _ *models.Task) (softDelete bool, mute bool) {
 	switch policy {
 	case models.CalendarDeletePolicyMuteImported:
 		return false, true
