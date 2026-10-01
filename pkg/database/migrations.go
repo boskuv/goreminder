@@ -28,10 +28,12 @@ func RunMigrations(db *sqlx.DB, migrationsDir string, log zerolog.Logger) error 
 
 	log.Info().
 		Str("migrations_dir", absPath).
+		Bool("allow_missing", true).
 		Msg("running database migrations")
 
-	// Run migrations
-	if err := goose.Up(sqlDB, absPath); err != nil {
+	// AllowMissing: apply out-of-order migrations when another service (e.g. attachments)
+	// advanced goose_db_version on a shared DB past some core migration timestamps.
+	if err := goose.Up(sqlDB, absPath, goose.WithAllowMissing()); err != nil {
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 
