@@ -334,7 +334,7 @@ func TestDigestService_GetDigest_Success(t *testing.T) {
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(user, nil)
 	backlogRepo.EXPECT().GetCompletedBacklogsCount(gomock.Any(), userID, startDateFrom, startDateTo).Return(completedCount, nil)
-	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, 1, 1000, "start_date ASC", &startDateFrom, &startDateTo, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, 2, nil)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, 1, 1000, "start_date ASC", &startDateFrom, &startDateTo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, 2, nil)
 	targetRepo.EXPECT().GetAllTargets(gomock.Any(), 1, 1000, "created_at DESC", &userID, nil).Return(expectedTargets, 0, nil)
 
 	digest, err := service.GetDigest(ctx, userID, nil, nil, &startDateFrom, &startDateTo)
@@ -357,7 +357,7 @@ func TestDigestService_GetDigest_WithDefaultDates(t *testing.T) {
 	expectedTargets := []*models.Target{}
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(user, nil)
-	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, 1, 1000, "start_date ASC", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, 0, nil)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, 1, 1000, "start_date ASC", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, 0, nil)
 	targetRepo.EXPECT().GetAllTargets(gomock.Any(), 1, 1000, "created_at DESC", &userID, nil).Return(expectedTargets, 0, nil)
 
 	digest, err := service.GetDigest(ctx, userID, nil, nil, nil, nil)
@@ -380,7 +380,7 @@ func TestDigestService_GetDigest_WithMessengerRelatedUser(t *testing.T) {
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(user, nil)
 	backlogRepo.EXPECT().GetCompletedBacklogsCount(gomock.Any(), userID, startDateFrom, startDateTo).Return(0, nil)
-	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, 1, 1000, "start_date ASC", &startDateFrom, &startDateTo, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, 0, nil)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, 1, 1000, "start_date ASC", &startDateFrom, &startDateTo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, 0, nil)
 	targetRepo.EXPECT().GetAllTargets(gomock.Any(), 1, 1000, "created_at DESC", &userID, nil).Return(expectedTargets, 0, nil)
 	messengerRepo.EXPECT().GetMessengerRelatedUserByID(gomock.Any(), messengerUserID).Return(messengerUser, nil)
 

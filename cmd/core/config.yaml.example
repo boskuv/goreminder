@@ -70,3 +70,15 @@ cors:
 autoreschedule:
   enabled: false        # Enable automatic rescheduling of tasks with startDate in the past
   time: "00:00"         # UTC time (HH:MM format) when autoreschedule should run (default: "00:00" if enabled)
+
+# googleCalendar:
+#   enabled: false
+#   clientID: ""
+#   clientSecret: ""
+#   redirectURL: "http://localhost:8080/api/v1/calendar/oauth/callback"
+#   tokenEncryptionKey: ""          # 64-char hex or any secret (SHA-256 hashed)
+#   syncInterval: "5m"
+#   defaultEventDurationMinutes: 30
+#   initialSyncWindowDays: 90
+#   apiKeyEnabled: false
+#   apiKey: ""                      # required when apiKeyEnabled; send as X-API-Key

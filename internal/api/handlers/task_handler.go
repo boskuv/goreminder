@@ -23,6 +23,7 @@ type TaskHandler struct {
 	taskService        TaskService
 	attClient          attachments.Client
 	attachmentsEnabled bool
+	calendarService    CalendarService // optional; nil when Google Calendar disabled
 }
 
 // NewTaskHandler creates a new TaskHandler
@@ -38,6 +39,11 @@ func NewTaskHandler(
 		attClient:          attClient,
 		attachmentsEnabled: attachmentsEnabled,
 	}
+}
+
+// SetCalendarService attaches calendar sync for external badges / filters.
+func (h *TaskHandler) SetCalendarService(svc CalendarService) {
+	h.calendarService = svc
 }
 
 // @Summary Create a new task
@@ -165,7 +171,13 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 			atts = mapper.AttachmentsToResponse(list)
 		}
 	}
-	c.JSON(http.StatusOK, mapper.TaskModelToDetailResponse(task, atts))
+	resp := mapper.TaskModelToDetailResponse(task, atts)
+	if h.calendarService != nil {
+		if link, err := h.calendarService.GetTaskExternal(ctx, taskID); err == nil {
+			resp.External = mapper.TaskSyncLinkToExternalResponse(link)
+		}
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // @Summary Get all user's tasks by userID
@@ -339,6 +351,17 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		messengerUserIDPtr = &messengerUserID
 	}
 
+	externalProvider, err := validation.ValidateOptionalStringQuery(c, "external_provider")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid external_provider query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	var externalProviderPtr *string
+	if externalProvider != "" {
+		externalProviderPtr = &externalProvider
+	}
+
 	log.Info().
 		Int64("user.id", userID).
 		Int64("page", page).
@@ -346,7 +369,7 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		Str("order_by", orderBy).
 		Msg("getting user tasks")
 
-	tasks, totalCount, err := h.taskService.GetUserTasks(ctx, userID, int(page), int(pageSize), orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, statusPtr, statusNotPtr, cronExpressionPtr, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserID, messengerUserIDPtr)
+	tasks, totalCount, err := h.taskService.GetUserTasks(ctx, userID, int(page), int(pageSize), orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, statusPtr, statusNotPtr, cronExpressionPtr, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserID, messengerUserIDPtr, externalProviderPtr)
 	if err != nil {
 		log.Error().
 			Stack().
@@ -375,6 +398,11 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 	responses := make([]dto.TaskResponse, len(responsesPtr))
 	for i, resp := range responsesPtr {
 		responses[i] = *resp
+		if h.calendarService != nil {
+			if link, err := h.calendarService.GetTaskExternal(ctx, resp.ID); err == nil {
+				responses[i].External = mapper.TaskSyncLinkToExternalResponse(link)
+			}
+		}
 	}
 
 	response := dto.PaginatedTasksResponse{
@@ -995,13 +1023,24 @@ func (h *TaskHandler) GetAllTasks(c *gin.Context) {
 		return
 	}
 
+	externalProvider, err := validation.ValidateOptionalStringQuery(c, "external_provider")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid external_provider query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	var externalProviderPtr *string
+	if externalProvider != "" {
+		externalProviderPtr = &externalProvider
+	}
+
 	log.Info().
 		Int64("page", page).
 		Int64("page_size", pageSize).
 		Str("order_by", orderBy).
 		Msg("getting all tasks")
 
-	tasks, totalCount, err := h.taskService.GetAllTasks(ctx, int(page), int(pageSize), orderBy, statusPtr, statusNotPtr, startDateFrom, startDateTo, userID, cronExpressionPtr, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation)
+	tasks, totalCount, err := h.taskService.GetAllTasks(ctx, int(page), int(pageSize), orderBy, statusPtr, statusNotPtr, startDateFrom, startDateTo, userID, cronExpressionPtr, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation, externalProviderPtr)
 	if err != nil {
 		log.Error().
 			Stack().

@@ -339,9 +339,9 @@ func TestTaskService_GetUserTasks_Success(t *testing.T) {
 	totalCount := 2
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
-	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, totalCount, nil)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(expectedTasks, totalCount, nil)
 
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTasks, tasks)
 	assert.Equal(t, totalCount, count)
@@ -357,9 +357,9 @@ func TestTaskService_GetUserTasks_EmptyList(t *testing.T) {
 	totalCount := 0
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
-	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return([]*models.Task{}, totalCount, nil)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return([]*models.Task{}, totalCount, nil)
 
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.NoError(t, err)
 	assert.Empty(t, tasks)
 	assert.Equal(t, totalCount, count)
@@ -375,7 +375,7 @@ func TestTaskService_GetUserTasks_UserNotFound(t *testing.T) {
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(nil, errs.ErrNotFound)
 
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.Error(t, err)
 	assert.Nil(t, tasks)
 	assert.Equal(t, 0, count)
@@ -393,7 +393,7 @@ func TestTaskService_GetUserTasks_UserRepositoryError(t *testing.T) {
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(nil, expectedErr)
 
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.Error(t, err)
 	assert.Nil(t, tasks)
 	assert.Equal(t, 0, count)
@@ -410,9 +410,9 @@ func TestTaskService_GetUserTasks_TaskRepositoryError(t *testing.T) {
 	expectedErr := errors.New("task database error")
 
 	userRepo.EXPECT().GetUserByID(gomock.Any(), userID).Return(&models.User{ID: userID}, nil)
-	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(nil, 0, expectedErr)
+	taskRepo.EXPECT().GetTasksByUserIDWithPagination(gomock.Any(), userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Return(nil, 0, expectedErr)
 
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.Error(t, err)
 	assert.Nil(t, tasks)
 	assert.Equal(t, 0, count)
@@ -437,9 +437,10 @@ func TestTaskService_GetUserTasks_FilterByMessengerRelatedUserID(t *testing.T) {
 		gomock.Any(), userID, page, pageSize, orderBy,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		gomock.Eq(&[]int{messengerRelatedUserID}),
+		nil,
 	).Return(expectedTasks, totalCount, nil)
 
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, &messengerRelatedUserID, nil)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, &messengerRelatedUserID, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTasks, tasks)
 	assert.Equal(t, totalCount, count)
@@ -464,10 +465,11 @@ func TestTaskService_GetUserTasks_MessengerRelatedUserIDWinsOverMessengerUserID(
 		gomock.Any(), userID, page, pageSize, orderBy,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		gomock.Eq(&[]int{messengerRelatedUserID}),
+		nil,
 	).Return(expectedTasks, totalCount, nil)
 
 	// If messenger_user_id were resolved, GetMessengerRelatedUserIDsByMessengerUserID would be an unexpected call and fail the test.
-	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, &messengerRelatedUserID, &messengerUserID)
+	tasks, count, err := service.GetUserTasks(ctx, userID, page, pageSize, orderBy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, &messengerRelatedUserID, &messengerUserID, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTasks, tasks)
 	assert.Equal(t, totalCount, count)

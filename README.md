@@ -17,7 +17,8 @@
 |---|---|
 | **Start here** | [Features](#business-features) · [Prerequisites](#prerequisites) · [Quick start](#setup-instructions) |
 | **Reference** | [Configuration](#configuration) · [API](#api-documentation) · [Filtering](#filtering-and-ordering) |
-| **Domain** | [Muting](#task-muting-muted) · [Pre-remind](#pre-remind-pre_remind_before_seconds) · [Task types](#task-types) · [Schema](#database-schema) |
+| **Domain** | [Muting](#task-muting-muted) · [Pre-remind](#pre-remind-pre_remind_before_seconds) · [Task types](#task-types) · [Schema](#database-schema) · [CHANGELOG](CHANGELOG.md) |
+| **Integrations** | [Google Calendar](docs/google-calendar.md) ([matrix](docs/google-calendar.md#behavior-matrix-direction--task-type), [bot](docs/google-calendar-bot.md), [test plan](docs/google-calendar-test-plan.md)) |
 | **Dev** | [Testing](#testing) · [Development](#development) · [Architecture](#architecture) |
 
 > Long sections (schema, full config, middleware, curl examples, …) are folded behind **Expand** / summary toggles.
@@ -28,8 +29,9 @@
 - [x] **Backlog Zone**: Tasks without fixed time and confirmation requirements
 - [x] **Targets/Goals Management**: Create and track targets (aims/goals) with completion tracking
 - [x] **Task Muting**: Per-task silence for the worker queue (see [Task muting (`muted`)](#task-muting-muted)).
-- [ ] **Reminder Groups**: Group related tasks together for batch management
+- [x] **Reminder Groups**: Group related tasks together for batch management / calendar sync scope
 - [ ] **ICS Import**: Import tasks from iCalendar (.ics) files
+- [x] **Google Calendar**: Per-user OAuth, multi-calendar import/export of Events (see [docs/google-calendar.md](docs/google-calendar.md))
 - [x] **Advanced Reminders**: Optional preliminary reminder before `start_date` (`pre_remind_before_seconds`; see [Pre-remind](#pre-remind-pre_remind_before_seconds)).
 
 ## Tech Features
@@ -414,6 +416,7 @@ The `autoreschedule` option controls whether the task scheduler should run autom
 - Finds tasks that need rescheduling (tasks with `startDate` in the past that require confirmation)
 - Finds parent tasks with a recurrence rule (`cron_expression` or `rrule`) that need their `startDate` updated
 - Automatically reschedules these tasks
+- **Skips** tasks imported from Google Calendar (`task_sync_links.origin = imported`); those are advanced/republished by calendar sync when a binding `messenger_related_user_id` is set (see [docs/google-calendar.md](docs/google-calendar.md))
 
 **Use Cases:**
 - Enable autoreschedule to automatically handle tasks that have passed their scheduled time
@@ -674,7 +677,7 @@ Structured logging using Zerolog:
 | REST API | `internal/api/handlers/attachment_handler.go` | Authz via task ownership, multipart vs JSON on one `POST` |
 | gRPC client | `pkg/attachments/` | Calls attachment service; noop when `attachments.enabled: false` |
 | Contract | `api/proto/attachments/v1/`, `api/gen/attachments/v1/` | Shared protobuf; regenerate with `make proto-attachments` |
-| Service + S3 + attachment DB | **Separate repository** (not in this monorepo) | `AttachmentService` implementation, MinIO/S3, outbox deletes |
+| Service + S3 + attachment DB | **Separate repository** (not in this monorepo) | `AttachmentService` implementation, MinIO/S3, `attachment_outbox` deletes |
 
 `docker-compose.dev.yml` in this repo starts core dependencies only (Postgres, RabbitMQ, tracing). For attachment E2E tests, run the attachments service stack separately and set `attachments.enabled: true` with `grpcAddr` pointing at it.
 
@@ -709,7 +712,7 @@ Files larger than the direct limit via multipart receive **413** — use the pre
 
 **Task history:** `GET /api/v1/tasks/{id}/history` records `attachment_added` when an attachment becomes `ready` (after `UploadDirect` or `CompleteUpload`) and `attachment_removed` on delete. Presigned init (`pending`) is not logged. Purge on task/user delete does not emit per-file history entries.
 
-**Purge on done (optional):** by default attachments remain after `POST .../done`. Set `attachments.purgeOnTaskDone: true` (with `attachments.enabled: true`) to run `PurgeByTask` after a successful mark-as-done (parent + child task IDs for recurring parents). Best-effort; S3 cleanup is asynchronous (outbox).
+**Purge on done (optional):** by default attachments remain after `POST .../done`. Set `attachments.purgeOnTaskDone: true` (with `attachments.enabled: true`) to run `PurgeByTask` after a successful mark-as-done (parent + child task IDs for recurring parents). Best-effort; S3 cleanup is asynchronous (`attachment_outbox` in the attachments service).
 
 When `attachments.enabled: false`, attachment endpoints return **503** with `error: attachments_disabled`. Contract details: [api/README.md](api/README.md).
 
@@ -1196,7 +1199,7 @@ curl http://localhost:8080/version
 
 1. Update `VERSION` file:
 ```bash
-echo "0.7.0-rc.1" > VERSION
+echo "0.3.0" > VERSION
 ```
 
 2. Update `CHANGELOG.md` (move changes from `[Unreleased]` to version section)
@@ -1208,8 +1211,8 @@ make build
 
 4. Tag release:
 ```bash
-git tag -a v0.7.0-rc.1 -m "Release v0.7.0-rc.1"
-git push origin v0.7.0-rc.1
+git tag -a v0.3.0 -m "Release v0.3.0"
+git push origin v0.3.0
 ```
 
 For detailed versioning guidelines, see [docs/versioning.md](docs/versioning.md).

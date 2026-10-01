@@ -35,6 +35,20 @@ type Configuration struct {
 	RateLimit      RateLimitConfiguration      `mapstructure:"ratelimit"`
 	Cors           CorsConfiguration           `mapstructure:"cors"`
 	Autoreschedule AutorescheduleConfiguration `mapstructure:"autoreschedule"`
+	GoogleCalendar GoogleCalendarConfiguration `mapstructure:"googleCalendar"`
+}
+
+type GoogleCalendarConfiguration struct {
+	Enabled                     bool   `mapstructure:"enabled" default:"false"`
+	ClientID                    string `mapstructure:"clientID"`
+	ClientSecret                string `mapstructure:"clientSecret"`
+	RedirectURL                 string `mapstructure:"redirectURL"`
+	TokenEncryptionKey          string `mapstructure:"tokenEncryptionKey"` // required when enabled
+	SyncInterval                string `mapstructure:"syncInterval" default:"5m"`
+	DefaultEventDurationMinutes int    `mapstructure:"defaultEventDurationMinutes" default:"30"`
+	InitialSyncWindowDays       int    `mapstructure:"initialSyncWindowDays" default:"90"`
+	APIKeyEnabled               bool   `mapstructure:"apiKeyEnabled" default:"false"`
+	APIKey                      string `mapstructure:"apiKey"` // compared to X-API-Key header when APIKeyEnabled
 }
 
 type AttachmentsConfiguration struct {
@@ -184,6 +198,36 @@ func Setup(configPath string) error {
 		matched, _ := regexp.MatchString(`^([0-1][0-9]|2[0-3]):[0-5][0-9]$`, configuration.Autoreschedule.Time)
 		if !matched {
 			return fmt.Errorf("invalid autoreschedule.time format: expected HH:MM (24-hour format), got: %s", configuration.Autoreschedule.Time)
+		}
+	}
+
+	if configuration.GoogleCalendar.Enabled {
+		if configuration.GoogleCalendar.ClientID == "" {
+			return fmt.Errorf("googleCalendar.clientID is required when googleCalendar.enabled is true")
+		}
+		if configuration.GoogleCalendar.ClientSecret == "" {
+			return fmt.Errorf("googleCalendar.clientSecret is required when googleCalendar.enabled is true")
+		}
+		if configuration.GoogleCalendar.RedirectURL == "" {
+			return fmt.Errorf("googleCalendar.redirectURL is required when googleCalendar.enabled is true")
+		}
+		if configuration.GoogleCalendar.TokenEncryptionKey == "" {
+			return fmt.Errorf("googleCalendar.tokenEncryptionKey is required when googleCalendar.enabled is true")
+		}
+		if configuration.GoogleCalendar.SyncInterval == "" {
+			configuration.GoogleCalendar.SyncInterval = "5m"
+		}
+		if _, err := time.ParseDuration(configuration.GoogleCalendar.SyncInterval); err != nil {
+			return fmt.Errorf("invalid googleCalendar.syncInterval duration: %w", err)
+		}
+		if configuration.GoogleCalendar.DefaultEventDurationMinutes <= 0 {
+			configuration.GoogleCalendar.DefaultEventDurationMinutes = 30
+		}
+		if configuration.GoogleCalendar.InitialSyncWindowDays <= 0 {
+			configuration.GoogleCalendar.InitialSyncWindowDays = 90
+		}
+		if configuration.GoogleCalendar.APIKeyEnabled && configuration.GoogleCalendar.APIKey == "" {
+			return fmt.Errorf("googleCalendar.apiKey is required when googleCalendar.apiKeyEnabled is true")
 		}
 	}
 

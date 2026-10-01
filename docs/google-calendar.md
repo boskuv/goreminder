@@ -1,0 +1,563 @@
+# Google Calendar integration
+
+GoReminder syncs **Google Calendar Events** (not Google Tasks) with tasks.
+
+**Messenger / Telegram bot playbook:** [google-calendar-bot.md](./google-calendar-bot.md) (OAuth in TG, groups, avoid mass export, mru, digests).
+
+**API test plan (test & prod, all endpoints):** [google-calendar-test-plan.md](./google-calendar-test-plan.md).
+
+## Who can connect what?
+
+| Level | What it means |
+|--------|----------------|
+| **Per user** | Each GoReminder user connects **their own** Google account via OAuth. Tokens are stored encrypted and scoped to that `user_id`. |
+| **Per calendar** | After connect, the user picks one or more Google calendars and creates a **binding** for each (`import` / `export` / `both`). |
+| **Not global** | There is no single shared app calendar for all users. User A cannot see or sync User B’s Google calendars. |
+
+So: **any user** can connect **their** Google account and **as many calendars** as they need. Bindings are independent (different directions, groups, delete policies).
+
+---
+
+## 1. Google Cloud setup (once per deployment)
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) → create or select a project.
+2. **APIs & Services → Library** → enable **Google Calendar API**.
+3. Configure the OAuth app (UI name varies — see note below):
+   - Open **APIs & Services → OAuth consent screen**, or in newer console **Google Auth Platform** (Branding / Audience).
+   - Fill **App name**, **User support email**, **Developer contact**.
+   - Scopes used by GoReminder (add if the wizard asks, or under Data access / Scopes):
+     - `https://www.googleapis.com/auth/calendar.events`
+     - `https://www.googleapis.com/auth/calendar.readonly`
+     - `https://www.googleapis.com/auth/userinfo.email`
+     - `https://www.googleapis.com/auth/userinfo.profile`
+   - While status is **Testing**, add yourself under **Test users** / **Audience → Test users**.
+4. **Credentials → Create credentials → OAuth client ID**
+   - Application type: **Web application**.
+   - Authorized redirect URI (must match config exactly), e.g.  
+     `http://localhost:8080/api/v1/calendar/oauth/callback`  
+     or your public URL:  
+     `https://your.domain/api/v1/calendar/oauth/callback`
+5. Copy **Client ID** and **Client secret**.
+
+### OAuth consent UI notes (current Google Cloud Console)
+
+| What you might look for | What you often see now |
+|-------------------------|-------------------------|
+| **External** vs **Internal** | **Internal** only for Google Workspace orgs. On a personal Gmail project there is often **no External toggle** — the app is already “external”; just complete Branding and add Test users. |
+| Left nav **OAuth consent screen** | May appear as **Google Auth Platform** → **Branding**, **Audience**, **Clients**, **Data access**. |
+| Where to add Test users | **Audience** (or consent screen summary) → **Test users** → Add your Gmail. Required while Publishing status is **Testing**. |
+| `access_denied` / app not verified | Almost always missing Test user, or you signed in with a different Google account than the one listed. |
+
+You do **not** need to publish the app to production for local testing; Testing + your email as Test user is enough.
+
+---
+
+## 2. Server config
+
+In `cmd/core/config.yaml` (or env `GOREMINDER_GOOGLECALENDAR_*`):
+
+```yaml
+googleCalendar:
+  enabled: true
+  clientID: "....apps.googleusercontent.com"
+  clientSecret: "...."
+  redirectURL: "http://localhost:8080/api/v1/calendar/oauth/callback"
+  # Any secret string (SHA-256 hashed) or 64-char hex (32-byte key)
+  tokenEncryptionKey: "change-me-to-a-long-random-secret"
+  syncInterval: "5m"
+  defaultEventDurationMinutes: 30
+  initialSyncWindowDays: 90
+  # Optional gate for the whole API when enabled
+  apiKeyEnabled: false
+  apiKey: ""
+```
+
+Restart the API. On startup you should see `google calendar integration enabled`.
+
+Background job: every `syncInterval` the core polls import bindings (syncToken) and processes the export outbox (`sync_outbox` — not the attachments service `attachment_outbox`).
+
+### Production notes (domain / HTTPS / poll)
+
+1. Public **HTTPS** hostname for OAuth callback (e.g. Caddy/nginx + Let’s Encrypt on the VPS). DNS A → server IP.
+2. Google Cloud OAuth client redirect URI **exactly**:
+   `https://<api-host>/api/v1/calendar/oauth/callback`
+3. Same URL in `googleCalendar.redirectURL`.
+4. Prefer `syncInterval: "5m"` in prod (use `1m` only for local debugging). Import lag ≈ interval; export after local mutation drains on the same tick via outbox.
+5. Set `apiKeyEnabled: true` + `apiKey` when the API is reachable from the internet; bot sends `X-API-Key`.
+6. Keep `tokenEncryptionKey` stable (rotation forces all users to reconnect).
+7. OAuth **Testing** + Test users is enough for a small audience; broad users need Publishing **Production** (+ Google verification for Calendar scopes).
+8. Smoke: [google-calendar-test-plan.md §9 Prod go-live](./google-calendar-test-plan.md#9-prod-go-live-checklist).
+
+---
+
+## 3. Per-user connect flow
+
+Replace `{user_id}` with the GoReminder user id.
+
+### 3.1 Start OAuth
+
+```http
+GET /api/v1/users/{user_id}/calendar/oauth/start
+```
+
+Response:
+
+```json
+{ "url": "https://accounts.google.com/o/oauth2/auth?..." }
+```
+
+Open `url` in a browser, sign in with Google, grant access. Google redirects to `redirectURL` with `code` and `state` (state = user id). The callback handler stores encrypted tokens.
+
+```http
+GET /api/v1/calendar/oauth/callback?code=...&state={user_id}
+```
+
+### 3.2 List Google calendars
+
+```http
+GET /api/v1/users/{user_id}/calendar/calendars
+```
+
+### 3.3 Create a binding (one calendar)
+
+```http
+POST /api/v1/users/{user_id}/calendar/bindings
+Content-Type: application/json
+
+{
+  "google_calendar_id": "primary",
+  "calendar_summary": "Personal",
+  "direction": "import",
+  "group_id": 1,
+  "messenger_related_user_id": 1,
+  "delete_policy": "soft_delete_imported"
+}
+```
+
+| Field | Values |
+|--------|--------|
+| `direction` | `import` — Google → tasks only (bot edits stay local; next sync may overwrite from Google); `export` — tasks → Google; `both` — bidirectional |
+| `group_id` | Optional task group: imported tasks go there; for export, only tasks in that group are pushed (if set). If `group_id` is omitted on an **export** binding, eligible tasks for that user may be exported. |
+| `messenger_related_user_id` | Optional. When set on an **import**/**both** binding, imported tasks get this `mru` and future occurrences are published to the messenger worker (`schedule_task`). Omit to keep calendar-only tasks (DB mirror, no chat reminders). Must belong to the same user. |
+| `delete_policy` | On unbind/cancel: `soft_delete_imported` (default), `mute_imported`, `keep` |
+
+Repeat `POST .../bindings` for additional calendars.
+
+### Behavior matrix: direction × task type
+
+This is the product contract for Google Calendar sync. “Bot / API edit” means `CreateTask` / `UpdateTask` / `DeleteTask` (and per-task export). **Autoreschedule never calls the calendar export hook** — it only updates the DB (and the messenger queue for one-shots).
+
+#### Directions (what each binding does)
+
+| | Google → GoReminder | GoReminder → Google | Notes |
+|--|--|--|--|
+| **`import`** | Periodic sync (`syncToken`) | **No** (even if the task has a sync link) | Local edits stay local until the next import overwrites calendar fields from Google |
+| **`export`** | **No** (`SyncBinding` skips) | Outbox on create/update/delete (and `POST .../calendar/export`) | Scope: optional `group_id`, or all top-level tasks if `group_id` omitted, or per-task opt-in |
+| **`both`** | Same as import | Same as export | Anti-loop via private `goreminder_task_id` on exported events |
+
+`messenger_related_user_id` on the binding is orthogonal: it only controls whether **imported** tasks get a messenger and `worker.schedule_task`. Native (export-origin) tasks use whatever `mru` they already have on the task row.
+
+#### Task types
+
+**A. One-shot** (no `cron_expression`, no `rrule`, no `parent_id`)
+
+| Direction | Behavior |
+|--|--|
+| **import** | One Google event → one task. Future → `scheduled`; after start passes → next sync sets `done` + `finish_date`. Not in autoreschedule. With binding `mru` → schedule once; when past → `delete_task` on sync. |
+| **export** | Task create/update → Create/Patch event; delete → DeleteEvent. Autoreschedule +24h **does not** update Google (event keeps old start until a normal API update). |
+| **both** | Import + export rules above. Prefer not to fight yourself: edits in Google and in the bot can overwrite each other on the next cycle. |
+
+**B. Recurring without confirmation** (`rrule` **or** `cron_expression`, `requires_confirmation=false`)
+
+| Direction | Behavior |
+|--|--|
+| **import** | One Google series → one task with `rrule` (instances are not expanded). Past DTSTART is advanced to the **next** occurrence → stays `scheduled`. Excluded from autoreschedule; next occurrence / worker republish come from calendar sync when `mru` is set. Worker payload has no RRULE — each publish is a one-shot at current `start_date`. |
+| **export** | One task → one Google event. `rrule` → Recurrence as-is. `cron_expression` only → mapped to RRULE when possible (`0 9 * * *` → `FREQ=DAILY`; weekly/monthly/yearly patterns similarly); unsupported cron → single timed event. Start/end are sent with **`timeZone: UTC`** (DB times are UTC; required by Google for recurring events). Autoreschedule advancing `start_date` **does not** Patch Google (series DTSTART should stay; Google already expands RRULE). |
+| **both** | Same combination. Google series ↔ one GoReminder row with `rrule`. |
+
+**C. Recurring with confirmation** (parent has `rrule`/`cron` + `requires_confirmation=true`; children have `parent_id`)
+
+| Direction | Behavior |
+|--|--|
+| **import** | Same as B: Google has no confirmation tree — import creates a **top-level** task (no auto children). If you later set `requires_confirmation` via API, normal GoReminder parent/child rules apply; that is outside calendar import. |
+| **export** | Only the **parent** is eligible (`ShouldExportTask` skips children). Parent → one Google series (`rrule` or cron→RRULE). Child create/done/autoreschedule **do not** export. Deleting the parent can delete the Google event. |
+| **both** | Parent syncs both ways as in B; children remain GoReminder-only. |
+
+#### Cross-cutting rules
+
+| Topic | Rule |
+|--|--|
+| **Confirmation children** | Never exported; never created by import. |
+| **Autoreschedule** | Skips `origin=imported`. For native tasks: updates DB (+ worker for one-shots); **no** calendar outbox. |
+| **Mute** | DB flag; MuteTask does not enqueue calendar export. With `mru`, mute/unmute still talk to the messenger worker as usual. |
+| **Past imported one-shot** | → `done` on sync (with or without `mru`). |
+| **Cancel in Google / unbind** | `delete_policy`: `soft_delete_imported` / `mute_imported` / `keep`. Export-origin links are not soft-deleted by import cancel of unrelated events. |
+| **Task history (import)** | Import create/update/done/cancel writes `task_history` with existing actions (`created` / `updated` / `status_changed` / `deleted`) and `source: "google_calendar_import"` in old/new value. Best-effort (sync does not fail if history insert fails). Export via normal API already records history as usual. |
+| **Export without `group_id`** | Every eligible top-level task of that user can be pushed — usually set a group unless that is intentional. |
+| **Reminders** | Bot `pre_remind_before_seconds` and Google event reminders are **independent** — neither side maps to the other. |
+| **Mark done** (`MarkTaskAsDone`) | **No** calendar export. Event stays in Google. |
+| **Calendar deleted in Google** | Next import → binding `status=error`. Export → outbox failures. Local tasks are **not** auto-cleaned; user must fix binding / disconnect. |
+| **Soft-delete task group** | Blocked (**409**) if a calendar binding still has that `group_id`. Soft-delete does **not** clear `tasks.group_id` via FK. |
+
+#### Binding `status` (active / error)
+
+| | Rule |
+|--|--|
+| **`active`** | Default. Import scheduler polls these. |
+| **`error`** | Set on **import/both pull** failure. Auto-poll skips until backoff `next_retry_at` (or force sync). **Does not** stop export outbox / `POST .../calendar/export`. |
+| **Force sync** | Works on `error` (recovery path). **No-op** for `export`-only bindings (no pull). |
+| **Export / EnableTaskExport** | Check direction + soft-delete only — **not** `status=active`. |
+| **`both`** | Import can be `error` while local→Google pushes still run. |
+| **`last_synced_at` on binding** | Updated on successful **import** pull. Export-only bindings often leave it null; per-task export success is on the **sync link** (`/calendar/external`). |
+
+Client: use `GET .../sync-status` for health; do not assume export stops when `status=error`.
+
+#### Which API changes hit Google Calendar?
+
+Export outbox runs only when `notifyCalendarExport` fires **and** a matching `export`/`both` binding applies. Import-only bindings never get local→Google pushes.
+
+| Action / field | Enqueues calendar export? | What changes in Google (if enqueued) |
+|--|--|--|
+| **Create** task | yes (`created`) | CreateEvent |
+| **Delete** task (`DeleteTask`) | yes (`deleted`) | DeleteEvent (after soft-delete: via sync link — task row is already `deleted_at`) |
+| **PUT** `title`, `description` | yes (`updated`) | Patch summary / description |
+| **PUT** `start_date` | yes | Patch event start/end |
+| **PUT** `finish_date` | yes | May change event **duration** (end = start + duration; if `finish_date` > start it is used as duration hint) — not “completion” in Google |
+| **PUT** `rrule` / `cron_expression` | yes | Patch Recurrence (`rrule` as-is; cron mapped when possible) |
+| **PUT** `status` (e.g. `done`) | yes (`updated`, not delete) | Patch only (event **stays** in Google). Prefer `DeleteTask` to remove the event |
+| **PUT** `muted` | yes | Outbox may run, but **muted is not** in the event payload → calendar looks unchanged |
+| **PUT** `pre_remind_before_seconds` | yes | Same — **not** mapped to Google reminders |
+| **PUT** `requires_confirmation` | yes | Not in event payload; may affect children locally only |
+| **PUT** `group_id` | yes | Not in event payload. Leaving a **group-scoped** export binding (no `export_opt_in`) enqueues **DeleteEvent**. Per-task opt-in (`POST .../calendar/export`, `export_opt_in=true`) keeps syncing outside the group |
+| **POST** `/mute`, `/unmute` | **no** | Messenger worker only |
+| **POST** mark done | **no** | Event stays in Google |
+| **Autoreschedule** | **no** | DB (+ worker for one-shots); Google unchanged |
+
+Mapped into the Google event body: `title`, `description`, `start_date`, duration (`finish_date` / link duration / default 30m), `rrule` or cron→RRULE, plus private `goreminder_task_id`.
+
+Not mapped: `muted`, `pre_remind_before_seconds`, `status`, `requires_confirmation`, `messenger_related_user_id`, attachments, etc.
+
+### 3.4 Force sync / list / disconnect / sync status
+
+```http
+GET    /api/v1/users/{user_id}/calendar/bindings
+GET    /api/v1/users/{user_id}/calendar/sync-status
+POST   /api/v1/users/{user_id}/calendar/bindings/{binding_id}/sync
+DELETE /api/v1/users/{user_id}/calendar/bindings/{binding_id}
+DELETE /api/v1/users/{user_id}/calendar/disconnect
+```
+
+`GET .../sync-status` returns all bindings (with `last_synced_at`, `last_error`, `status`, `sync_attempts`, `next_retry_at`) plus export **outbox** counts (`pending` / `processing` / `failed`) for that user's tasks.
+
+**Import auto-retry:** when a pull fails, the binding becomes `status=error` and is temporarily skipped by the normal active poll. The scheduler still retries with exponential backoff (`1m → 5m → 30m → 2h`, up to 8 attempts) via `next_retry_at`. After the cap, only **force sync** (or a later success) resumes automatic polling. Success resets `sync_attempts` and clears `last_error`. Export outbox retries are independent (same backoff schedule). See [Binding status](#binding-status-active--error).
+
+---
+
+## 4. Export options
+
+**By group:** create/use a task group, put tasks in it (`group_id` on the task), bind a calendar with `direction: export|both` and the same `group_id`.
+
+Deleting a task group is **blocked (HTTP 409)** while any calendar binding still references that `group_id` — delete or reassign the binding first.
+
+Moving a task **out** of an export group removes its Google event (group-scoped link, `export_opt_in=false`). **Per-task** export (`POST .../calendar/export`) sets `export_opt_in=true` so the event stays even if the task leaves the group.
+
+**By single task:**
+
+```http
+POST /api/v1/tasks/{task_id}/calendar/export
+Content-Type: application/json
+
+{ "calendar_binding_id": 1 }
+```
+
+Confirmation **child** tasks are not exported separately; the parent / logical series is. Full matrix (import / export / both × one-shot / recurring / confirmation): see [Behavior matrix](#behavior-matrix-direction--task-type) above.
+
+---
+
+## 5. Seeing synced tasks
+
+- Task detail / list may include:
+
+```json
+"external": {
+  "provider": "google_calendar",
+  "calendar_id": "...",
+  "event_id": "...",
+  "origin": "imported",
+  "sync_enabled": true,
+  "export_opt_in": false
+}
+```
+
+- Filter: `GET /api/v1/users/{user_id}/tasks?external_provider=google_calendar`
+- Explicit: `GET /api/v1/tasks/{id}/calendar/external`
+
+---
+
+## 6. Security notes
+
+- Refresh/access tokens are **encrypted at rest** (`tokenEncryptionKey`). Keep it secret and stable; rotating it invalidates stored tokens (users must reconnect).
+- Optional `apiKeyEnabled` + `X-API-Key` header when you want a shared gate on the API.
+- Calendar ACL stays on Google’s side: anyone who can edit that Google calendar can change events; GoReminder will pick up changes on the next sync.
+- Loop prevention: exported events get private extended property `goreminder_task_id`.
+
+---
+
+## 7. Quick checklist
+
+1. Enable Calendar API + OAuth client + redirect URI  
+2. Set `googleCalendar.enabled` and secrets in config  
+3. Create GoReminder user if needed  
+4. OAuth start → consent → binding(s)  
+5. Force sync or wait for `syncInterval`  
+6. Check tasks / `external` badge  
+
+---
+
+## 8. Local smoke-test algorithm (full feature walkthrough)
+
+Goal: on your machine, exercise **OAuth → import → export (group) → export (single task) → force sync → filter/badge → disconnect**.
+
+Assume API at `http://localhost:8080`. Base: `API=http://localhost:8080/api/v1`.
+
+### A. One-time Google Cloud (5–10 min)
+
+1. Create/select a GCP project.
+2. Enable **Google Calendar API**.
+3. Open **OAuth consent screen** / **Google Auth Platform**:
+   - Fill Branding (app name, support email, developer contact).
+   - Do **not** expect an **External** button on personal Gmail — that choice is mainly for Workspace (**Internal** vs external). Skip if you do not see it.
+   - Under **Audience → Test users**, add **yourself** (the Google account you will use in the browser).
+4. Create OAuth client → **Web application**.
+5. Authorized redirect URI (exact match):
+
+   `http://localhost:8080/api/v1/calendar/oauth/callback`
+
+6. Save Client ID + Client secret.
+
+### B. Local deps + config
+
+1. Start Postgres (and optionally Rabbit):
+
+   ```bash
+   docker compose -f docker-compose.dev.yml up -d postgres
+   # optional: rabbitmq if you want queue publishes
+   ```
+
+2. In [`cmd/core/config.yaml`](../cmd/core/config.yaml) uncomment/set:
+
+   ```yaml
+   googleCalendar:
+     enabled: true
+     clientID: "<from Google>"
+     clientSecret: "<from Google>"
+     redirectURL: "http://localhost:8080/api/v1/calendar/oauth/callback"
+     tokenEncryptionKey: "local-dev-secret-change-me"
+     syncInterval: "1m"          # faster feedback while testing
+     defaultEventDurationMinutes: 30
+     initialSyncWindowDays: 90
+     apiKeyEnabled: false
+   ```
+
+3. Run API (migrations apply on start unless `SKIP_MIGRATIONS=true`):
+
+   ```bash
+   make run
+   # or: go run ./cmd/core -config cmd/core/config.yaml
+   ```
+
+4. Log line to expect: `google calendar integration enabled`.
+
+5. Health check: `curl -s http://localhost:8080/version`
+
+### C. Create a GoReminder user
+
+```bash
+curl -s -X POST "$API/users" -H 'Content-Type: application/json' \
+  -d '{"name":"calendar-tester","email":"you@example.com"}'
+# → {"id": <USER_ID>}
+export USER_ID=<USER_ID>
+```
+
+Optional: create a task group for import/export scoping:
+
+```bash
+curl -s -X POST "$API/task-groups" -H 'Content-Type: application/json' \
+  -d "{\"user_id\": $USER_ID, \"name\": \"Google Personal\"}"
+# → {"id": <GROUP_ID>}
+export GROUP_ID=<GROUP_ID>
+```
+
+### D. Connect Google (OAuth)
+
+1. Get consent URL:
+
+   ```bash
+   curl -s "$API/users/$USER_ID/calendar/oauth/start"
+   # → {"url":"https://accounts.google.com/..."}
+   ```
+
+2. Open `url` in a **browser on the same machine** (localhost callback).
+3. Sign in with the Google account you added as Test user → Allow.
+4. Browser lands on `/calendar/oauth/callback?code=...&state=$USER_ID` and returns JSON with account email (tokens stored encrypted).
+5. If you see `redirect_uri_mismatch` — URI in Google Console ≠ `redirectURL` in config.
+
+### E. List calendars and create bindings
+
+```bash
+curl -s "$API/users/$USER_ID/calendar/calendars"
+# pick google_calendar_id, often "primary"
+```
+
+**Binding 1 — IMPORT only** (pull events into `GROUP_ID`):
+
+```bash
+curl -s -X POST "$API/users/$USER_ID/calendar/bindings" \
+  -H 'Content-Type: application/json' \
+  -d "{
+    \"google_calendar_id\": \"primary\",
+    \"calendar_summary\": \"Primary import\",
+    \"direction\": \"import\",
+    \"group_id\": $GROUP_ID,
+    \"delete_policy\": \"soft_delete_imported\"
+  }"
+# → binding id → export IMPORT_BINDING_ID=...
+```
+
+**Binding 2 — EXPORT only** (optional second calendar, or same calendar with care):
+
+For a clean demo, create a dedicated Google calendar “GoReminder Export” in Google UI, then:
+
+```bash
+curl -s -X POST "$API/users/$USER_ID/calendar/bindings" \
+  -H 'Content-Type: application/json' \
+  -d "{
+    \"google_calendar_id\": \"<export-calendar-id>\",
+    \"calendar_summary\": \"Export\",
+    \"direction\": \"export\",
+    \"group_id\": $GROUP_ID
+  }"
+# → EXPORT_BINDING_ID=...
+```
+
+Using `both` on one calendar is fine too; duplicates are prevented via `goreminder_task_id` on events.
+
+```bash
+curl -s "$API/users/$USER_ID/calendar/bindings"
+```
+
+### F. Test IMPORT (Google → GoReminder)
+
+1. In Google Calendar UI, create 2–3 events in the **import** calendar (one timed, optionally one recurring with RRULE).
+2. Force sync:
+
+   ```bash
+   curl -s -X POST "$API/users/$USER_ID/calendar/bindings/$IMPORT_BINDING_ID/sync"
+   # → {"status":"synced"}
+   ```
+
+3. List tasks (with external badge / filter):
+
+   ```bash
+   curl -s "$API/users/$USER_ID/tasks?external_provider=google_calendar&page=1&page_size=50"
+   curl -s "$API/tasks/<task_id>"
+   # look for "external": { "provider":"google_calendar", "origin":"imported", ... }
+   curl -s "$API/tasks/<task_id>/calendar/external"
+   ```
+
+4. Change event title/time in Google → force sync again → task should update.
+5. Delete/cancel event in Google → sync → with `soft_delete_imported` the task is soft-deleted.
+
+### G. Test EXPORT by group (GoReminder → Google)
+
+1. Create a future task **in the export group**:
+
+   ```bash
+   curl -s -X POST "$API/tasks" -H 'Content-Type: application/json' \
+     -d "{
+       \"title\": \"Export me (group)\",
+       \"user_id\": $USER_ID,
+       \"group_id\": $GROUP_ID,
+       \"start_date\": \"2030-01-15T10:00:00Z\"
+     }"
+   # → task id
+   ```
+
+2. Wait up to `syncInterval` **or** trigger outbox by updating the task (title change) — create/update calls `OnTaskChanged` → outbox → Google.
+
+   ```bash
+   curl -s -X PUT "$API/tasks/<task_id>" -H 'Content-Type: application/json' \
+     -d '{"title":"Export me (group) updated"}'
+   ```
+
+3. Open the **export** calendar in Google UI — event should appear (duration ≈ 30 min).
+4. Check link:
+
+   ```bash
+   curl -s "$API/tasks/<task_id>/calendar/external"
+   # origin: exported
+   ```
+
+### H. Test EXPORT by single task (no group required)
+
+```bash
+# task without group_id is fine
+curl -s -X POST "$API/tasks" -H 'Content-Type: application/json' \
+  -d "{
+    \"title\": \"Export me (solo)\",
+    \"user_id\": $USER_ID,
+    \"start_date\": \"2030-02-01T12:00:00Z\"
+  }"
+
+curl -s -X POST "$API/tasks/<task_id>/calendar/export" \
+  -H 'Content-Type: application/json' \
+  -d "{\"calendar_binding_id\": $EXPORT_BINDING_ID}"
+```
+
+Binding must be `export` or `both`. Then check Google + `/calendar/external`.
+
+### I. What the background job does
+
+With `syncInterval: "1m"`:
+
+- polls all **active import/both** bindings (incremental `syncToken`);
+- drains **export outbox** (retries with backoff on failure).
+
+Errors land on binding: `last_error`, `status: error` in `GET .../bindings`.
+
+### J. Disconnect / cleanup
+
+```bash
+# remove one binding (applies delete_policy to imported tasks)
+curl -s -X DELETE "$API/users/$USER_ID/calendar/bindings/$IMPORT_BINDING_ID"
+
+# revoke Google tokens + tear down remaining bindings
+curl -s -X DELETE "$API/users/$USER_ID/calendar/disconnect"
+```
+
+### K. Suggested order to “see everything”
+
+| Step | Feature exercised |
+|------|-------------------|
+| A–D | OAuth, encrypted tokens, per-user account |
+| E | Multi-calendar, direction import vs export, group scope |
+| F | Import, syncToken/force sync, external badge, delete_policy |
+| G | Group export + outbox |
+| H | Per-task `sync_enabled` export |
+| I | Scheduler / retries |
+| J | Unbind + disconnect |
+
+### L. Common local pitfalls
+
+| Symptom | Fix |
+|---------|-----|
+| `redirect_uri_mismatch` | URI in Google Console must equal `redirectURL` exactly |
+| `access_denied` / app not verified | Add your Google account as **Test user** (Audience / consent screen). Sign in with that same account. Personal Gmail: no External toggle needed — see §1 notes. |
+| Callback 404 / connection refused | API not running on `:8080`, or browser not on same host |
+| Import empty | Events outside `initialSyncWindowDays` (±90); or wrong calendar id |
+| Export silent | Binding not `export`/`both`; or `group_id` set and task not in that group; wait for outbox/`syncInterval` |
+| Recurring export 400 timezone | Fixed: export always sends `timeZone: UTC` on start/end; re-create task or re-enqueue after upgrade |
+| Import stuck `status=error` | Auto-retry with backoff up to 8 attempts; then force sync or fix OAuth. See `GET .../sync-status`. Export may still run |
+| Calendar removed in Google | Import → error; export outbox fails; tasks stay until user unbinds |
+| Expect export off when `error` | Not how it works — only auto-**import** pauses |
+| `googleCalendar.clientID is required` | `enabled: true` without credentials — fill config and restart |
