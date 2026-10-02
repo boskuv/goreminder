@@ -58,6 +58,7 @@ type EventListResult struct {
 // CalendarClient abstracts Google Calendar API operations used by sync.
 type CalendarClient interface {
 	ListCalendars(ctx context.Context) ([]Calendar, error)
+	GetCalendar(ctx context.Context, calendarID string) (*Calendar, error)
 	ListEvents(ctx context.Context, calendarID string, opts ListEventsOpts) (*EventListResult, error)
 	GetEvent(ctx context.Context, calendarID, eventID string) (*Event, error)
 	CreateEvent(ctx context.Context, calendarID string, event *Event) (*Event, error)
@@ -100,6 +101,18 @@ func (c *apiClient) ListCalendars(ctx context.Context) ([]Calendar, error) {
 		return nil, fmt.Errorf("list calendars: %w", err)
 	}
 	return out, nil
+}
+
+func (c *apiClient) GetCalendar(ctx context.Context, calendarID string) (*Calendar, error) {
+	item, err := c.svc.CalendarList.Get(calendarID).Context(ctx).Do()
+	if err != nil {
+		return nil, fmt.Errorf("get calendar %q: %w", calendarID, err)
+	}
+	return &Calendar{
+		ID:      item.Id,
+		Summary: item.Summary,
+		Primary: item.Primary,
+	}, nil
 }
 
 func (c *apiClient) ListEvents(ctx context.Context, calendarID string, opts ListEventsOpts) (*EventListResult, error) {

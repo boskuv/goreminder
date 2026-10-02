@@ -136,6 +136,7 @@ Content-Type: application/json
 
 | Field | Values |
 |--------|--------|
+| `calendar_summary` | Display name only (stored at create). Refreshed from Google on each import/both poll and on force sync (including export-only). Does not affect `google_calendar_id`. |
 | `direction` | `import` — Google → tasks only (bot edits stay local; next sync may overwrite from Google); `export` — tasks → Google; `both` — bidirectional |
 | `group_id` | Optional task group: imported tasks go there; for export, only tasks in that group are pushed (if set). If `group_id` is omitted on an **export** binding, eligible tasks for that user may be exported. |
 | `messenger_related_user_id` | Optional. When set on an **import**/**both** binding, imported tasks get this `mru` and future occurrences are published to the messenger worker (`schedule_task`). Omit to keep calendar-only tasks (DB mirror, no chat reminders). Must belong to the same user. |
@@ -205,7 +206,7 @@ This is the product contract for Google Calendar sync. “Bot / API edit” mean
 |--|--|
 | **`active`** | Default. Import scheduler polls these. |
 | **`error`** | Set on **import/both pull** failure. Auto-poll skips until backoff `next_retry_at` (or force sync). **Does not** stop export outbox / `POST .../calendar/export`. |
-| **Force sync** | Works on `error` (recovery path). **No-op** for `export`-only bindings (no pull). |
+| **Force sync** | Works on `error` (recovery path). For `export`-only: refreshes `calendar_summary` only (no event pull). |
 | **Export / EnableTaskExport** | Check direction + soft-delete only — **not** `status=active`. |
 | **`both`** | Import can be `error` while local→Google pushes still run. |
 | **`last_synced_at` on binding** | Updated on successful **import** pull. Export-only bindings often leave it null; per-task export success is on the **sync link** (`/calendar/external`). |

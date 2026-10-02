@@ -444,6 +444,7 @@ func (s *CalendarSyncService) revokeRemoteToken(ctx context.Context, accessToken
 }
 
 // SyncBinding imports events for a binding (and is used by ForceSync).
+// For every direction it best-effort refreshes calendar_summary from Google.
 func (s *CalendarSyncService) SyncBinding(ctx context.Context, bindingID int64) error {
 	ctx, span := s.tracer.Start(ctx, "calendar_sync_service.SyncBinding",
 		trace.WithAttributes(attribute.Int64("calendar_binding.id", bindingID)))
@@ -456,16 +457,21 @@ func (s *CalendarSyncService) SyncBinding(ctx context.Context, bindingID int64) 
 		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
 	}
-	if binding.Direction != models.CalendarBindingDirectionImport && binding.Direction != models.CalendarBindingDirectionBoth {
-		span.SetStatus(codes.Ok, "skip non-import")
-		return nil
-	}
 
 	client, _, err := s.clientForAccountID(ctx, binding.GoogleAccountID)
 	if err != nil {
-		s.markBindingError(ctx, binding, err)
-		observability.CalendarSyncErrors.Inc()
+		if binding.Direction == models.CalendarBindingDirectionImport || binding.Direction == models.CalendarBindingDirectionBoth {
+			s.markBindingError(ctx, binding, err)
+			observability.CalendarSyncErrors.Inc()
+		}
 		return err
+	}
+
+	s.refreshBindingCalendarSummary(ctx, client, binding)
+
+	if binding.Direction != models.CalendarBindingDirectionImport && binding.Direction != models.CalendarBindingDirectionBoth {
+		span.SetStatus(codes.Ok, "summary refreshed, skip non-import")
+		return nil
 	}
 
 	err = s.importEvents(ctx, client, binding)
@@ -482,6 +488,21 @@ func (s *CalendarSyncService) SyncBinding(ctx context.Context, bindingID int64) 
 	observability.CalendarSyncSuccess.Inc()
 	span.SetStatus(codes.Ok, "synced")
 	return nil
+}
+
+// refreshBindingCalendarSummary updates binding.calendar_summary from Google CalendarList
+// when the remote display name changed. Failures are ignored (cosmetic field).
+func (s *CalendarSyncService) refreshBindingCalendarSummary(ctx context.Context, client googlecalendar.CalendarClient, binding *models.CalendarBinding) {
+	cal, err := client.GetCalendar(ctx, binding.GoogleCalendarID)
+	if err != nil || cal == nil || cal.Summary == "" {
+		return
+	}
+	if binding.CalendarSummary != nil && *binding.CalendarSummary == cal.Summary {
+		return
+	}
+	summary := cal.Summary
+	binding.CalendarSummary = &summary
+	_ = s.bindings.Update(ctx, binding)
 }
 
 func (s *CalendarSyncService) importEvents(ctx context.Context, client googlecalendar.CalendarClient, binding *models.CalendarBinding) error {

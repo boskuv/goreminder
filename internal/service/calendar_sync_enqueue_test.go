@@ -47,8 +47,9 @@ func (s *stubSyncLinkRepo) Delete(context.Context, int64) error                 
 func (s *stubSyncLinkRepo) SetSyncEnabled(context.Context, int64, bool) error  { return nil }
 
 type stubBindingRepo struct {
-	binding  *models.CalendarBinding
-	bindings []*models.CalendarBinding
+	binding     *models.CalendarBinding
+	bindings    []*models.CalendarBinding
+	updateCalls int
 }
 
 func (s *stubBindingRepo) Create(context.Context, *models.CalendarBinding) (int64, error) {
@@ -77,7 +78,13 @@ func (s *stubBindingRepo) ListByUserID(context.Context, int64) ([]*models.Calend
 	}
 	return nil, nil
 }
-func (s *stubBindingRepo) Update(context.Context, *models.CalendarBinding) error { return nil }
+func (s *stubBindingRepo) Update(_ context.Context, binding *models.CalendarBinding) error {
+	s.updateCalls++
+	if binding != nil {
+		s.binding = binding
+	}
+	return nil
+}
 func (s *stubBindingRepo) SoftDelete(context.Context, int64) error               { return nil }
 func (s *stubBindingRepo) ListActiveForSync(context.Context) ([]*models.CalendarBinding, error) {
 	return nil, nil

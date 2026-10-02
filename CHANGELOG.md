@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Calendar bindings**: `calendar_summary` is refreshed from Google CalendarList on each import/both poll and on force sync (including export-only); display-only, does not change `google_calendar_id`.
+
 ## [v0.3.0] - 2026-09-29
 
 ### Added
