@@ -100,15 +100,15 @@ func (r *taskSyncLinkRepository) GetByTaskID(ctx context.Context, taskID int64) 
 	err = r.db.GetContext(ctx, &link, query, args...)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			err = errors.Wrap(errs.ErrNotFound, "no sync link found for task")
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return nil, err
+			// Expected miss (task without calendar link) — don't mark span as Error.
+			span.SetAttributes(attribute.Bool("sync_link.found", false))
+			return nil, errors.Wrap(errs.ErrNotFound, "no sync link found for task")
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.Wrap(err, "failed to get sync link by task")
 	}
+	span.SetAttributes(attribute.Bool("sync_link.found", true))
 	span.SetStatus(codes.Ok, "found")
 	return &link, nil
 }
@@ -133,15 +133,15 @@ func (r *taskSyncLinkRepository) GetByEvent(ctx context.Context, provider, calen
 	err = r.db.GetContext(ctx, &link, query, args...)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			err = errors.Wrap(errs.ErrNotFound, "no sync link found for event")
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return nil, err
+			// Expected miss during import/lookup — don't mark span as Error.
+			span.SetAttributes(attribute.Bool("sync_link.found", false))
+			return nil, errors.Wrap(errs.ErrNotFound, "no sync link found for event")
 		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.Wrap(err, "failed to get sync link by event")
 	}
+	span.SetAttributes(attribute.Bool("sync_link.found", true))
 	span.SetStatus(codes.Ok, "found")
 	return &link, nil
 }
