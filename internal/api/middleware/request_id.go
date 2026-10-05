@@ -11,8 +11,8 @@ import (
 
 const RequestIDHeader = "X-Request-ID"
 
-// RequestIDKey is stored in gin.Context and request context.Context.
-const RequestIDKey = logger.RequestIDContextKey
+// requestIDGinKey is used with gin.Context (map[string]any).
+const requestIDGinKey = "request_id"
 
 // RequestIDMiddleware generates a unique request ID for each request
 // and adds it to gin context, request context, and response headers.
@@ -23,9 +23,9 @@ func RequestIDMiddleware() gin.HandlerFunc {
 			requestID = uuid.New().String()
 		}
 
-		c.Set(RequestIDKey, requestID)
+		c.Set(requestIDGinKey, requestID)
 		c.Request = c.Request.WithContext(
-			context.WithValue(c.Request.Context(), RequestIDKey, requestID),
+			context.WithValue(c.Request.Context(), logger.RequestIDContextKey, requestID),
 		)
 		c.Header(RequestIDHeader, requestID)
 
@@ -35,7 +35,7 @@ func RequestIDMiddleware() gin.HandlerFunc {
 
 // GetRequestID retrieves the request ID from the gin context
 func GetRequestID(c *gin.Context) string {
-	if id, exists := c.Get(RequestIDKey); exists {
+	if id, exists := c.Get(requestIDGinKey); exists {
 		if requestID, ok := id.(string); ok {
 			return requestID
 		}

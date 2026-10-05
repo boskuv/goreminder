@@ -13,9 +13,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// contextKey is an unexported typed key for context.WithValue to avoid collisions.
+type contextKey string
+
 // RequestIDContextKey is the context.Value key for the HTTP request ID.
-// Must match middleware.RequestIDKey.
-const RequestIDContextKey = "request_id"
+const RequestIDContextKey contextKey = "request_id"
 
 // New is a convenience function to initialize a zerolog.Logger
 // with an initial minimum accepted level and timestamp (if true)
