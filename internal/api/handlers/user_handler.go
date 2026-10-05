@@ -45,7 +45,7 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 
 	var req dto.CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Error().
+		log.Info().
 			Err(err).
 			Msg("invalid request payload for user creation")
 
@@ -58,7 +58,7 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 
 	userID, err := h.userService.CreateUser(c.Request.Context(), userModel)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while adding new user")
+		errEvent(log, err).Msg("error while adding new user")
 
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -78,15 +78,18 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 // @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/users/{user_id} [get]
 func (h *UserHandler) GetUser(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	userID, err := validation.ValidateInt64Param(c, "user_id")
 	if err != nil {
 		validation.HandleValidationError(c, err)
 		return
 	}
 
-	user, err := h.userService.GetUser(c.Request.Context(), userID)
+	user, err := h.userService.GetUser(ctx, userID)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while getting user by its id")
+		errEvent(log, err).Msg("error while getting user by its id")
 
 		if errors.Is(err, errs.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
@@ -118,6 +121,9 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 // @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/users/{user_id} [put]
 func (h *UserHandler) UpdateUser(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	userID, err := validation.ValidateInt64Param(c, "user_id")
 	if err != nil {
 		validation.HandleValidationError(c, err)
@@ -126,6 +132,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 
 	var req dto.UpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Info().Err(err).Msg("invalid request payload for user update")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -133,9 +140,9 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	// Convert DTO to model update request
 	updateRequest := mapper.UpdateUserRequestToModel(&req)
 
-	updatedUser, err := h.userService.UpdateUser(c.Request.Context(), userID, updateRequest)
+	updatedUser, err := h.userService.UpdateUser(ctx, userID, updateRequest)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while updating user")
+		errEvent(log, err).Msg("error while updating user")
 
 		if errors.Is(err, errs.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
@@ -172,16 +179,19 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 // @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/users/{user_id} [delete]
 func (h *UserHandler) DeleteUser(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	userID, err := validation.ValidateInt64Param(c, "user_id")
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while processing request with userID parameter")
+		log.Info().Err(err).Msg("invalid userID parameter")
 		validation.HandleValidationError(c, err)
 		return
 	}
 
-	err = h.userService.DeleteUser(c.Request.Context(), userID)
+	err = h.userService.DeleteUser(ctx, userID)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while soft deleting user")
+		errEvent(log, err).Msg("error while soft deleting user")
 
 		if errors.Is(err, errs.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
@@ -250,7 +260,7 @@ func (h *UserHandler) GetAllUsers(c *gin.Context) {
 
 	users, totalCount, err := h.userService.GetAllUsers(ctx, int(page), int(pageSize), orderBy)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while getting all users")
+		errEvent(log, err).Msg("error while getting all users")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -310,7 +320,7 @@ func (h *UserHandler) GetRecentUserActivity(c *gin.Context) {
 
 	activities, err := h.userService.GetRecentUserActivity(ctx, int(limit))
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while getting recent user activity")
+		errEvent(log, err).Msg("error while getting recent user activity")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

@@ -8,3 +8,11 @@ var (
 	ErrUnprocessableEntity = errors.New("unprocessable entity")            // 422
 	ErrConflict            = errors.New("conflict")                        // 409
 )
+
+// IsClientError reports whether err is an expected API client error (4xx-class).
+func IsClientError(err error) bool {
+	return errors.Is(err, ErrNotFound) ||
+		errors.Is(err, ErrValidation) ||
+		errors.Is(err, ErrUnprocessableEntity) ||
+		errors.Is(err, ErrConflict)
+}

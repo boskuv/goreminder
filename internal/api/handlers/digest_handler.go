@@ -65,9 +65,7 @@ func (h *DigestHandler) CreateDigestSettings(c *gin.Context) {
 
 	settingsID, err := h.digestService.CreateDigestSettings(ctx, settingsModel)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("user.id", req.UserID).
 			Msg("error while creating digest settings")
 
@@ -138,9 +136,7 @@ func (h *DigestHandler) GetDigestSettings(c *gin.Context) {
 
 	settings, err := h.digestService.GetDigestSettings(ctx, userID, messengerRelatedUserID)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("user.id", userID).
 			Msg("error while getting digest settings")
 
@@ -221,9 +217,7 @@ func (h *DigestHandler) UpdateDigestSettings(c *gin.Context) {
 
 	settings, err := h.digestService.UpdateDigestSettings(ctx, userID, messengerRelatedUserID, updateRequest)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("user.id", userID).
 			Msg("error while updating digest settings")
 
@@ -348,9 +342,7 @@ func (h *DigestHandler) GetDigest(c *gin.Context) {
 
 	digest, err := h.digestService.GetDigest(ctx, userID, messengerRelatedUserID, messengerUserIDPtr, startDateFrom, startDateTo)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("user.id", userID).
 			Msg("error while generating digest")
 
@@ -449,9 +441,7 @@ func (h *DigestHandler) GetAllDigestSettings(c *gin.Context) {
 
 	settings, totalCount, err := h.digestService.GetAllDigestSettings(ctx, int(page), int(pageSize), orderBy, userID, messengerUserIDPtr)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Msg("error while getting all digest settings")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -526,9 +516,7 @@ func (h *DigestHandler) DeleteDigestSettings(c *gin.Context) {
 
 	err = h.digestService.DeleteDigestSettings(ctx, userID, messengerRelatedUserID)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("user.id", userID).
 			Msg("error while deleting digest settings")
 

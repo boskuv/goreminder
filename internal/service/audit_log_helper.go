@@ -7,6 +7,8 @@ import (
 	"sort"
 
 	"github.com/rs/zerolog"
+
+	"github.com/boskuv/goreminder/pkg/logger"
 )
 
 const unknownAuditActorID = "unknown"
@@ -123,7 +125,7 @@ func requestIDFromContext(ctx context.Context) string {
 		return ""
 	}
 
-	if requestID, ok := ctx.Value("request_id").(string); ok {
+	if requestID, ok := ctx.Value(logger.RequestIDContextKey).(string); ok {
 		return requestID
 	}
 

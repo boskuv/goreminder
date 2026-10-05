@@ -395,7 +395,7 @@ func (h *AttachmentHandler) mapAttachmentError(c *gin.Context, err error) {
 		return
 	}
 	log := logger.WithTraceContext(c.Request.Context(), h.log)
-	log.Error().Err(err).Msg("attachment operation failed")
+	errEvent(log, err).Msg("attachment operation failed")
 	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 }
 

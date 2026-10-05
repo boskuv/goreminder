@@ -64,9 +64,7 @@ func (h *BacklogHandler) CreateBacklog(c *gin.Context) {
 
 	backlogID, err := h.backlogService.CreateBacklog(ctx, backlogModel)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("user.id", req.UserID).
 			Msg("error while adding new backlog")
 
@@ -126,9 +124,7 @@ func (h *BacklogHandler) CreateBacklogsBatch(c *gin.Context) {
 
 	ids, err := h.backlogService.CreateBacklogsBatch(ctx, req.Items, req.Separator, req.UserID, req.MessengerRelatedUserID)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("user.id", req.UserID).
 			Msg("error while creating batch backlogs")
 
@@ -189,9 +185,7 @@ func (h *BacklogHandler) GetBacklog(c *gin.Context) {
 
 	backlog, err := h.backlogService.GetBacklogByID(ctx, id)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("backlog.id", id).
 			Msg("error while getting backlog by id")
 
@@ -296,9 +290,7 @@ func (h *BacklogHandler) GetAllBacklogs(c *gin.Context) {
 
 	backlogs, totalCount, err := h.backlogService.GetAllBacklogs(ctx, int(page), int(pageSize), orderBy, userID, completed, messengerUserIDPtr)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Msg("error while getting all backlogs")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -384,9 +376,7 @@ func (h *BacklogHandler) UpdateBacklog(c *gin.Context) {
 
 	backlog, err := h.backlogService.UpdateBacklog(ctx, id, updateRequest)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("backlog.id", id).
 			Msg("error while updating backlog")
 
@@ -453,9 +443,7 @@ func (h *BacklogHandler) DeleteBacklog(c *gin.Context) {
 
 	err = h.backlogService.DeleteBacklog(ctx, id)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("backlog.id", id).
 			Msg("error while deleting backlog")
 

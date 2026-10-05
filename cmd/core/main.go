@@ -311,15 +311,21 @@ func main() {
 	// Register Swagger handler
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// Add base middlewares (order matters)
+	// Add base middlewares (order matters):
+	// RequestID → Tracing → Logger so access logs get request_id + trace_id after c.Next().
 
-	// 1. Request ID middleware - should be first to add ID to all requests
+	// 1. Request ID — inject into gin + request context for all downstream logs
 	router.Use(middleware.RequestIDMiddleware())
 
-	// 2. Logger middleware - logs all requests with request ID
+	// 2. Tracing — start root span early so handlers and access logs can correlate
+	if cfg.Tracing.Enabled {
+		router.Use(middleware.TracingMiddleware(cfg.Tracing.ServiceName))
+	}
+
+	// 3. Access logger — runs after handlers; includes request_id / trace_id / span_id
 	router.Use(middleware.LoggerMiddleware(log))
 
-	// 3. CORS middleware (if enabled)
+	// 4. CORS middleware (if enabled)
 	if cfg.Cors.Enabled {
 		router.Use(middleware.CorsMiddleware(middleware.CorsConfig{
 			Enabled:          cfg.Cors.Enabled,
@@ -332,7 +338,7 @@ func main() {
 		}))
 	}
 
-	// 4. Rate limiting middleware (if enabled)
+	// 5. Rate limiting middleware (if enabled)
 	if cfg.RateLimit.Enabled {
 		rateLimitWindow, err := time.ParseDuration(cfg.RateLimit.Window)
 		if err != nil {
@@ -346,15 +352,10 @@ func main() {
 		}))
 	}
 
-	// 5. Metrics middleware (if enabled)
+	// 6. Metrics middleware (if enabled)
 	if cfg.Metrics.Enabled {
 		middleware.InitMetrics()
 		router.Use(middleware.MetricsMiddleware())
-	}
-
-	// 6. Tracing middleware (if enabled)
-	if cfg.Tracing.Enabled {
-		router.Use(middleware.TracingMiddleware(cfg.Tracing.ServiceName))
 	}
 
 	// 7. Optional API key gate for calendar-related endpoints (and whole API when enabled)

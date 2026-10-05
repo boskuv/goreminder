@@ -63,9 +63,7 @@ func (h *TaskGroupHandler) CreateTaskGroup(c *gin.Context) {
 
 	groupID, err := h.taskGroupService.CreateTaskGroup(ctx, groupModel)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("user.id", req.UserID).
 			Msg("error while adding new task group")
 
@@ -126,9 +124,7 @@ func (h *TaskGroupHandler) GetTaskGroup(c *gin.Context) {
 
 	group, err := h.taskGroupService.GetTaskGroupByID(ctx, id)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("task_group.id", id).
 			Msg("error while getting task group by id")
 
@@ -213,9 +209,7 @@ func (h *TaskGroupHandler) GetAllTaskGroups(c *gin.Context) {
 
 	groups, totalCount, err := h.taskGroupService.GetAllTaskGroups(ctx, int(page), int(pageSize), orderBy, userID)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Msg("error while getting all task groups")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -298,9 +292,7 @@ func (h *TaskGroupHandler) UpdateTaskGroup(c *gin.Context) {
 
 	group, err := h.taskGroupService.UpdateTaskGroup(ctx, id, updateRequest)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("task_group.id", id).
 			Msg("error while updating task group")
 
@@ -368,9 +360,7 @@ func (h *TaskGroupHandler) DeleteTaskGroup(c *gin.Context) {
 
 	err = h.taskGroupService.DeleteTaskGroup(ctx, id)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("task_group.id", id).
 			Msg("error while deleting task group")
 

@@ -5,27 +5,37 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
+
+	"github.com/boskuv/goreminder/pkg/logger"
 )
 
-// LoggerMiddleware creates a request logging middleware using zerolog
+// LoggerMiddleware creates a request logging middleware using zerolog.
+// It should run after RequestID and Tracing so access logs include
+// request_id / trace_id / span_id after c.Next().
 func LoggerMiddleware(log zerolog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
 		query := c.Request.URL.RawQuery
 
-		// Process request
 		c.Next()
 
-		// Calculate latency
 		latency := time.Since(start)
+		status := c.Writer.Status()
+		reqLog := logger.WithTraceContext(c.Request.Context(), log)
 
-		// Get request ID from context
-		requestID := GetRequestID(c)
+		var logEvent *zerolog.Event
+		switch {
+		case status >= 500:
+			logEvent = reqLog.Error()
+		case status >= 400:
+			logEvent = reqLog.Warn()
+		default:
+			logEvent = reqLog.Info()
+		}
 
-		// Build log event
-		logEvent := log.Info().
-			Int("status", c.Writer.Status()).
+		logEvent = logEvent.
+			Int("status", status).
 			Str("method", c.Request.Method).
 			Str("path", path).
 			Dur("latency", latency).
@@ -36,11 +46,6 @@ func LoggerMiddleware(log zerolog.Logger) gin.HandlerFunc {
 			logEvent = logEvent.Str("query", query)
 		}
 
-		if requestID != "" {
-			logEvent = logEvent.Str("request_id", requestID)
-		}
-
-		// Log errors
 		if len(c.Errors) > 0 {
 			errs := make([]error, len(c.Errors))
 			for i, e := range c.Errors {
@@ -49,12 +54,12 @@ func LoggerMiddleware(log zerolog.Logger) gin.HandlerFunc {
 			logEvent = logEvent.Errs("errors", errs)
 		}
 
-		// Log based on status code
-		if c.Writer.Status() >= 500 {
+		switch {
+		case status >= 500:
 			logEvent.Msg("Request failed")
-		} else if c.Writer.Status() >= 400 {
+		case status >= 400:
 			logEvent.Msg("Request error")
-		} else {
+		default:
 			logEvent.Msg("Request completed")
 		}
 	}

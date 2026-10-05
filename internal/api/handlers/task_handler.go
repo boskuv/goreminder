@@ -80,9 +80,7 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 
 	taskID, childTaskID, err := h.taskService.CreateTask(ctx, taskModel)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("user.id", req.UserID).
 			Msg("error while adding new task")
 
@@ -141,9 +139,7 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 
 	task, err := h.taskService.GetTask(ctx, taskID)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("task.id", taskID).
 			Msg("error while getting task by its id")
 
@@ -371,9 +367,7 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 
 	tasks, totalCount, err := h.taskService.GetUserTasks(ctx, userID, int(page), int(pageSize), orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, statusPtr, statusNotPtr, cronExpressionPtr, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserID, messengerUserIDPtr, externalProviderPtr)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("user.id", userID).
 			Msg("error while getting tasks by userID parameter")
 		if errors.Is(err, errs.ErrUnprocessableEntity) {
@@ -470,9 +464,7 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 
 	updatedTask, err := h.taskService.UpdateTask(ctx, taskID, updateRequest)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("task.id", taskID).
 			Msg("error while updating task")
 
@@ -539,9 +531,7 @@ func (h *TaskHandler) DeleteTask(c *gin.Context) {
 
 	err = h.taskService.DeleteTask(ctx, taskID)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("task.id", taskID).
 			Msg("error while soft deleting task")
 
@@ -598,9 +588,7 @@ func (h *TaskHandler) QueueTask(c *gin.Context) {
 
 	err := h.taskService.QueueTask(ctx, scheduledModel)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("task.id", req.TaskID).
 			Msg("error while enqueuing task")
 
@@ -660,9 +648,7 @@ func (h *TaskHandler) MarkTaskAsDone(c *gin.Context) {
 
 	task, err := h.taskService.MarkTaskAsDone(ctx, taskID)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("task.id", taskID).
 			Msg("error while marking task as done")
 
@@ -713,7 +699,7 @@ func (h *TaskHandler) MuteTask(c *gin.Context) {
 
 	task, err := h.taskService.MuteTask(ctx, taskID)
 	if err != nil {
-		log.Error().Stack().Err(err).Int64("task.id", taskID).Msg("error while muting task")
+		errEvent(log, err).Int64("task.id", taskID).Msg("error while muting task")
 		if errors.Is(err, errs.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
@@ -753,7 +739,7 @@ func (h *TaskHandler) UnmuteTask(c *gin.Context) {
 
 	task, err := h.taskService.UnmuteTask(ctx, taskID)
 	if err != nil {
-		log.Error().Stack().Err(err).Int64("task.id", taskID).Msg("error while unmuting task")
+		errEvent(log, err).Int64("task.id", taskID).Msg("error while unmuting task")
 		if errors.Is(err, errs.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
@@ -795,9 +781,7 @@ func (h *TaskHandler) GetTaskHistory(c *gin.Context) {
 
 	histories, err := h.taskService.GetTaskHistory(ctx, taskID)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("task.id", taskID).
 			Msg("error while getting task history")
 
@@ -874,9 +858,7 @@ func (h *TaskHandler) GetUserTaskHistory(c *gin.Context) {
 
 	histories, err := h.taskService.GetUserTaskHistory(ctx, userID, int(limit), int(offset))
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("user.id", userID).
 			Msg("error while getting user task history")
 
@@ -1042,9 +1024,7 @@ func (h *TaskHandler) GetAllTasks(c *gin.Context) {
 
 	tasks, totalCount, err := h.taskService.GetAllTasks(ctx, int(page), int(pageSize), orderBy, statusPtr, statusNotPtr, startDateFrom, startDateTo, userID, cronExpressionPtr, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation, externalProviderPtr)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Msg("error while getting all tasks")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

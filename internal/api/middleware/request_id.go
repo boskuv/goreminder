@@ -1,29 +1,32 @@
 package middleware
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+
+	"github.com/boskuv/goreminder/pkg/logger"
 )
 
 const RequestIDHeader = "X-Request-ID"
-const RequestIDKey = "request_id"
+
+// RequestIDKey is stored in gin.Context and request context.Context.
+const RequestIDKey = logger.RequestIDContextKey
 
 // RequestIDMiddleware generates a unique request ID for each request
-// and adds it to the context and response headers
+// and adds it to gin context, request context, and response headers.
 func RequestIDMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Check if request ID already exists in header (from client)
 		requestID := c.GetHeader(RequestIDHeader)
-
-		// If not provided by client, generate a new one
 		if requestID == "" {
 			requestID = uuid.New().String()
 		}
 
-		// Set request ID in context for use in handlers
 		c.Set(RequestIDKey, requestID)
-
-		// Add request ID to response header
+		c.Request = c.Request.WithContext(
+			context.WithValue(c.Request.Context(), RequestIDKey, requestID),
+		)
 		c.Header(RequestIDHeader, requestID)
 
 		c.Next()

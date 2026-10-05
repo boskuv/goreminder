@@ -62,7 +62,7 @@ func (h *CalendarHandler) StartOAuth(c *gin.Context) {
 
 	url, err := h.service.StartOAuth(ctx, userID)
 	if err != nil {
-		log.Error().Err(err).Int64("user.id", userID).Msg("failed to start google oauth")
+		errEvent(log, err).Int64("user.id", userID).Msg("failed to start google oauth")
 		h.writeErr(c, err)
 		return
 	}
@@ -89,7 +89,7 @@ func (h *CalendarHandler) OAuthCallback(c *gin.Context) {
 
 	account, err := h.service.HandleOAuthCallback(ctx, code, state)
 	if err != nil {
-		log.Error().Err(err).Msg("google oauth callback failed")
+		errEvent(log, err).Msg("google oauth callback failed")
 		h.writeErr(c, err)
 		return
 	}
@@ -114,7 +114,7 @@ func (h *CalendarHandler) ListCalendars(c *gin.Context) {
 
 	calendars, err := h.service.ListGoogleCalendars(ctx, userID)
 	if err != nil {
-		log.Error().Err(err).Int64("user.id", userID).Msg("failed to list google calendars")
+		errEvent(log, err).Int64("user.id", userID).Msg("failed to list google calendars")
 		h.writeErr(c, err)
 		return
 	}
@@ -164,7 +164,7 @@ func (h *CalendarHandler) CreateBinding(c *gin.Context) {
 		DeletePolicy:           policy,
 	})
 	if err != nil {
-		log.Error().Err(err).Int64("user.id", userID).Msg("failed to create calendar binding")
+		errEvent(log, err).Int64("user.id", userID).Msg("failed to create calendar binding")
 		h.writeErr(c, err)
 		return
 	}
@@ -189,7 +189,7 @@ func (h *CalendarHandler) ListBindings(c *gin.Context) {
 
 	bindings, err := h.service.ListBindings(ctx, userID)
 	if err != nil {
-		log.Error().Err(err).Int64("user.id", userID).Msg("failed to list calendar bindings")
+		errEvent(log, err).Int64("user.id", userID).Msg("failed to list calendar bindings")
 		h.writeErr(c, err)
 		return
 	}
@@ -235,7 +235,7 @@ func (h *CalendarHandler) DeleteBinding(c *gin.Context) {
 	}
 
 	if err := h.service.DeleteBinding(ctx, bindingID); err != nil {
-		log.Error().Err(err).Int64("calendar_binding.id", bindingID).Msg("failed to delete calendar binding")
+		errEvent(log, err).Int64("calendar_binding.id", bindingID).Msg("failed to delete calendar binding")
 		h.writeErr(c, err)
 		return
 	}
@@ -281,7 +281,7 @@ func (h *CalendarHandler) ForceSync(c *gin.Context) {
 	}
 
 	if err := h.service.SyncBinding(ctx, bindingID); err != nil {
-		log.Error().Err(err).Int64("calendar_binding.id", bindingID).Msg("force sync failed")
+		errEvent(log, err).Int64("calendar_binding.id", bindingID).Msg("force sync failed")
 		h.writeErr(c, err)
 		return
 	}
@@ -307,7 +307,7 @@ func (h *CalendarHandler) GetSyncStatus(c *gin.Context) {
 
 	status, err := h.service.GetSyncStatus(ctx, userID)
 	if err != nil {
-		log.Error().Err(err).Int64("user.id", userID).Msg("failed to get calendar sync status")
+		errEvent(log, err).Int64("user.id", userID).Msg("failed to get calendar sync status")
 		h.writeErr(c, err)
 		return
 	}
@@ -338,7 +338,7 @@ func (h *CalendarHandler) Disconnect(c *gin.Context) {
 	}
 
 	if err := h.service.DisconnectGoogle(ctx, userID); err != nil {
-		log.Error().Err(err).Int64("user.id", userID).Msg("failed to disconnect google")
+		errEvent(log, err).Int64("user.id", userID).Msg("failed to disconnect google")
 		h.writeErr(c, err)
 		return
 	}
@@ -371,7 +371,7 @@ func (h *CalendarHandler) EnableTaskExport(c *gin.Context) {
 
 	link, err := h.service.EnableTaskExport(ctx, taskID, req.CalendarBindingID)
 	if err != nil {
-		log.Error().Err(err).Int64("task.id", taskID).Msg("failed to enable task export")
+		errEvent(log, err).Int64("task.id", taskID).Msg("failed to enable task export")
 		h.writeErr(c, err)
 		return
 	}
@@ -396,7 +396,7 @@ func (h *CalendarHandler) GetTaskExternal(c *gin.Context) {
 
 	link, err := h.service.GetTaskExternal(ctx, taskID)
 	if err != nil {
-		log.Error().Err(err).Int64("task.id", taskID).Msg("failed to get task external")
+		errEvent(log, err).Int64("task.id", taskID).Msg("failed to get task external")
 		h.writeErr(c, err)
 		return
 	}

@@ -45,7 +45,7 @@ func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
 
 	var req dto.CreateMessengerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Error().
+		log.Info().
 			Err(err).
 			Msg("invalid request payload for messenger creation")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -57,7 +57,7 @@ func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
 
 	messengerID, err := h.messengerService.CreateMessenger(c.Request.Context(), messengerModel)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while adding new messenger type")
+		errEvent(log, err).Msg("error while adding new messenger type")
 
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -77,15 +77,18 @@ func (h *MessengerHandler) CreateMessenger(c *gin.Context) {
 // @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/messengers/{messenger_id} [get]
 func (h *MessengerHandler) GetMessenger(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	messengerID, err := validation.ValidateInt64Param(c, "messenger_id")
 	if err != nil {
 		validation.HandleValidationError(c, err)
 		return
 	}
 
-	messenger, err := h.messengerService.GetMessenger(c.Request.Context(), messengerID)
+	messenger, err := h.messengerService.GetMessenger(ctx, messengerID)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while getting messenger by its id")
+		errEvent(log, err).Msg("error while getting messenger by its id")
 
 		if errors.Is(err, errs.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
@@ -114,15 +117,18 @@ func (h *MessengerHandler) GetMessenger(c *gin.Context) {
 // @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/messengers/by-name/{messenger_name} [get]
 func (h *MessengerHandler) GetMessengerIDByName(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	messengerName, err := validation.ValidateStringParam(c, "messenger_name", true)
 	if err != nil {
 		validation.HandleValidationError(c, err)
 		return
 	}
 
-	messengerID, err := h.messengerService.GetMessengerIDByName(c.Request.Context(), messengerName)
+	messengerID, err := h.messengerService.GetMessengerIDByName(ctx, messengerName)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while getting messenger by its name")
+		errEvent(log, err).Msg("error while getting messenger by its name")
 
 		if errors.Is(err, errs.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
@@ -155,7 +161,7 @@ func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
 
 	var req dto.CreateMessengerRelatedUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Error().
+		log.Info().
 			Err(err).
 			Msg("invalid request payload for messenger-related user creation")
 
@@ -168,7 +174,7 @@ func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
 
 	messengerRelatedUserID, err := h.messengerService.CreateMessengerRelatedUser(c.Request.Context(), messengerRelatedUserModel)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while creating a messenger-related user")
+		errEvent(log, err).Msg("error while creating a messenger-related user")
 
 		if errors.Is(err, errs.ErrUnprocessableEntity) {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
@@ -197,6 +203,9 @@ func (h *MessengerHandler) CreateMessengerRelatedUser(c *gin.Context) {
 // @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/messengerRelatedUsers [get]
 func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	chatID, err := validation.ValidateStringQuery(c, "chat_id", true)
 	if err != nil {
 		validation.HandleValidationError(c, err)
@@ -221,9 +230,9 @@ func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 		return
 	}
 
-	messengerRelatedUser, err := h.messengerService.GetMessengerRelatedUser(c.Request.Context(), chatID, messengerUserID, userID, messengerID)
+	messengerRelatedUser, err := h.messengerService.GetMessengerRelatedUser(ctx, chatID, messengerUserID, userID, messengerID)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while getting a messenger-related user")
+		errEvent(log, err).Msg("error while getting a messenger-related user")
 
 		if errors.Is(err, errs.ErrUnprocessableEntity) {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
@@ -255,15 +264,18 @@ func (h *MessengerHandler) GetMessengerRelatedUser(c *gin.Context) {
 // @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/messengerRelatedUsers/{messenger_user_id}/user [get]
 func (h *MessengerHandler) GetUserID(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
 	messengerUserID, err := validation.ValidateStringParam(c, "messenger_user_id", true)
 	if err != nil {
 		validation.HandleValidationError(c, err)
 		return
 	}
 
-	userID, err := h.messengerService.GetUserID(c.Request.Context(), messengerUserID)
+	userID, err := h.messengerService.GetUserID(ctx, messengerUserID)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while getting a userID")
+		errEvent(log, err).Msg("error while getting a userID")
 
 		if errors.Is(err, errs.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -324,7 +336,7 @@ func (h *MessengerHandler) GetAllMessengers(c *gin.Context) {
 
 	messengers, totalCount, err := h.messengerService.GetAllMessengers(ctx, int(page), int(pageSize), orderBy)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while getting all messengers")
+		errEvent(log, err).Msg("error while getting all messengers")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -426,7 +438,7 @@ func (h *MessengerHandler) GetAllMessengerRelatedUsers(c *gin.Context) {
 
 	messengerRelatedUsers, totalCount, err := h.messengerService.GetAllMessengerRelatedUsers(ctx, int(page), int(pageSize), orderBy, userID, chatIDPtr)
 	if err != nil {
-		h.logger.Error().Stack().Err(err).Msg("error while getting all messenger-related users")
+		errEvent(log, err).Msg("error while getting all messenger-related users")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

@@ -64,9 +64,7 @@ func (h *TargetHandler) CreateTarget(c *gin.Context) {
 
 	targetID, err := h.targetService.CreateTarget(ctx, targetModel)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("user.id", req.UserID).
 			Msg("error while adding new target")
 
@@ -127,9 +125,7 @@ func (h *TargetHandler) GetTarget(c *gin.Context) {
 
 	target, err := h.targetService.GetTargetByID(ctx, id)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("target.id", id).
 			Msg("error while getting target by id")
 
@@ -226,9 +222,7 @@ func (h *TargetHandler) GetAllTargets(c *gin.Context) {
 
 	targets, totalCount, err := h.targetService.GetAllTargets(ctx, int(page), int(pageSize), orderBy, userID, messengerUserIDPtr)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Msg("error while getting all targets")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -314,9 +308,7 @@ func (h *TargetHandler) UpdateTarget(c *gin.Context) {
 
 	target, err := h.targetService.UpdateTarget(ctx, id, updateRequest)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("target.id", id).
 			Msg("error while updating target")
 
@@ -383,9 +375,7 @@ func (h *TargetHandler) DeleteTarget(c *gin.Context) {
 
 	err = h.targetService.DeleteTarget(ctx, id)
 	if err != nil {
-		log.Error().
-			Stack().
-			Err(err).
+		errEvent(log, err).
 			Int64("target.id", id).
 			Msg("error while deleting target")
 
