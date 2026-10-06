@@ -17,7 +17,7 @@
 |---|---|
 | **Start here** | [Features](#business-features) · [Prerequisites](#prerequisites) · [Quick start](#setup-instructions) |
 | **Reference** | [Configuration](#configuration) · [API](#api-documentation) · [Filtering](#filtering-and-ordering) |
-| **Domain** | [Muting](#task-muting-muted) · [Pre-remind](#pre-remind-pre_remind_before_seconds) · [Task types](#task-types) · [Schema](#database-schema) · [CHANGELOG](CHANGELOG.md) |
+| **Domain** | [Muting](#task-muting-muted) · [Skip digest](#skip-digest-skip_digest) · [Pre-remind](#pre-remind-pre_remind_before_seconds) · [Task types](#task-types) · [Schema](#database-schema) · [CHANGELOG](CHANGELOG.md) |
 | **Integrations** | [Google Calendar](docs/google-calendar.md) ([matrix](docs/google-calendar.md#behavior-matrix-direction--task-type), [bot](docs/google-calendar-bot.md), [test plan](docs/google-calendar-test-plan.md)) |
 | **Dev** | [Testing](#testing) · [Development](#development) · [Architecture](#architecture) |
 
@@ -25,7 +25,7 @@
 
 ## Business Features
 - [x] **Auto-rescheduling**: Tasks are automatically rescheduled to the next day if confirmation is not received
-- [x] **Daily Task Digest**: Configure digest settings and fetch digest payloads via API
+- [x] **Daily Task Digest**: Configure digest settings and fetch digest payloads via API. Tasks with `skip_digest=true` are omitted (see [Skip digest (`skip_digest`)](#skip-digest-skip_digest)).
 - [x] **Backlog Zone**: Tasks without fixed time and confirmation requirements
 - [x] **Targets/Goals Management**: Create and track targets (aims/goals) with completion tracking
 - [x] **Task Muting**: Per-task silence for the worker queue (see [Task muting (`muted`)](#task-muting-muted)).
@@ -172,6 +172,7 @@ erDiagram
         text rrule
         boolean requires_confirmation
         boolean muted
+        boolean skip_digest
         bigint pre_remind_before_seconds
         varchar status
         timestamp created_at
@@ -810,6 +811,8 @@ Activity is recorded on successful user-driven mutations (tasks, users, backlogs
 | `/api/v1/digests/settings` | DELETE | Delete digest settings | `user_id` |
 | `/api/v1/digests/settings/all` | GET | Get all digest settings | `page`, `page_size`, `order_by`, `user_id`, `messenger_user_id` |
 
+`GET /api/v1/digests` returns the user's tasks for the requested `start_date` window (inclusive), up to 1000 rows ordered by `start_date`. Rows with `skip_digest=true` are left out. `messenger_related_user_id` / `messenger_user_id` only fill `chat_id`; they do not filter the task list.
+
 ### System
 
 | Endpoint | Method | Description |
@@ -835,6 +838,23 @@ Each task row has a boolean **`muted`** (PostgreSQL `tasks.muted`). It controls 
 | **Autoreschedule** | May still move `start_date` forward in the DB for overdue rows; muted tasks **do not** get a new `schedule_task` from that path. For muted recurring child tasks (`parent_id != null`, `requires_confirmation=true`), `start_date` is advanced directly to the parent's next `cron_expression`/`rrule` occurrence. |
 
 For recurring **parents** with `requires_confirmation`, mute/unmute can propagate to active child tasks (see `MuteTask` / `UnmuteTask` in `internal/service/task_service.go`).
+
+</details>
+
+<details>
+<summary><strong>Skip digest (`skip_digest`)</strong></summary>
+
+## Skip digest (`skip_digest`)
+
+Each task row has a boolean **`skip_digest`** (PostgreSQL `tasks.skip_digest`, default `false`). It controls **whether the task is included in `GET /api/v1/digests`**.
+
+| Mechanism | Behavior |
+|-----------|----------|
+| **JSON** | Task responses include `"skip_digest": true \| false`. Optional on `POST /api/v1/tasks` and `PUT /api/v1/tasks/:id` (omit on update = no change). |
+| **Digest** | Rows with `skip_digest=true` are excluded from the digest query. |
+| **Elsewhere** | Task lists, `worker.schedule_task`, mute, and autoreschedule ignore this flag. |
+| **Children** | Recurrence children copy the parent's flag on create. Updating it on a confirmation parent propagates to active children (done children stay as they are). |
+| **History** | Creating or changing the flag is stored in task history. |
 
 </details>
 
@@ -870,6 +890,7 @@ GoReminder supports two types of tasks: **one-time tasks** and **recurring tasks
 | `requires_confirmation` | `true` | `true` or `false` | `true` only |
 | `parent_id` | `null` | `null` | Points to parent task ID |
 | `muted` | Optional; while `true`, new `worker.schedule_task` messages are not enqueued (row still updated; `delete_task` still sent when required). | Same | Same |
+| `skip_digest` | Optional; while `true`, the row is omitted from `GET /api/v1/digests` | Inherited by children | Copied from parent |
 | `pre_remind_before_seconds` | Optional offset before `start_date` for a preliminary reminder | Inherited by children | Copied from parent |
 | Execution | Executes once at `start_date` | Does not execute directly | Executes at calculated `start_date` |
 | Auto-creates child | No | Yes (on creation and when child is done) | No |
@@ -1105,6 +1126,8 @@ curl -X PUT http://localhost:8080/api/v1/tasks/1 \
 
 **Muting**: optional `"muted": true` / `false` in the JSON body. While the stored task is muted, schedule-related queue messages are suppressed; see [Task muting (`muted`)](#task-muting-muted). To toggle without sending a full `PUT`, use `POST /api/v1/tasks/:id/mute` or `.../unmute`.
 
+**Skip digest**: optional `"skip_digest": true` / `false`. While true, the task is left out of `GET /api/v1/digests`; see [Skip digest (`skip_digest`)](#skip-digest-skip_digest).
+
 ### Update User
 ```bash
 curl -X PUT http://localhost:8080/api/v1/users/1 \
@@ -1183,7 +1206,7 @@ pytest   # or the run_*_tests.py helpers in that directory
 
 ## Versioning
 
-The project uses [Semantic Versioning](https://semver.org/) with version information managed through a `VERSION` file and build-time injection.
+The project uses [Semantic Versioning](https://semver.org/) with version information managed through a `VERSION` file and build-time injection. `make build` passes that value via ldflags. The Docker image also copies `VERSION` to `/app/VERSION`; if the binary was built without ldflags, `GET /version` and the startup log read this file instead of reporting `dev`.
 
 ### Check Version
 
