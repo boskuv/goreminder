@@ -14,6 +14,8 @@ type TaskUpdateRequest struct {
 	RRule                *string    `json:"rrule,omitempty"`
 	RequiresConfirmation *bool      `json:"requires_confirmation,omitempty"`
 	Muted                *bool      `json:"muted,omitempty"`
+	// SkipDigest: omit = no change. true excludes the task from digests.
+	SkipDigest *bool `json:"skip_digest,omitempty"`
 	// PreRemindBeforeSeconds: omit = no change; 0 = clear; >0 = set offset in seconds.
 	PreRemindBeforeSeconds *int64 `json:"pre_remind_before_seconds,omitempty"`
 	// GroupID: omit = no change; 0 = clear group; >0 = assign to group.

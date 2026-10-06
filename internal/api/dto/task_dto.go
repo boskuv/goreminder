@@ -15,6 +15,8 @@ type CreateTaskRequest struct {
 	RRule                  *string    `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 	RequiresConfirmation   bool       `json:"requires_confirmation,omitempty" example:"true"`
 	Muted                  bool       `json:"muted,omitempty" example:"false"`
+	// SkipDigest excludes this task from GET /digests. Omit or false keeps it in the digest.
+	SkipDigest bool `json:"skip_digest,omitempty" example:"false"`
 	// PreRemindBeforeSeconds: seconds before start_date for a preliminary reminder; omit/null = disabled.
 	PreRemindBeforeSeconds *int64 `json:"pre_remind_before_seconds,omitempty" example:"900"`
 	Status                 string `json:"status,omitempty" binding:"omitempty,task_status" example:"pending" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
@@ -30,6 +32,8 @@ type UpdateTaskRequest struct {
 	FinishDate           *time.Time `json:"finish_date,omitempty" example:"2024-01-20T18:00:00Z"`
 	RequiresConfirmation *bool      `json:"requires_confirmation,omitempty" example:"true"`
 	Muted                *bool      `json:"muted,omitempty" example:"false"`
+	// SkipDigest: omit = no change; true excludes the task from digests.
+	SkipDigest *bool `json:"skip_digest,omitempty" example:"false"`
 	// PreRemindBeforeSeconds: omit = no change; 0 = disable; >0 = set offset in seconds before start_date.
 	PreRemindBeforeSeconds *int64  `json:"pre_remind_before_seconds,omitempty" example:"900"`
 	CronExpression         *string `json:"cron_expression,omitempty" binding:"omitempty,cron" example:"0 9 * * *"`
@@ -40,19 +44,20 @@ type UpdateTaskRequest struct {
 
 // TaskResponse represents a task in list and mutation responses (no attachments).
 type TaskResponse struct {
-	ID                     int64      `json:"id" example:"1"`
-	Title                  string     `json:"title" example:"Complete project documentation"`
-	Description            string     `json:"description" example:"Write comprehensive documentation for the API"`
-	UserID                 int64      `json:"user_id" example:"1"`
-	MessengerRelatedUserID *int       `json:"messenger_related_user_id,omitempty" example:"123"`
-	ParentID               *int64     `json:"parent_id,omitempty" example:"5"`
-	GroupID                *int64     `json:"group_id,omitempty" example:"1"`
-	StartDate              time.Time  `json:"start_date" example:"2024-01-15T10:00:00Z"`
-	FinishDate             *time.Time `json:"finish_date,omitempty" example:"2024-01-20T18:00:00Z"`
-	CronExpression         *string    `json:"cron_expression,omitempty" example:"0 9 * * *"`
-	RRule                  *string    `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
-	RequiresConfirmation   bool       `json:"requires_confirmation,omitempty" example:"true"`
-	Muted                  bool       `json:"muted" example:"false"`
+	ID                     int64                 `json:"id" example:"1"`
+	Title                  string                `json:"title" example:"Complete project documentation"`
+	Description            string                `json:"description" example:"Write comprehensive documentation for the API"`
+	UserID                 int64                 `json:"user_id" example:"1"`
+	MessengerRelatedUserID *int                  `json:"messenger_related_user_id,omitempty" example:"123"`
+	ParentID               *int64                `json:"parent_id,omitempty" example:"5"`
+	GroupID                *int64                `json:"group_id,omitempty" example:"1"`
+	StartDate              time.Time             `json:"start_date" example:"2024-01-15T10:00:00Z"`
+	FinishDate             *time.Time            `json:"finish_date,omitempty" example:"2024-01-20T18:00:00Z"`
+	CronExpression         *string               `json:"cron_expression,omitempty" example:"0 9 * * *"`
+	RRule                  *string               `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
+	RequiresConfirmation   bool                  `json:"requires_confirmation,omitempty" example:"true"`
+	Muted                  bool                  `json:"muted" example:"false"`
+	SkipDigest             bool                  `json:"skip_digest" example:"false"`
 	PreRemindBeforeSeconds *int64                `json:"pre_remind_before_seconds,omitempty" example:"900"`
 	Status                 string                `json:"status" example:"pending" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
 	CreatedAt              time.Time             `json:"created_at" example:"2024-01-10T08:00:00Z"`
@@ -74,6 +79,7 @@ type TaskDetailResponse struct {
 	RRule                  *string               `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 	RequiresConfirmation   bool                  `json:"requires_confirmation,omitempty" example:"true"`
 	Muted                  bool                  `json:"muted" example:"false"`
+	SkipDigest             bool                  `json:"skip_digest" example:"false"`
 	PreRemindBeforeSeconds *int64                `json:"pre_remind_before_seconds,omitempty" example:"900"`
 	Status                 string                `json:"status" example:"pending" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
 	CreatedAt              time.Time             `json:"created_at" example:"2024-01-10T08:00:00Z"`
@@ -97,6 +103,7 @@ type TaskMarkedDoneResponse struct {
 	RRule                  *string    `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 	RequiresConfirmation   bool       `json:"requires_confirmation,omitempty" example:"true"`
 	Muted                  bool       `json:"muted" example:"false"`
+	SkipDigest             bool       `json:"skip_digest" example:"false"`
 	PreRemindBeforeSeconds *int64     `json:"pre_remind_before_seconds,omitempty" example:"900"`
 	CreatedAt              time.Time  `json:"created_at" example:"2024-01-10T08:00:00Z"`
 }

@@ -74,6 +74,8 @@ type Task struct {
 	RRule                  *string    `db:"rrule" json:"rrule,omitempty"`
 	RequiresConfirmation   bool       `db:"requires_confirmation" json:"requires_confirmation,omitempty"`
 	Muted                  bool       `db:"muted" json:"muted,omitempty"`
+	// SkipDigest excludes the task from GET /digests. Reminders and task lists are unchanged.
+	SkipDigest bool `db:"skip_digest" json:"skip_digest,omitempty"`
 	// PreRemindBeforeSeconds is an optional offset before start_date for a preliminary reminder.
 	// nil / omitted means disabled. Worker schedules a separate job at start_date − this value.
 	PreRemindBeforeSeconds *int64    `db:"pre_remind_before_seconds" json:"pre_remind_before_seconds,omitempty"`

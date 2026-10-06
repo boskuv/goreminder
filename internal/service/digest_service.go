@@ -419,8 +419,9 @@ func (s *DigestService) GetDigest(ctx context.Context, userID int64, messengerRe
 		}
 	}
 
-	// Get tasks for the period
-	tasks, _, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, 1, 1000, "start_date ASC", startDateFromInTZ, startDateToInTZ, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	// Get tasks for the period. skip_digest rows stay in task lists and still remind, but are omitted here.
+	excludeSkipDigest := true
+	tasks, _, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, 1, 1000, "start_date ASC", startDateFromInTZ, startDateToInTZ, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, &excludeSkipDigest)
 	if err != nil {
 		log.Debug().
 			Err(err).

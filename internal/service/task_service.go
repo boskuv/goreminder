@@ -420,6 +420,7 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 			RRule:                  nil,
 			RequiresConfirmation:   task.RequiresConfirmation,
 			Muted:                  task.Muted,
+			SkipDigest:             task.SkipDigest,
 			PreRemindBeforeSeconds: clonePreRemindBeforeSeconds(task.PreRemindBeforeSeconds),
 			Status:                 string(models.TaskStatusPending),
 		}
@@ -564,7 +565,7 @@ func (s *TaskService) GetUserTasks(ctx context.Context, userID int64, page, page
 		messengerRelatedUserIDs = &ids
 	}
 
-	tasks, totalCount, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserIDs, externalProvider)
+	tasks, totalCount, err := s.taskRepo.GetTasksByUserIDWithPagination(ctx, userID, page, pageSize, orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, status, statusNot, cronExpression, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserIDs, externalProvider, nil)
 	if err != nil {
 		log.Debug().
 			Err(err).
@@ -679,6 +680,9 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	}
 	if updateRequest.Muted != nil {
 		oldTask.Muted = *updateRequest.Muted
+	}
+	if updateRequest.SkipDigest != nil {
+		oldTask.SkipDigest = *updateRequest.SkipDigest
 	}
 	if err := applyPreRemindBeforeSecondsUpdate(oldTask, updateRequest.PreRemindBeforeSeconds); err != nil {
 		return nil, errors.Wrap(errs.ErrValidation, err.Error())
@@ -1112,6 +1116,11 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 					childUpdated = true
 				}
 
+				if updateRequest.SkipDigest != nil {
+					childTask.SkipDigest = oldTask.SkipDigest
+					childUpdated = true
+				}
+
 				if updateRequest.PreRemindBeforeSeconds != nil {
 					childTask.PreRemindBeforeSeconds = clonePreRemindBeforeSeconds(oldTask.PreRemindBeforeSeconds)
 					childUpdated = true
@@ -1459,6 +1468,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 				RRule:                  nil,
 				RequiresConfirmation:   oldTask.RequiresConfirmation,
 				Muted:                  oldTask.Muted,
+				SkipDigest:             oldTask.SkipDigest,
 				PreRemindBeforeSeconds: clonePreRemindBeforeSeconds(oldTask.PreRemindBeforeSeconds),
 				Status:                 string(models.TaskStatusScheduled),
 			}
@@ -1591,7 +1601,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	hasOtherChanges := updateRequest.Title != nil || updateRequest.Description != nil ||
 		updateRequest.StartDate != nil || updateRequest.FinishDate != nil ||
 		updateRequest.CronExpression != nil || updateRequest.RRule != nil || updateRequest.RequiresConfirmation != nil ||
-		updateRequest.Muted != nil || updateRequest.PreRemindBeforeSeconds != nil || updateRequest.GroupID != nil
+		updateRequest.Muted != nil || updateRequest.SkipDigest != nil || updateRequest.PreRemindBeforeSeconds != nil || updateRequest.GroupID != nil
 
 	newTaskMap := s.taskToMap(oldTask)
 	updateChangedFields := changedFieldsFromMaps(oldTaskMap, newTaskMap)
@@ -2393,6 +2403,7 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 					RRule:                  nil,
 					RequiresConfirmation:   parentTask.RequiresConfirmation,
 					Muted:                  parentTask.Muted,
+					SkipDigest:             parentTask.SkipDigest,
 					PreRemindBeforeSeconds: clonePreRemindBeforeSeconds(parentTask.PreRemindBeforeSeconds),
 					Status:                 string(models.TaskStatusScheduled),
 				}
@@ -2803,6 +2814,7 @@ func (s *TaskService) taskToMap(task *models.Task) map[string]interface{} {
 		"status":                task.Status,
 		"requires_confirmation": task.RequiresConfirmation,
 		"muted":                 task.Muted,
+		"skip_digest":           task.SkipDigest,
 	}
 
 	if !task.StartDate.IsZero() {

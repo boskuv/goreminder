@@ -19,6 +19,7 @@ func CreateTaskRequestToModel(req *dto.CreateTaskRequest) *models.Task {
 		RRule:                  req.RRule,
 		RequiresConfirmation:   req.RequiresConfirmation,
 		Muted:                  req.Muted,
+		SkipDigest:             req.SkipDigest,
 		PreRemindBeforeSeconds: normalizePreRemindBeforeSeconds(req.PreRemindBeforeSeconds),
 		Status:                 req.Status,
 	}
@@ -40,6 +41,7 @@ func UpdateTaskRequestToModel(req *dto.UpdateTaskRequest) *models.TaskUpdateRequ
 		RRule:                  req.RRule,
 		RequiresConfirmation:   req.RequiresConfirmation,
 		Muted:                  req.Muted,
+		SkipDigest:             req.SkipDigest,
 		PreRemindBeforeSeconds: req.PreRemindBeforeSeconds,
 		GroupID:                req.GroupID,
 	}
@@ -61,6 +63,7 @@ func TaskModelToResponse(task *models.Task) *dto.TaskResponse {
 		RRule:                  task.RRule,
 		RequiresConfirmation:   task.RequiresConfirmation,
 		Muted:                  task.Muted,
+		SkipDigest:             task.SkipDigest,
 		PreRemindBeforeSeconds: task.PreRemindBeforeSeconds,
 		Status:                 task.Status,
 		CreatedAt:              task.CreatedAt,
@@ -83,6 +86,7 @@ func TaskModelToMarkedDoneResponse(task *models.Task) *dto.TaskMarkedDoneRespons
 		RRule:                  task.RRule,
 		RequiresConfirmation:   task.RequiresConfirmation,
 		Muted:                  task.Muted,
+		SkipDigest:             task.SkipDigest,
 		PreRemindBeforeSeconds: task.PreRemindBeforeSeconds,
 		CreatedAt:              task.CreatedAt,
 	}
@@ -105,6 +109,7 @@ func TaskModelToDetailResponse(task *models.Task, attachments []dto.AttachmentRe
 		RRule:                  base.RRule,
 		RequiresConfirmation:   base.RequiresConfirmation,
 		Muted:                  base.Muted,
+		SkipDigest:             base.SkipDigest,
 		PreRemindBeforeSeconds: base.PreRemindBeforeSeconds,
 		Status:                 base.Status,
 		CreatedAt:              base.CreatedAt,

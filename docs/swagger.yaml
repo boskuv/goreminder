@@ -319,6 +319,9 @@ definitions:
       muted:
         example: false
         type: boolean
+      skip_digest:
+        example: false
+        type: boolean
       pre_remind_before_seconds:
         description: 'PreRemindBeforeSeconds: seconds before start_date for a preliminary
           reminder; omit/null = disabled.'
@@ -787,6 +790,9 @@ definitions:
       muted:
         example: false
         type: boolean
+      skip_digest:
+        example: false
+        type: boolean
       parent_id:
         example: 5
         type: integer
@@ -925,6 +931,9 @@ definitions:
       muted:
         example: false
         type: boolean
+      skip_digest:
+        example: false
+        type: boolean
       parent_id:
         example: 5
         type: integer
@@ -973,6 +982,9 @@ definitions:
         example: 123
         type: integer
       muted:
+        example: false
+        type: boolean
+      skip_digest:
         example: false
         type: boolean
       parent_id:
@@ -1070,6 +1082,9 @@ definitions:
         example: 1
         type: integer
       muted:
+        example: false
+        type: boolean
+      skip_digest:
         example: false
         type: boolean
       pre_remind_before_seconds:

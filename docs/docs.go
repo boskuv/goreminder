@@ -3807,6 +3807,10 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": false
                 },
+                "skip_digest": {
+                    "type": "boolean",
+                    "example": false
+                },
                 "pre_remind_before_seconds": {
                     "description": "PreRemindBeforeSeconds: seconds before start_date for a preliminary reminder; omit/null = disabled.",
                     "type": "integer",
@@ -4463,6 +4467,10 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": false
                 },
+                "skip_digest": {
+                    "type": "boolean",
+                    "example": false
+                },
                 "parent_id": {
                     "type": "integer",
                     "example": 5
@@ -4649,6 +4657,10 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": false
                 },
+                "skip_digest": {
+                    "type": "boolean",
+                    "example": false
+                },
                 "parent_id": {
                     "type": "integer",
                     "example": 5
@@ -4714,6 +4726,10 @@ const docTemplate = `{
                     "example": 123
                 },
                 "muted": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "skip_digest": {
                     "type": "boolean",
                     "example": false
                 },
@@ -4846,6 +4862,10 @@ const docTemplate = `{
                     "example": 1
                 },
                 "muted": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "skip_digest": {
                     "type": "boolean",
                     "example": false
                 },
