@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -428,6 +431,7 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 // @Success 200 {object} dto.TaskResponse "Updated task"
 // @Failure 400 {object} dto.ErrorResponse "Bad request"
 // @Failure 404 {object} dto.ErrorResponse "Task not found"
+// @Failure 409 {object} dto.ErrorResponse "shift_from_completion conflicts with a calendar sync link"
 // @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
 // @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/tasks/{id} [put]
@@ -478,6 +482,10 @@ func (h *TaskHandler) UpdateTask(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": fmt.Sprintf("task with id `%d` not found", taskID),
 			})
+			return
+		}
+		if errors.Is(err, errs.ErrConflict) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
 		if errors.Is(err, errs.ErrUnprocessableEntity) {
@@ -618,14 +626,16 @@ func (h *TaskHandler) QueueTask(c *gin.Context) {
 }
 
 // @Summary Mark task as done
-// @Description Marks a task as done, updates it in the database, and queues worker.delete_task in a transactional manner. If queueing fails, the database update is rolled back. Returns task DTO without status (assumed "done") to avoid extra repo fetch.
+// @Description Marks a task as done, updates it in the database, and queues worker.delete_task in a transactional manner. If queueing fails, the database update is rolled back. Returns task DTO without status (assumed "done") to avoid extra repo fetch. Optional JSON shift_from_completion overrides the parent flag for this call. An empty body follows the parent's shift_from_completion (confirmation recurrence series only). The shift rebases the parent anchor and the next child, does not run on PUT, and does not export to Google Calendar. Already-done tasks are idempotent and are not shifted again.
 // @Tags Tasks
 // @Accept json
 // @Produce json
 // @Param id path int true "Task ID"
+// @Param request body dto.MarkTaskDoneRequest false "Optional. Omit shift_from_completion to follow the parent flag; set it to override this call"
 // @Success 200 {object} dto.TaskMarkedDoneResponse "Task marked as done successfully"
-// @Failure 400 {object} dto.ErrorResponse "Invalid task ID parameter"
+// @Failure 400 {object} dto.ErrorResponse "Invalid task ID parameter or request body"
 // @Failure 404 {object} dto.ErrorResponse "Task not found"
+// @Failure 409 {object} dto.ErrorResponse "Shift conflicts with task shape, an unshiftable rule, a calendar sync link, or another active child"
 // @Failure 500 {object} dto.ErrorResponse "Internal server error or transaction failure"
 // @Router /api/v1/tasks/{id}/done [post]
 func (h *TaskHandler) MarkTaskAsDone(c *gin.Context) {
@@ -642,11 +652,22 @@ func (h *TaskHandler) MarkTaskAsDone(c *gin.Context) {
 		return
 	}
 
+	shiftFromCompletion, err := parseMarkTaskDoneBody(c)
+	if err != nil {
+		log.Info().
+			Err(err).
+			Int64("task.id", taskID).
+			Msg("invalid mark-as-done request body")
+		validation.HandleValidationError(c, err)
+		return
+	}
+
 	log.Info().
 		Int64("task.id", taskID).
+		Bool("shift_from_completion", shiftFromCompletion != nil && *shiftFromCompletion).
 		Msg("marking task as done")
 
-	task, err := h.taskService.MarkTaskAsDone(ctx, taskID)
+	task, err := h.taskService.MarkTaskAsDone(ctx, taskID, shiftFromCompletion)
 	if err != nil {
 		errEvent(log, err).
 			Int64("task.id", taskID).
@@ -656,6 +677,10 @@ func (h *TaskHandler) MarkTaskAsDone(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": fmt.Sprintf("task with id `%d` not found", taskID),
 			})
+			return
+		}
+		if errors.Is(err, errs.ErrConflict) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
 
@@ -669,6 +694,24 @@ func (h *TaskHandler) MarkTaskAsDone(c *gin.Context) {
 
 	response := mapper.TaskModelToMarkedDoneResponse(task)
 	c.JSON(http.StatusOK, response)
+}
+
+func parseMarkTaskDoneBody(c *gin.Context) (*bool, error) {
+	if c.Request.Body == nil {
+		return nil, nil
+	}
+	raw, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return nil, err
+	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return nil, nil
+	}
+	var req dto.MarkTaskDoneRequest
+	if err := json.Unmarshal(raw, &req); err != nil {
+		return nil, err
+	}
+	return req.ShiftFromCompletion, nil
 }
 
 // @Summary Mute task notifications

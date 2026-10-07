@@ -16,7 +16,7 @@ type TaskService interface {
 	UpdateTask(ctx context.Context, taskID int64, updateRequest *models.TaskUpdateRequest) (*models.Task, error)
 	DeleteTask(ctx context.Context, taskID int64) error
 	QueueTask(ctx context.Context, scheduledTask *models.ScheduledTask) error
-	MarkTaskAsDone(ctx context.Context, taskID int64) (*models.Task, error)
+	MarkTaskAsDone(ctx context.Context, taskID int64, shiftFromCompletion *bool) (*models.Task, error)
 	MuteTask(ctx context.Context, taskID int64) (*models.Task, error)
 	UnmuteTask(ctx context.Context, taskID int64) (*models.Task, error)
 	GetTaskHistory(ctx context.Context, taskID int64) ([]*models.TaskHistory, error)

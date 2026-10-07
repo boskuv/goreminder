@@ -196,7 +196,7 @@ This is the product contract for Google Calendar sync. “Bot / API edit” mean
 | **Task history (import)** | Import create/update/done/cancel writes `task_history` with existing actions (`created` / `updated` / `status_changed` / `deleted`) and `source: "google_calendar_import"` in old/new value. Best-effort (sync does not fail if history insert fails). Export via normal API already records history as usual. |
 | **Export without `group_id`** | Every eligible top-level task of that user can be pushed — usually set a group unless that is intentional. |
 | **Reminders** | Bot `pre_remind_before_seconds` and Google event reminders are **independent** — neither side maps to the other. |
-| **Mark done** (`MarkTaskAsDone`) | **No** calendar export. Event stays in Google. |
+| **Mark done** (`MarkTaskAsDone`) | **No** calendar export. Event stays in Google. A stored parent `shift_from_completion` or the same field on the done body rebases a confirmation series locally and returns **409** when the parent has a `task_sync_links` row. Enabling the stored flag on a linked parent is also **409**. |
 | **Calendar deleted in Google** | Next import → binding `status=error`. Export → outbox failures. Local tasks are **not** auto-cleaned; user must fix binding / disconnect. |
 | **Soft-delete task group** | Blocked (**409**) if a calendar binding still has that `group_id`. Soft-delete does **not** clear `tasks.group_id` via FK. |
 
@@ -231,12 +231,13 @@ Export outbox runs only when `notifyCalendarExport` fires **and** a matching `ex
 | **PUT** `requires_confirmation` | yes | Not in event payload; may affect children locally only |
 | **PUT** `group_id` | yes | Not in event payload. Leaving a **group-scoped** export binding (no `export_opt_in`) enqueues **DeleteEvent**. Per-task opt-in (`POST .../calendar/export`, `export_opt_in=true`) keeps syncing outside the group |
 | **POST** `/mute`, `/unmute` | **no** | Messenger worker only |
-| **POST** mark done | **no** | Event stays in Google |
+| **POST** mark done | **no** | Event stays in Google. Stored or per-call `shift_from_completion` is local only and **409**s if the parent already has a sync link |
+| **PUT** `shift_from_completion` | yes, if the update is accepted | Not mapped into the event. Enabling the flag on a linked parent returns **409** before any write and does not move the series |
 | **Autoreschedule** | **no** | DB (+ worker for one-shots); Google unchanged |
 
 Mapped into the Google event body: `title`, `description`, `start_date`, duration (`finish_date` / link duration / default 30m), `rrule` or cron→RRULE, plus private `goreminder_task_id`.
 
-Not mapped: `muted`, `pre_remind_before_seconds`, `status`, `requires_confirmation`, `messenger_related_user_id`, attachments, etc.
+Not mapped: `muted`, `shift_from_completion`, `pre_remind_before_seconds`, `status`, `requires_confirmation`, `messenger_related_user_id`, attachments, etc.
 
 ### 3.4 Force sync / list / disconnect / sync status
 

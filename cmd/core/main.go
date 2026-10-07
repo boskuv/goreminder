@@ -248,6 +248,7 @@ func main() {
 			log,
 		)
 		taskService.SetCalendarExportHook(calendarSyncService)
+		taskService.SetTaskSyncLinkLookup(taskSyncLinkRepo)
 		calendarSyncService.SetImportedTaskScheduler(taskService)
 		calendarHandler = handlers.NewCalendarHandler(calendarSyncService, log)
 		log.Info().Msg("google calendar integration enabled")

@@ -15,6 +15,8 @@ type CreateTaskRequest struct {
 	RRule                  *string    `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 	RequiresConfirmation   bool       `json:"requires_confirmation,omitempty" example:"true"`
 	Muted                  bool       `json:"muted,omitempty" example:"false"`
+	// ShiftFromCompletion, on a confirmation recurrence parent, rebases the series from the completion date whenever a child is marked done.
+	ShiftFromCompletion bool `json:"shift_from_completion,omitempty" example:"false"`
 	// SkipDigest excludes this task from GET /digests. Omit or false keeps it in the digest.
 	SkipDigest bool `json:"skip_digest,omitempty" example:"false"`
 	// PreRemindBeforeSeconds: seconds before start_date for a preliminary reminder; omit/null = disabled.
@@ -32,6 +34,8 @@ type UpdateTaskRequest struct {
 	FinishDate           *time.Time `json:"finish_date,omitempty" example:"2024-01-20T18:00:00Z"`
 	RequiresConfirmation *bool      `json:"requires_confirmation,omitempty" example:"true"`
 	Muted                *bool      `json:"muted,omitempty" example:"false"`
+	// ShiftFromCompletion: omit = no change. true on a confirmation recurrence parent rebases later child dones from the completion date.
+	ShiftFromCompletion *bool `json:"shift_from_completion,omitempty" example:"false"`
 	// SkipDigest: omit = no change; true excludes the task from digests.
 	SkipDigest *bool `json:"skip_digest,omitempty" example:"false"`
 	// PreRemindBeforeSeconds: omit = no change; 0 = disable; >0 = set offset in seconds before start_date.
@@ -57,6 +61,7 @@ type TaskResponse struct {
 	RRule                  *string               `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 	RequiresConfirmation   bool                  `json:"requires_confirmation,omitempty" example:"true"`
 	Muted                  bool                  `json:"muted" example:"false"`
+	ShiftFromCompletion    bool                  `json:"shift_from_completion" example:"false"`
 	SkipDigest             bool                  `json:"skip_digest" example:"false"`
 	PreRemindBeforeSeconds *int64                `json:"pre_remind_before_seconds,omitempty" example:"900"`
 	Status                 string                `json:"status" example:"pending" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
@@ -79,12 +84,19 @@ type TaskDetailResponse struct {
 	RRule                  *string               `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 	RequiresConfirmation   bool                  `json:"requires_confirmation,omitempty" example:"true"`
 	Muted                  bool                  `json:"muted" example:"false"`
+	ShiftFromCompletion    bool                  `json:"shift_from_completion" example:"false"`
 	SkipDigest             bool                  `json:"skip_digest" example:"false"`
 	PreRemindBeforeSeconds *int64                `json:"pre_remind_before_seconds,omitempty" example:"900"`
 	Status                 string                `json:"status" example:"pending" enums:"pending,scheduled,done,rescheduled,postponed,deleted"`
 	CreatedAt              time.Time             `json:"created_at" example:"2024-01-10T08:00:00Z"`
 	Attachments            []AttachmentResponse  `json:"attachments,omitempty"` // when attachments.enabled; omitted when empty
 	External               *TaskExternalResponse `json:"external,omitempty"`
+}
+
+// MarkTaskDoneRequest is the optional body of POST /tasks/{id}/done.
+// Omit shift_from_completion to follow the parent flag. Set it to override that flag for this call.
+type MarkTaskDoneRequest struct {
+	ShiftFromCompletion *bool `json:"shift_from_completion,omitempty" example:"true"`
 }
 
 // TaskMarkedDoneResponse represents the response DTO for mark-as-done endpoint.
@@ -103,6 +115,7 @@ type TaskMarkedDoneResponse struct {
 	RRule                  *string    `json:"rrule,omitempty" example:"FREQ=DAILY;INTERVAL=1"`
 	RequiresConfirmation   bool       `json:"requires_confirmation,omitempty" example:"true"`
 	Muted                  bool       `json:"muted" example:"false"`
+	ShiftFromCompletion    bool       `json:"shift_from_completion" example:"false"`
 	SkipDigest             bool       `json:"skip_digest" example:"false"`
 	PreRemindBeforeSeconds *int64     `json:"pre_remind_before_seconds,omitempty" example:"900"`
 	CreatedAt              time.Time  `json:"created_at" example:"2024-01-10T08:00:00Z"`

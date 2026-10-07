@@ -319,9 +319,6 @@ definitions:
       muted:
         example: false
         type: boolean
-      skip_digest:
-        example: false
-        type: boolean
       pre_remind_before_seconds:
         description: 'PreRemindBeforeSeconds: seconds before start_date for a preliminary
           reminder; omit/null = disabled.'
@@ -333,6 +330,16 @@ definitions:
       rrule:
         example: FREQ=DAILY;INTERVAL=1
         type: string
+      shift_from_completion:
+        description: ShiftFromCompletion, on a confirmation recurrence parent, rebases
+          the series from the completion date whenever a child is marked done.
+        example: false
+        type: boolean
+      skip_digest:
+        description: SkipDigest excludes this task from GET /digests. Omit or false
+          keeps it in the digest.
+        example: false
+        type: boolean
       start_date:
         example: "2024-01-15T10:00:00Z"
         type: string
@@ -563,6 +570,12 @@ definitions:
           $ref: '#/definitions/dto.AttachmentResponse'
         type: array
     type: object
+  dto.MarkTaskDoneRequest:
+    properties:
+      shift_from_completion:
+        example: true
+        type: boolean
+    type: object
   dto.MessengerRelatedUserResponse:
     properties:
       chat_id:
@@ -790,9 +803,6 @@ definitions:
       muted:
         example: false
         type: boolean
-      skip_digest:
-        example: false
-        type: boolean
       parent_id:
         example: 5
         type: integer
@@ -805,6 +815,12 @@ definitions:
       rrule:
         example: FREQ=DAILY;INTERVAL=1
         type: string
+      shift_from_completion:
+        example: false
+        type: boolean
+      skip_digest:
+        example: false
+        type: boolean
       start_date:
         example: "2024-01-15T10:00:00Z"
         type: string
@@ -931,9 +947,6 @@ definitions:
       muted:
         example: false
         type: boolean
-      skip_digest:
-        example: false
-        type: boolean
       parent_id:
         example: 5
         type: integer
@@ -946,6 +959,12 @@ definitions:
       rrule:
         example: FREQ=DAILY;INTERVAL=1
         type: string
+      shift_from_completion:
+        example: false
+        type: boolean
+      skip_digest:
+        example: false
+        type: boolean
       start_date:
         example: "2024-01-15T10:00:00Z"
         type: string
@@ -984,9 +1003,6 @@ definitions:
       muted:
         example: false
         type: boolean
-      skip_digest:
-        example: false
-        type: boolean
       parent_id:
         example: 5
         type: integer
@@ -999,6 +1015,12 @@ definitions:
       rrule:
         example: FREQ=DAILY;INTERVAL=1
         type: string
+      shift_from_completion:
+        example: false
+        type: boolean
+      skip_digest:
+        example: false
+        type: boolean
       start_date:
         example: "2024-01-15T10:00:00Z"
         type: string
@@ -1084,9 +1106,6 @@ definitions:
       muted:
         example: false
         type: boolean
-      skip_digest:
-        example: false
-        type: boolean
       pre_remind_before_seconds:
         description: 'PreRemindBeforeSeconds: omit = no change; 0 = disable; >0 =
           set offset in seconds before start_date.'
@@ -1098,6 +1117,15 @@ definitions:
       rrule:
         example: FREQ=DAILY;INTERVAL=1
         type: string
+      shift_from_completion:
+        description: 'ShiftFromCompletion: omit = no change. true on a confirmation
+          recurrence parent rebases later child dones from the completion date.'
+        example: false
+        type: boolean
+      skip_digest:
+        description: 'SkipDigest: omit = no change; true excludes the task from digests.'
+        example: false
+        type: boolean
       start_date:
         example: "2024-01-15T10:00:00Z"
         type: string
@@ -2513,6 +2541,10 @@ paths:
           description: Task not found
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+        "409":
+          description: shift_from_completion conflicts with a calendar sync link
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
         "422":
           description: Unprocessable entity
           schema:
@@ -2752,13 +2784,23 @@ paths:
       description: Marks a task as done, updates it in the database, and queues worker.delete_task
         in a transactional manner. If queueing fails, the database update is rolled
         back. Returns task DTO without status (assumed "done") to avoid extra repo
-        fetch.
+        fetch. Optional JSON shift_from_completion overrides the parent flag for this
+        call. An empty body follows the parent's shift_from_completion (confirmation
+        recurrence series only). The shift rebases the parent anchor and the next
+        child, does not run on PUT, and does not export to Google Calendar. Already-done
+        tasks are idempotent and are not shifted again.
       parameters:
       - description: Task ID
         in: path
         name: id
         required: true
         type: integer
+      - description: Optional. Omit shift_from_completion to follow the parent flag;
+          set it to override this call
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/dto.MarkTaskDoneRequest'
       produces:
       - application/json
       responses:
@@ -2767,11 +2809,16 @@ paths:
           schema:
             $ref: '#/definitions/dto.TaskMarkedDoneResponse'
         "400":
-          description: Invalid task ID parameter
+          description: Invalid task ID parameter or request body
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
         "404":
           description: Task not found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "409":
+          description: Shift conflicts with task shape, an unshiftable rule, a calendar
+            sync link, or another active child
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
         "500":

@@ -245,6 +245,7 @@ func TestTaskService_CreateTask_RRuleWithConfirmationCreatesChild(t *testing.T) 
 		assert.Equal(t, int64(100), *child.ParentID)
 		assert.Nil(t, child.CronExpression)
 		assert.Nil(t, child.RRule)
+		assert.False(t, child.ShiftFromCompletion)
 		assert.Equal(t, start, child.StartDate)
 		return int64(101), nil
 	})
@@ -254,6 +255,52 @@ func TestTaskService_CreateTask_RRuleWithConfirmationCreatesChild(t *testing.T) 
 	assert.NoError(t, err)
 	assert.Equal(t, int64(100), id)
 	assert.Equal(t, int64(101), childID)
+}
+
+func TestTaskService_CreateTask_ShiftFromCompletionRequiresConfirmationSeries(t *testing.T) {
+	service, _, userRepo, _, _, _ := setup(t)
+	ctx := context.Background()
+	userRepo.EXPECT().GetUserByID(gomock.Any(), int64(1)).Return(&models.User{ID: 1}, nil)
+
+	_, _, err := service.CreateTask(ctx, &models.Task{
+		UserID:               1,
+		Title:                "one shot",
+		RequiresConfirmation: true,
+		ShiftFromCompletion:  true,
+		StartDate:            time.Now().UTC().Add(time.Hour),
+	})
+	assert.ErrorIs(t, err, errs.ErrValidation)
+}
+
+func TestTaskService_UpdateTask_ShiftFromCompletion_RejectsUnshiftableRule(t *testing.T) {
+	service, taskRepo, _, _, _, _ := setup(t)
+	ctx := context.Background()
+	cron := "0 9 * * 1,3,5"
+	taskRepo.EXPECT().GetTaskByID(gomock.Any(), int64(1)).Return(&models.Task{
+		ID: 1, Title: "parent", Status: string(models.TaskStatusScheduled),
+		CronExpression: &cron, RequiresConfirmation: true,
+		StartDate: time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC),
+	}, nil)
+
+	out, err := service.UpdateTask(ctx, 1, &models.TaskUpdateRequest{ShiftFromCompletion: ptrBool(true)})
+	assert.Nil(t, out)
+	assert.ErrorIs(t, err, errs.ErrValidation)
+}
+
+func TestTaskService_UpdateTask_ShiftFromCompletion_RejectsCalendarLink(t *testing.T) {
+	service, taskRepo, _, _, _, _ := setup(t)
+	service.SetTaskSyncLinkLookup(stubSyncLinkLookup{link: &models.TaskSyncLink{TaskID: 1}})
+	ctx := context.Background()
+	cron := "0 9 * * *"
+	taskRepo.EXPECT().GetTaskByID(gomock.Any(), int64(1)).Return(&models.Task{
+		ID: 1, Title: "parent", Status: string(models.TaskStatusScheduled),
+		CronExpression: &cron, RequiresConfirmation: true,
+		StartDate: time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC),
+	}, nil)
+
+	out, err := service.UpdateTask(ctx, 1, &models.TaskUpdateRequest{ShiftFromCompletion: ptrBool(true)})
+	assert.Nil(t, out)
+	assert.ErrorIs(t, err, errs.ErrConflict)
 }
 
 func TestTaskService_RescheduleCronTasks_RRuleAdvancesStartDate(t *testing.T) {

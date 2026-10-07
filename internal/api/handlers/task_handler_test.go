@@ -41,7 +41,7 @@ type stubTaskService struct {
 	deleteTask     func(ctx context.Context, taskID int64) error
 	muteTask       func(ctx context.Context, taskID int64) (*models.Task, error)
 	unmuteTask     func(ctx context.Context, taskID int64) (*models.Task, error)
-	markTaskAsDone func(ctx context.Context, taskID int64) (*models.Task, error)
+	markTaskAsDone func(ctx context.Context, taskID int64, shiftFromCompletion *bool) (*models.Task, error)
 	getAllTasks    func(ctx context.Context, page, pageSize int, orderBy string, status *string, statusNot *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64, cronExpression *string, cronExpressionIsNull *bool, requiresConfirmation *bool, excludeCronWithConfirmation *bool, externalProvider *string) ([]*models.Task, int, error)
 }
 
@@ -75,11 +75,11 @@ func (s *stubTaskService) DeleteTask(ctx context.Context, taskID int64) error {
 func (s *stubTaskService) QueueTask(context.Context, *models.ScheduledTask) error {
 	panic("unexpected QueueTask")
 }
-func (s *stubTaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models.Task, error) {
+func (s *stubTaskService) MarkTaskAsDone(ctx context.Context, taskID int64, shiftFromCompletion *bool) (*models.Task, error) {
 	if s.markTaskAsDone == nil {
 		panic("unexpected MarkTaskAsDone")
 	}
-	return s.markTaskAsDone(ctx, taskID)
+	return s.markTaskAsDone(ctx, taskID, shiftFromCompletion)
 }
 func (s *stubTaskService) MuteTask(ctx context.Context, taskID int64) (*models.Task, error) {
 	if s.muteTask == nil {
@@ -319,9 +319,58 @@ func TestTaskHandler_UnmuteTask_Success(t *testing.T) {
 	assert.Equal(t, false, body["muted"])
 }
 
+func TestTaskHandler_MarkTaskAsDone_ShiftFromCompletion(t *testing.T) {
+	var gotShift bool
+	svc := &stubTaskService{
+		markTaskAsDone: func(_ context.Context, taskID int64, shiftFromCompletion *bool) (*models.Task, error) {
+			assert.Equal(t, int64(5), taskID)
+			require.NotNil(t, shiftFromCompletion)
+			gotShift = *shiftFromCompletion
+			task := sampleTask(5, "done")
+			return task, nil
+		},
+	}
+	r := newTaskRouter(svc)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/5/done", bytes.NewBufferString(`{"shift_from_completion":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, gotShift)
+}
+
+func TestTaskHandler_MarkTaskAsDone_EmptyBodyDoesNotShift(t *testing.T) {
+	var gotShift bool
+	svc := &stubTaskService{
+		markTaskAsDone: func(_ context.Context, _ int64, shiftFromCompletion *bool) (*models.Task, error) {
+			gotShift = shiftFromCompletion != nil && *shiftFromCompletion
+			return sampleTask(5, "done"), nil
+		},
+	}
+	r := newTaskRouter(svc)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/5/done", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.False(t, gotShift)
+}
+
+func TestTaskHandler_MarkTaskAsDone_Conflict(t *testing.T) {
+	svc := &stubTaskService{
+		markTaskAsDone: func(context.Context, int64, *bool) (*models.Task, error) {
+			return nil, errs.ErrConflict
+		},
+	}
+	r := newTaskRouter(svc)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/5/done", bytes.NewBufferString(`{"shift_from_completion":true}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusConflict, w.Code)
+}
+
 func TestTaskHandler_MarkTaskAsDone_NotFound(t *testing.T) {
 	svc := &stubTaskService{
-		markTaskAsDone: func(context.Context, int64) (*models.Task, error) {
+		markTaskAsDone: func(context.Context, int64, *bool) (*models.Task, error) {
 			return nil, errs.ErrNotFound
 		},
 	}

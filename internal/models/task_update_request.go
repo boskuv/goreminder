@@ -14,6 +14,9 @@ type TaskUpdateRequest struct {
 	RRule                *string    `json:"rrule,omitempty"`
 	RequiresConfirmation *bool      `json:"requires_confirmation,omitempty"`
 	Muted                *bool      `json:"muted,omitempty"`
+	// ShiftFromCompletion: omit = no change. true makes later child dones rebase the series
+	// from the completion date. Does not move start_date by itself.
+	ShiftFromCompletion *bool `json:"shift_from_completion,omitempty"`
 	// SkipDigest: omit = no change. true excludes the task from digests.
 	SkipDigest *bool `json:"skip_digest,omitempty"`
 	// PreRemindBeforeSeconds: omit = no change; 0 = clear; >0 = set offset in seconds.

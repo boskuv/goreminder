@@ -899,7 +899,7 @@ GoReminder supports two types of tasks: **one-time tasks** and **recurring tasks
 
 1. **Parent Task**: Stores recurrence as either `cron_expression` **or** `rrule` (not both). With `requires_confirmation=true`, the parent does not execute directly; children carry the next occurrence (same model as before for cron-only parents).
 2. **Child Task**: Created automatically from parent. Has `parent_id` pointing to parent. Executes at calculated `start_date`.
-3. When a child task is marked as **done**, a new child task is created with `start_date` set to the parent’s next occurrence from **cron** or **RRULE**, whichever is configured.
+3. When a child task is marked as **done**, a new child task is created with `start_date` set to the parent’s next occurrence from **cron** or **RRULE**, whichever is configured. If the parent stores `shift_from_completion`, or the done call passes that field as `true`, the series is rebased from the completion date first (see Mark as Done).
 
 ### Reschedule Mechanism
 
@@ -938,6 +938,17 @@ Rescheduling occurs when a task with `requires_confirmation=true` is not confirm
 2. `worker.delete_task` is queued
 3. If parent exists and has a recurrence rule (`cron_expression` or `rrule`):
    - New child task is created with `start_date` = next occurrence from that rule
+
+A confirmation recurrence **parent** can store `shift_from_completion` (`POST /api/v1/tasks` and `PUT /api/v1/tasks/{id}`). The flag is not copied to children. Turning it on does not move `start_date`; it only changes later dones. It is rejected (**400**) unless the parent has `requires_confirmation` and a single-interval cron or RRULE, and (**409**) when that parent already has a `task_sync_links` row.
+
+`POST /api/v1/tasks/{id}/done` accepts an optional JSON body. An empty body follows the parent's `shift_from_completion`. `{"shift_from_completion": false}` keeps the current schedule for this call even when the parent flag is on. `{"shift_from_completion": true}` rebases this call and applies only to a **child** of a confirmation series:
+
+- The parent anchor moves to the completion calendar day (UTC), keeping the clock time from the completed child’s `start_date`. The rule is rewritten when it names a single weekday, month day, or month (`30 8 * * 1` → that weekday; `BYMONTHDAY` / `BYDAY` / `BYMONTH` the same way). A rule with no such part stays as stored; the new day comes from the parent `start_date` used as DTSTART.
+- The next child is the first occurrence **strictly after** the completion instant on that shifted rule. Later done calls without the flag, unmute, and muted autoreschedule follow the new anchor.
+- The new child still copies `muted`, `skip_digest`, and `pre_remind_before_seconds`. A muted child is stored but does not get `worker.schedule_task` (`delete_task` for the completed child is still published). Mute itself is not a conflict.
+- The parent anchor is written in the same transaction as `status=done`. This path does not run on `PUT` and does not enqueue calendar export. Parent `task_history` records `updated` with the old and new `start_date` / `cron_expression` / `rrule`. The HTTP response is still the completed child.
+- A task that is already `done` is idempotent and is **not** shifted again.
+- **409** before any write when the option is set and the task is not such a child (including marking the parent done with the flag), the rule is not a single shiftable interval (lists, steps, ranges, `COUNT`, `UNTIL`, nth weekdays, hourly, and similar), the parent has a `task_sync_links` row (any origin, including `sync_enabled=false`; checked only while Google Calendar integration is enabled), or another child is not `done` / `deleted`. Short months follow cronexpr / rrule-go and may skip a month.
 
 #### Marking a Parent Task as Done
 

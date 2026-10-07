@@ -74,6 +74,9 @@ type Task struct {
 	RRule                  *string    `db:"rrule" json:"rrule,omitempty"`
 	RequiresConfirmation   bool       `db:"requires_confirmation" json:"requires_confirmation,omitempty"`
 	Muted                  bool       `db:"muted" json:"muted,omitempty"`
+	// ShiftFromCompletion rebases a confirmation recurrence series from the completion
+	// date on every done of a child. Meaningful on the parent row; children stay false.
+	ShiftFromCompletion bool `db:"shift_from_completion" json:"shift_from_completion,omitempty"`
 	// SkipDigest excludes the task from GET /digests. Reminders and task lists are unchanged.
 	SkipDigest bool `db:"skip_digest" json:"skip_digest,omitempty"`
 	// PreRemindBeforeSeconds is an optional offset before start_date for a preliminary reminder.

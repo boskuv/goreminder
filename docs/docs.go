@@ -1978,6 +1978,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
+                    "409": {
+                        "description": "shift_from_completion conflicts with a calendar sync link",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
                     "422": {
                         "description": "Unprocessable entity",
                         "schema": {
@@ -2366,7 +2372,7 @@ const docTemplate = `{
         },
         "/api/v1/tasks/{id}/done": {
             "post": {
-                "description": "Marks a task as done, updates it in the database, and queues worker.delete_task in a transactional manner. If queueing fails, the database update is rolled back. Returns task DTO without status (assumed \"done\") to avoid extra repo fetch.",
+                "description": "Marks a task as done, updates it in the database, and queues worker.delete_task in a transactional manner. If queueing fails, the database update is rolled back. Returns task DTO without status (assumed \"done\") to avoid extra repo fetch. Optional JSON shift_from_completion overrides the parent flag for this call. An empty body follows the parent's shift_from_completion (confirmation recurrence series only). The shift rebases the parent anchor and the next child, does not run on PUT, and does not export to Google Calendar. Already-done tasks are idempotent and are not shifted again.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2384,6 +2390,14 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Optional. Omit shift_from_completion to follow the parent flag; set it to override this call",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/dto.MarkTaskDoneRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -2394,13 +2408,19 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Invalid task ID parameter",
+                        "description": "Invalid task ID parameter or request body",
                         "schema": {
                             "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Task not found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Shift conflicts with task shape, an unshiftable rule, a calendar sync link, or another active child",
                         "schema": {
                             "$ref": "#/definitions/dto.ErrorResponse"
                         }
@@ -3807,10 +3827,6 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": false
                 },
-                "skip_digest": {
-                    "type": "boolean",
-                    "example": false
-                },
                 "pre_remind_before_seconds": {
                     "description": "PreRemindBeforeSeconds: seconds before start_date for a preliminary reminder; omit/null = disabled.",
                     "type": "integer",
@@ -3823,6 +3839,16 @@ const docTemplate = `{
                 "rrule": {
                     "type": "string",
                     "example": "FREQ=DAILY;INTERVAL=1"
+                },
+                "shift_from_completion": {
+                    "description": "ShiftFromCompletion, on a confirmation recurrence parent, rebases the series from the completion date whenever a child is marked done.",
+                    "type": "boolean",
+                    "example": false
+                },
+                "skip_digest": {
+                    "description": "SkipDigest excludes this task from GET /digests. Omit or false keeps it in the digest.",
+                    "type": "boolean",
+                    "example": false
                 },
                 "start_date": {
                     "type": "string",
@@ -4139,6 +4165,15 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/dto.AttachmentResponse"
                     }
+                }
+            }
+        },
+        "dto.MarkTaskDoneRequest": {
+            "type": "object",
+            "properties": {
+                "shift_from_completion": {
+                    "type": "boolean",
+                    "example": true
                 }
             }
         },
@@ -4467,10 +4502,6 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": false
                 },
-                "skip_digest": {
-                    "type": "boolean",
-                    "example": false
-                },
                 "parent_id": {
                     "type": "integer",
                     "example": 5
@@ -4486,6 +4517,14 @@ const docTemplate = `{
                 "rrule": {
                     "type": "string",
                     "example": "FREQ=DAILY;INTERVAL=1"
+                },
+                "shift_from_completion": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "skip_digest": {
+                    "type": "boolean",
+                    "example": false
                 },
                 "start_date": {
                     "type": "string",
@@ -4657,10 +4696,6 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": false
                 },
-                "skip_digest": {
-                    "type": "boolean",
-                    "example": false
-                },
                 "parent_id": {
                     "type": "integer",
                     "example": 5
@@ -4676,6 +4711,14 @@ const docTemplate = `{
                 "rrule": {
                     "type": "string",
                     "example": "FREQ=DAILY;INTERVAL=1"
+                },
+                "shift_from_completion": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "skip_digest": {
+                    "type": "boolean",
+                    "example": false
                 },
                 "start_date": {
                     "type": "string",
@@ -4729,10 +4772,6 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": false
                 },
-                "skip_digest": {
-                    "type": "boolean",
-                    "example": false
-                },
                 "parent_id": {
                     "type": "integer",
                     "example": 5
@@ -4748,6 +4787,14 @@ const docTemplate = `{
                 "rrule": {
                     "type": "string",
                     "example": "FREQ=DAILY;INTERVAL=1"
+                },
+                "shift_from_completion": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "skip_digest": {
+                    "type": "boolean",
+                    "example": false
                 },
                 "start_date": {
                     "type": "string",
@@ -4865,10 +4912,6 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": false
                 },
-                "skip_digest": {
-                    "type": "boolean",
-                    "example": false
-                },
                 "pre_remind_before_seconds": {
                     "description": "PreRemindBeforeSeconds: omit = no change; 0 = disable; \u003e0 = set offset in seconds before start_date.",
                     "type": "integer",
@@ -4881,6 +4924,16 @@ const docTemplate = `{
                 "rrule": {
                     "type": "string",
                     "example": "FREQ=DAILY;INTERVAL=1"
+                },
+                "shift_from_completion": {
+                    "description": "ShiftFromCompletion: omit = no change. true on a confirmation recurrence parent rebases later child dones from the completion date.",
+                    "type": "boolean",
+                    "example": false
+                },
+                "skip_digest": {
+                    "description": "SkipDigest: omit = no change; true excludes the task from digests.",
+                    "type": "boolean",
+                    "example": false
                 },
                 "start_date": {
                     "type": "string",

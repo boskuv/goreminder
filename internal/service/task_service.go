@@ -34,8 +34,15 @@ type TaskService struct {
 	activity                   ActivityTracker
 	attachmentsPurgeOnTaskDone bool
 	exportHook                 CalendarExportHook
+	syncLinks                  taskSyncLinkLookup
 	tracer                     trace.Tracer
 	logger                     zerolog.Logger
+}
+
+// taskSyncLinkLookup reports a task's external calendar link.
+// A missing link is errs.ErrNotFound.
+type taskSyncLinkLookup interface {
+	GetByTaskID(ctx context.Context, taskID int64) (*models.TaskSyncLink, error)
 }
 
 // NewTaskService creates a new TaskService.
@@ -57,6 +64,12 @@ func NewTaskService(taskRepo repository.TaskRepository, userRepo repository.User
 		tracer:                     otel.Tracer("task-service"),
 		logger:                     logger,
 	}
+}
+
+// SetTaskSyncLinkLookup wires calendar-link checks used by completion-date shifts.
+// Nil (calendar integration disabled) treats every task as unlinked.
+func (s *TaskService) SetTaskSyncLinkLookup(lookup taskSyncLinkLookup) {
+	s.syncLinks = lookup
 }
 
 // SetCalendarExportHook sets an optional hook for calendar export after task mutations.
@@ -342,6 +355,9 @@ func (s *TaskService) CreateTask(ctx context.Context, task *models.Task) (int64,
 	}
 	if err := validatePreRemindBeforeSeconds(task.PreRemindBeforeSeconds); err != nil {
 		return 0, 0, errors.Wrap(errs.ErrValidation, err.Error())
+	}
+	if err := validateShiftFromCompletionSeries(task); err != nil {
+		return 0, 0, err
 	}
 	if task.PreRemindBeforeSeconds != nil && *task.PreRemindBeforeSeconds == 0 {
 		task.PreRemindBeforeSeconds = nil
@@ -681,6 +697,11 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	if updateRequest.Muted != nil {
 		oldTask.Muted = *updateRequest.Muted
 	}
+	enablingShiftFromCompletion := false
+	if updateRequest.ShiftFromCompletion != nil {
+		enablingShiftFromCompletion = *updateRequest.ShiftFromCompletion && !oldTask.ShiftFromCompletion
+		oldTask.ShiftFromCompletion = *updateRequest.ShiftFromCompletion
+	}
 	if updateRequest.SkipDigest != nil {
 		oldTask.SkipDigest = *updateRequest.SkipDigest
 	}
@@ -701,6 +722,14 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	if recurrenceFieldSet(oldTask.RRule) {
 		if err := validateRRuleString(*oldTask.RRule, oldTask.StartDate); err != nil {
 			return nil, errors.Wrap(errs.ErrValidation, err.Error())
+		}
+	}
+	if err := validateShiftFromCompletionSeries(oldTask); err != nil {
+		return nil, err
+	}
+	if enablingShiftFromCompletion {
+		if err := s.rejectShiftFromCompletionWhenLinked(ctx, oldTask.ID); err != nil {
+			return nil, err
 		}
 	}
 
@@ -1601,7 +1630,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 	hasOtherChanges := updateRequest.Title != nil || updateRequest.Description != nil ||
 		updateRequest.StartDate != nil || updateRequest.FinishDate != nil ||
 		updateRequest.CronExpression != nil || updateRequest.RRule != nil || updateRequest.RequiresConfirmation != nil ||
-		updateRequest.Muted != nil || updateRequest.SkipDigest != nil || updateRequest.PreRemindBeforeSeconds != nil || updateRequest.GroupID != nil
+		updateRequest.Muted != nil || updateRequest.ShiftFromCompletion != nil || updateRequest.SkipDigest != nil || updateRequest.PreRemindBeforeSeconds != nil || updateRequest.GroupID != nil
 
 	newTaskMap := s.taskToMap(oldTask)
 	updateChangedFields := changedFieldsFromMaps(oldTaskMap, newTaskMap)
@@ -2218,9 +2247,181 @@ func (s *TaskService) UnmuteTask(ctx context.Context, taskID int64) (*models.Tas
 	return task, nil
 }
 
-// MarkTaskAsDone marks a task as done and queues worker.delete_task in a transactional manner
-// If queueing fails, the database update is rolled back
-func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models.Task, error) {
+// preparedCompletionShift is a validated series rebase applied in the same transaction as done.
+type preparedCompletionShift struct {
+	parent    *models.Task
+	anchor    time.Time
+	nextStart time.Time
+	cron      *string
+	rrule     *string
+	oldStart  time.Time
+	oldCron   *string
+	oldRRule  *string
+}
+
+func (s *TaskService) prepareCompletionShift(ctx context.Context, task *models.Task, completedAt time.Time) (*preparedCompletionShift, error) {
+	if task == nil || task.ParentID == nil {
+		return nil, errors.Wrap(errs.ErrConflict, "completion shift applies only to a confirmation recurrence child")
+	}
+	parent, err := s.taskRepo.GetTaskByIDWithoutStatusFilter(ctx, *task.ParentID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			return nil, errors.Wrap(errs.ErrConflict, "completion shift applies only to a confirmation recurrence child")
+		}
+		return nil, errors.WithStack(err)
+	}
+	if parent.Status == string(models.TaskStatusDone) || parent.Status == string(models.TaskStatusDeleted) || !isRecurrenceParentWithConfirmation(parent) {
+		return nil, errors.Wrap(errs.ErrConflict, "completion shift applies only to a confirmation recurrence child")
+	}
+
+	clock := task.StartDate
+	if clock.IsZero() {
+		clock = parent.StartDate
+	}
+	shifted, err := shiftRecurrenceFromCompletion(parent, clock, completedAt)
+	if err != nil {
+		if errors.Is(err, errRecurrenceNotShiftable) {
+			return nil, errors.Wrap(errs.ErrConflict, "recurrence rule cannot be shifted from the completion date")
+		}
+		return nil, errors.WithStack(err)
+	}
+
+	if s.syncLinks != nil {
+		_, linkErr := s.syncLinks.GetByTaskID(ctx, parent.ID)
+		if linkErr == nil {
+			return nil, errors.Wrap(errs.ErrConflict, "parent task is linked to a calendar and cannot be shifted on done")
+		}
+		if !errors.Is(linkErr, errs.ErrNotFound) {
+			return nil, errors.WithStack(linkErr)
+		}
+	}
+
+	children, err := s.taskRepo.GetChildTasksByParentID(ctx, parent.ID)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for _, child := range children {
+		if child.ID == task.ID {
+			continue
+		}
+		if child.Status == string(models.TaskStatusDone) || child.Status == string(models.TaskStatusDeleted) {
+			continue
+		}
+		return nil, errors.Wrap(errs.ErrConflict, "another active child task already exists")
+	}
+
+	return &preparedCompletionShift{
+		parent:    parent,
+		anchor:    shifted.Anchor,
+		nextStart: shifted.NextStart,
+		cron:      shifted.Cron,
+		rrule:     shifted.RRule,
+		oldStart:  parent.StartDate,
+		oldCron:   copyStringPtr(parent.CronExpression),
+		oldRRule:  copyStringPtr(parent.RRule),
+	}, nil
+}
+
+func (s *TaskService) recordCompletionShiftHistory(ctx context.Context, shift *preparedCompletionShift) {
+	if shift == nil || shift.parent == nil {
+		return
+	}
+	log := logger.WithTraceContext(ctx, s.logger)
+	history := &models.TaskHistory{
+		TaskID:   shift.parent.ID,
+		UserID:   shift.parent.UserID,
+		Action:   string(models.TaskHistoryActionUpdated),
+		OldValue: recurrenceHistoryValue(shift.oldStart, shift.oldCron, shift.oldRRule),
+		NewValue: recurrenceHistoryValue(shift.parent.StartDate, shift.parent.CronExpression, shift.parent.RRule),
+	}
+	if err := s.taskHistoryRepo.CreateTaskHistory(ctx, history); err != nil {
+		log.Error().
+			Stack().
+			Err(err).
+			Int64("parent.id", shift.parent.ID).
+			Msg("failed to record completion shift history")
+	}
+}
+
+func recurrenceHistoryValue(start time.Time, cronExpr, rrule *string) map[string]interface{} {
+	value := map[string]interface{}{
+		"start_date": start,
+	}
+	if cronExpr != nil {
+		value["cron_expression"] = *cronExpr
+	}
+	if rrule != nil {
+		value["rrule"] = *rrule
+	}
+	return value
+}
+
+func copyStringPtr(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	copied := *value
+	return &copied
+}
+
+// validateShiftFromCompletionSeries rejects the stored mode unless the row is a confirmation
+// recurrence parent whose rule can be re-anchored. A false flag is always valid.
+func validateShiftFromCompletionSeries(task *models.Task) error {
+	if task == nil || !task.ShiftFromCompletion {
+		return nil
+	}
+	if task.ParentID != nil || !isRecurrenceParentWithConfirmation(task) {
+		return errors.Wrap(errs.ErrValidation, "shift_from_completion applies only to a confirmation recurrence parent")
+	}
+	clock := task.StartDate
+	if clock.IsZero() {
+		clock = time.Now().UTC()
+	}
+	if _, err := shiftRecurrenceFromCompletion(task, clock, clock); err != nil {
+		return errors.Wrap(errs.ErrValidation, "recurrence rule cannot be shifted from the completion date")
+	}
+	return nil
+}
+
+func (s *TaskService) rejectShiftFromCompletionWhenLinked(ctx context.Context, taskID int64) error {
+	if s.syncLinks == nil || taskID == 0 {
+		return nil
+	}
+	_, err := s.syncLinks.GetByTaskID(ctx, taskID)
+	if err == nil {
+		return errors.Wrap(errs.ErrConflict, "task is linked to a calendar and cannot shift from the completion date")
+	}
+	if errors.Is(err, errs.ErrNotFound) {
+		return nil
+	}
+	return errors.WithStack(err)
+}
+
+// parentStoresCompletionShift reports whether an omitted done body should rebase the series.
+func (s *TaskService) parentStoresCompletionShift(ctx context.Context, task *models.Task) (bool, error) {
+	if task == nil || task.ParentID == nil {
+		return false, nil
+	}
+	parent, err := s.taskRepo.GetTaskByIDWithoutStatusFilter(ctx, *task.ParentID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			return false, nil
+		}
+		return false, errors.WithStack(err)
+	}
+	if parent.Status == string(models.TaskStatusDone) || parent.Status == string(models.TaskStatusDeleted) || !isRecurrenceParentWithConfirmation(parent) {
+		return false, nil
+	}
+	return parent.ShiftFromCompletion, nil
+}
+
+// MarkTaskAsDone marks a task as done and queues worker.delete_task in a transactional manner.
+// If queueing fails, the database update is rolled back.
+// shiftFromCompletion overrides the parent flag for this call. Nil follows the parent's
+// shift_from_completion. A true value rebases the series and is rejected with ErrConflict
+// before any write when the shift cannot be applied. A task that is already done is returned
+// unchanged and is not shifted again.
+func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64, shiftFromCompletion *bool) (*models.Task, error) {
 	ctx, span := s.tracer.Start(ctx, "task_service.MarkTaskAsDone",
 		trace.WithAttributes(
 			attribute.Int64("task.id", taskID),
@@ -2255,6 +2456,31 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 
 	// Store old status for history
 	oldStatus := task.Status
+	now := time.Now().UTC()
+
+	applyShift := false
+	if shiftFromCompletion != nil {
+		applyShift = *shiftFromCompletion
+	} else {
+		stored, storedErr := s.parentStoresCompletionShift(ctx, task)
+		if storedErr != nil {
+			span.RecordError(storedErr)
+			span.SetStatus(codes.Error, storedErr.Error())
+			return nil, storedErr
+		}
+		applyShift = stored
+	}
+
+	var shift *preparedCompletionShift
+	if applyShift {
+		var shiftErr error
+		shift, shiftErr = s.prepareCompletionShift(ctx, task, now)
+		if shiftErr != nil {
+			span.RecordError(shiftErr)
+			span.SetStatus(codes.Error, shiftErr.Error())
+			return nil, shiftErr
+		}
+	}
 
 	// Get database connection for transaction
 	db := s.taskRepo.GetDB()
@@ -2299,7 +2525,6 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 
 	// Update task status to done within transaction
 	task.Status = string(models.TaskStatusDone)
-	now := time.Now().UTC()
 	task.FinishDate = &now
 	err = s.taskRepo.UpdateTaskWithTx(ctx, tx, task)
 	if err != nil {
@@ -2311,6 +2536,27 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, errors.WithStack(err)
+	}
+
+	if shift != nil {
+		shift.parent.StartDate = shift.anchor
+		if shift.cron != nil {
+			shift.parent.CronExpression = shift.cron
+		}
+		if shift.rrule != nil {
+			shift.parent.RRule = shift.rrule
+		}
+		if err := s.taskRepo.UpdateTaskWithTx(ctx, tx, shift.parent); err != nil {
+			log.Error().
+				Stack().
+				Err(err).
+				Int64("task.id", taskID).
+				Int64("parent.id", shift.parent.ID).
+				Msg("failed to shift parent recurrence anchor in transaction")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, errors.WithStack(err)
+		}
 	}
 
 	// Queue delete_task message
@@ -2362,116 +2608,132 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64) (*models
 	// Mark that we've committed, so defer won't rollback
 	hasActiveTransaction = false
 
+	if shift != nil {
+		s.recordCompletionShiftHistory(ctx, shift)
+	}
+
 	// Handle child task logic after transaction commit
 	// If this is a child task and parent is not done, create next child task
 	if task.ParentID != nil {
-		parentTask, err := s.taskRepo.GetTaskByIDWithoutStatusFilter(ctx, *task.ParentID)
-		if err != nil {
-			log.Error().
-				Stack().
-				Err(err).
-				Int64("task.id", taskID).
-				Int64("parent.id", *task.ParentID).
-				Msg("failed to get parent task for child task logic")
-			// Don't fail the operation, just log the error
-		} else if parentTask.Status != string(models.TaskStatusDone) && isRecurrenceParentWithConfirmation(parentTask) {
+		var parentTask *models.Task
+		var nextTime time.Time
+		if shift != nil {
+			parentTask = shift.parent
+			nextTime = shift.nextStart
+		} else {
+			loaded, loadErr := s.taskRepo.GetTaskByIDWithoutStatusFilter(ctx, *task.ParentID)
+			if loadErr != nil {
+				log.Error().
+					Stack().
+					Err(loadErr).
+					Int64("task.id", taskID).
+					Int64("parent.id", *task.ParentID).
+					Msg("failed to get parent task for child task logic")
+				// Don't fail the operation, just log the error
+			} else if loaded.Status != string(models.TaskStatusDone) && isRecurrenceParentWithConfirmation(loaded) {
+				parentTask = loaded
+				var nextErr error
+				nextTime, nextErr = nextRecurrenceAfter(parentTask, time.Now().UTC())
+				if nextErr != nil {
+					log.Error().
+						Stack().
+						Err(nextErr).
+						Int64("task.id", taskID).
+						Int64("parent.id", *task.ParentID).
+						Msg("failed to compute next child start from parent recurrence")
+					parentTask = nil
+				}
+			}
+		}
+		if parentTask != nil && parentTask.Status != string(models.TaskStatusDone) && isRecurrenceParentWithConfirmation(parentTask) && !nextTime.IsZero() {
 			// Parent is not done and still uses the parent/child recurrence model — create next child task
 			log.Debug().
 				Int64("task.id", taskID).
 				Int64("parent.id", *task.ParentID).
 				Msg("creating next child task for recurring parent with confirmation")
 
-			nextTime, nextErr := nextRecurrenceAfter(parentTask, time.Now().UTC())
-			if nextErr != nil {
+			childTask := &models.Task{
+				Title:                  parentTask.Title,
+				Description:            parentTask.Description,
+				UserID:                 parentTask.UserID,
+				MessengerRelatedUserID: parentTask.MessengerRelatedUserID,
+				ParentID:               task.ParentID,
+				GroupID:                parentTask.GroupID,
+				StartDate:              nextTime,
+				FinishDate:             parentTask.FinishDate,
+				CronExpression:         nil,
+				RRule:                  nil,
+				RequiresConfirmation:   parentTask.RequiresConfirmation,
+				Muted:                  parentTask.Muted,
+				ShiftFromCompletion:    false,
+				SkipDigest:             parentTask.SkipDigest,
+				PreRemindBeforeSeconds: clonePreRemindBeforeSeconds(parentTask.PreRemindBeforeSeconds),
+				Status:                 string(models.TaskStatusScheduled),
+			}
+
+			childTaskID, createErr := s.taskRepo.CreateTask(ctx, childTask)
+			if createErr != nil {
 				log.Error().
 					Stack().
-					Err(nextErr).
+					Err(createErr).
 					Int64("task.id", taskID).
 					Int64("parent.id", *task.ParentID).
-					Msg("failed to compute next child start from parent recurrence")
+					Msg("failed to create next child task")
 			} else {
-				childTask := &models.Task{
-					Title:                  parentTask.Title,
-					Description:            parentTask.Description,
-					UserID:                 parentTask.UserID,
-					MessengerRelatedUserID: parentTask.MessengerRelatedUserID,
-					ParentID:               task.ParentID,
-					GroupID:                parentTask.GroupID,
-					StartDate:              nextTime,
-					FinishDate:             parentTask.FinishDate,
-					CronExpression:         nil,
-					RRule:                  nil,
-					RequiresConfirmation:   parentTask.RequiresConfirmation,
-					Muted:                  parentTask.Muted,
-					SkipDigest:             parentTask.SkipDigest,
-					PreRemindBeforeSeconds: clonePreRemindBeforeSeconds(parentTask.PreRemindBeforeSeconds),
-					Status:                 string(models.TaskStatusScheduled),
-				}
+				log.Debug().
+					Int64("task.id", taskID).
+					Int64("parent.id", *task.ParentID).
+					Int64("child_task.id", childTaskID).
+					Time("child_start_date", nextTime).
+					Msg("next child task created successfully")
+				span.SetAttributes(attribute.Int64("child_task.id", childTaskID))
 
-				childTaskID, createErr := s.taskRepo.CreateTask(ctx, childTask)
-				if createErr != nil {
-					log.Error().
-						Stack().
-						Err(createErr).
-						Int64("task.id", taskID).
-						Int64("parent.id", *task.ParentID).
-						Msg("failed to create next child task")
-				} else {
-					log.Debug().
-						Int64("task.id", taskID).
-						Int64("parent.id", *task.ParentID).
-						Int64("child_task.id", childTaskID).
-						Time("child_start_date", nextTime).
-						Msg("next child task created successfully")
-					span.SetAttributes(attribute.Int64("child_task.id", childTaskID))
-
-					if childTask.MessengerRelatedUserID != nil {
-						messengerRelatedUser, pubErr := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *childTask.MessengerRelatedUserID)
+				if childTask.MessengerRelatedUserID != nil {
+					messengerRelatedUser, pubErr := s.messengerRepo.GetMessengerRelatedUserByID(ctx, *childTask.MessengerRelatedUserID)
+					if pubErr != nil {
+						log.Error().
+							Stack().
+							Err(pubErr).
+							Int64("task.id", taskID).
+							Int64("child_task.id", childTaskID).
+							Msg("failed to get messenger related user for child task queue publish")
+					} else {
+						messengerName, pubErr := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
 						if pubErr != nil {
 							log.Error().
 								Stack().
 								Err(pubErr).
 								Int64("task.id", taskID).
 								Int64("child_task.id", childTaskID).
-								Msg("failed to get messenger related user for child task queue publish")
+								Msg("failed to get messenger name for child task queue publish")
 						} else {
-							messengerName, pubErr := s.getMessengerNameFromRelatedUser(ctx, messengerRelatedUser)
+							event := queue.TaskEvent{
+								Type:                   queue.TaskEventSchedule,
+								TaskID:                 childTaskID,
+								UserID:                 childTask.UserID,
+								MessengerName:          messengerName,
+								ChatID:                 messengerRelatedUser.ChatID,
+								Title:                  childTask.Title,
+								Description:            childTask.Description,
+								StartDate:              &childTask.StartDate,
+								CronExpression:         childTask.CronExpression,
+								RequiresConfirmation:   childTask.RequiresConfirmation,
+								PreRemindBeforeSeconds: childTask.PreRemindBeforeSeconds,
+							}
+							childTask.ID = childTaskID
+							pubErr = s.publishTaskEvent(ctx, childTask, event)
 							if pubErr != nil {
 								log.Error().
 									Stack().
 									Err(pubErr).
 									Int64("task.id", taskID).
 									Int64("child_task.id", childTaskID).
-									Msg("failed to get messenger name for child task queue publish")
+									Msg("failed to queue schedule_task for new child task")
 							} else {
-								event := queue.TaskEvent{
-									Type:                   queue.TaskEventSchedule,
-									TaskID:                 childTaskID,
-									UserID:                 childTask.UserID,
-									MessengerName:          messengerName,
-									ChatID:                 messengerRelatedUser.ChatID,
-									Title:                  childTask.Title,
-									Description:            childTask.Description,
-									StartDate:              &childTask.StartDate,
-									CronExpression:         childTask.CronExpression,
-									RequiresConfirmation:   childTask.RequiresConfirmation,
-									PreRemindBeforeSeconds: childTask.PreRemindBeforeSeconds,
-								}
-								childTask.ID = childTaskID
-								pubErr = s.publishTaskEvent(ctx, childTask, event)
-								if pubErr != nil {
-									log.Error().
-										Stack().
-										Err(pubErr).
-										Int64("task.id", taskID).
-										Int64("child_task.id", childTaskID).
-										Msg("failed to queue schedule_task for new child task")
-								} else {
-									log.Debug().
-										Int64("task.id", taskID).
-										Int64("child_task.id", childTaskID).
-										Msg("schedule_task queued successfully for new child task")
-								}
+								log.Debug().
+									Int64("task.id", taskID).
+									Int64("child_task.id", childTaskID).
+									Msg("schedule_task queued successfully for new child task")
 							}
 						}
 					}
@@ -2814,6 +3076,7 @@ func (s *TaskService) taskToMap(task *models.Task) map[string]interface{} {
 		"status":                task.Status,
 		"requires_confirmation": task.RequiresConfirmation,
 		"muted":                 task.Muted,
+		"shift_from_completion": task.ShiftFromCompletion,
 		"skip_digest":           task.SkipDigest,
 	}
 
