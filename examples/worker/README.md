@@ -30,9 +30,10 @@ GoReminder API
 4. `title` (string)
 5. `description` (string)
 6. `start_date` (RFC3339 / null — may include fractional seconds)
-7. `cron_expression` (string / null) — **not** `rrule`
+7. `cron_expression` (string / null) — mutually exclusive with `rrule` in the domain
 8. `requires_confirmation` (bool)
 9. `pre_remind_before_seconds` (int / null) — optional; when set, also schedules `{messenger}_{task_id}_pre`
+10. `rrule` (string / null) — iCalendar RRULE; sample worker re-arms with `python-dateutil`
 
 **`worker.delete_task` args:**
 
@@ -97,7 +98,7 @@ body = {
   "args": [
     "telegram", "YOUR_CHAT_ID", 999001, "Worker smoke", "",
     (datetime.now(timezone.utc) + timedelta(seconds=15)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    None, True, 900,
+    None, True, 900, None,
   ],
 }
 conn = pika.BlockingConnection(pika.URLParameters("amqp://guest:guest@localhost:5672/"))
@@ -111,7 +112,7 @@ PY
 ## Limits (intentionally)
 
 - No Celery app / result backend — plain AMQP + JSON
-- Cron via `croniter` only; **RRULE** is not in queue args (resolve via API if needed)
+- Recurrence re-arm: cron via `croniter`, RRULE via `python-dateutil` (10th arg; optional for older 9-arg publishers)
 - Digest settings tasks are logged and ignored
 - Not multi-replica safe beyond ZREM claim (demo-grade)
 - Retries are a simple re-ZADD +30s after webhook failure

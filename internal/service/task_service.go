@@ -1557,6 +1557,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, taskID int64, updateReques
 									CronExpression:         childTask.CronExpression,
 									RequiresConfirmation:   childTask.RequiresConfirmation,
 									PreRemindBeforeSeconds: childTask.PreRemindBeforeSeconds,
+									RRule:                  childTask.RRule,
 								}
 
 								childTask.ID = childTaskID
@@ -2076,6 +2077,7 @@ func (s *TaskService) buildScheduleTaskEvent(ctx context.Context, task *models.T
 		CronExpression:         task.CronExpression,
 		RequiresConfirmation:   task.RequiresConfirmation,
 		PreRemindBeforeSeconds: task.PreRemindBeforeSeconds,
+		RRule:                  task.RRule,
 	}, nil
 }
 
@@ -2719,6 +2721,7 @@ func (s *TaskService) MarkTaskAsDone(ctx context.Context, taskID int64, shiftFro
 								CronExpression:         childTask.CronExpression,
 								RequiresConfirmation:   childTask.RequiresConfirmation,
 								PreRemindBeforeSeconds: childTask.PreRemindBeforeSeconds,
+								RRule:                  childTask.RRule,
 							}
 							childTask.ID = childTaskID
 							pubErr = s.publishTaskEvent(ctx, childTask, event)
@@ -3245,6 +3248,8 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 		span.SetStatus(codes.Error, err.Error())
 		return errors.WithStack(err)
 	}
+	// Reschedule (+24h / muted override) is one-shot for this fire: do not pass recurrence
+	// so the worker does not re-arm; core owns the next occurrence for confirmation series.
 	event := queue.TaskEvent{
 		Type:                   queue.TaskEventSchedule,
 		TaskID:                 task.ID,
@@ -3257,6 +3262,7 @@ func (s *TaskService) RescheduleTask(ctx context.Context, task *models.Task) err
 		CronExpression:         nil,
 		RequiresConfirmation:   task.RequiresConfirmation,
 		PreRemindBeforeSeconds: task.PreRemindBeforeSeconds,
+		RRule:                  nil,
 	}
 
 	// Publish to queue - if this fails, we don't reschedule

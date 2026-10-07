@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from croniter import croniter
+from dateutil.rrule import rrulestr
 
 from datetime_util import parse_datetime
 from store import DueStore, job_id, pre_job_id
@@ -35,6 +36,12 @@ def _as_positive_int(v: Any) -> int | None:
     return n if n > 0 else None
 
 
+def _optional_str(v: Any) -> str | None:
+    if v in (None, "", "null"):
+        return None
+    return str(v)
+
+
 def _next_cron(cron_expression: str, after: datetime) -> datetime:
     """Next fire time. GoReminder uses 5-field cron; croniter accepts that."""
     base = after.astimezone(timezone.utc)
@@ -43,6 +50,33 @@ def _next_cron(cron_expression: str, after: datetime) -> datetime:
     if nxt.tzinfo is None:
         nxt = nxt.replace(tzinfo=timezone.utc)
     return nxt.astimezone(timezone.utc)
+
+
+def _next_rrule(rrule_expression: str, after: datetime, dtstart: datetime | None = None) -> datetime:
+    """Next occurrence strictly after `after`, using start_date (or after) as DTSTART."""
+    base = after.astimezone(timezone.utc)
+    start = (dtstart or base).astimezone(timezone.utc)
+    rule = rrulestr(rrule_expression, dtstart=start)
+    nxt = rule.after(base, inc=False)
+    if nxt is None:
+        raise ValueError(f"no rrule occurrence after {base.isoformat()}")
+    if nxt.tzinfo is None:
+        nxt = nxt.replace(tzinfo=timezone.utc)
+    return nxt.astimezone(timezone.utc)
+
+
+def _next_recurrence(
+    cron: str | None,
+    rrule: str | None,
+    after: datetime,
+    dtstart: datetime | None = None,
+) -> datetime | None:
+    """Prefer cron when both are set (domain treats them as mutually exclusive)."""
+    if cron:
+        return _next_cron(cron, after)
+    if rrule:
+        return _next_rrule(rrule, after, dtstart=dtstart)
+    return None
 
 
 class Handlers:
@@ -76,25 +110,27 @@ class Handlers:
         cron_expression: Any = None,
         requires_confirmation: Any = False,
         pre_remind_before_seconds: Any = None,
+        rrule: Any = None,
     ) -> None:
         jid = job_id(str(messenger_name), task_id)
         pjid = pre_job_id(str(messenger_name), task_id)
-        cron = cron_expression if cron_expression not in (None, "", "null") else None
+        cron = _optional_str(cron_expression)
+        rule = _optional_str(rrule)
         start = parse_datetime(scheduled_time_str)
         pre_secs = _as_positive_int(pre_remind_before_seconds)
 
-        if not start and not cron:
-            raise ValueError("schedule_task needs start_date and/or cron_expression")
+        if not start and not cron and not rule:
+            raise ValueError("schedule_task needs start_date and/or cron_expression or rrule")
 
         # One-shot or first occurrence: use start_date when present.
-        if start is None and cron:
-            start = _next_cron(str(cron), datetime.now(timezone.utc))
+        if start is None:
+            start = _next_recurrence(cron, rule, datetime.now(timezone.utc))
 
         assert start is not None
         now = datetime.now(timezone.utc)
-        # If already overdue and recurring, jump to next cron tick.
-        if cron and start <= now:
-            start = _next_cron(str(cron), now)
+        # If already overdue and recurring, jump to next tick.
+        if (cron or rule) and start <= now:
+            start = _next_recurrence(cron, rule, now, dtstart=start)
 
         payload = {
             "messenger_name": str(messenger_name),
@@ -103,6 +139,8 @@ class Handlers:
             "task_title": task_title,
             "task_description": task_description or "",
             "cron_expression": cron,
+            "rrule": rule,
+            "dtstart": start.isoformat(),
             "requires_confirmation": _as_bool(requires_confirmation),
             "pre_remind_before_seconds": pre_secs,
             "is_pre_remind": False,
@@ -134,6 +172,7 @@ class Handlers:
         pre_payload = {
             **main_payload,
             "cron_expression": None,  # pre-remind is one-shot per occurrence
+            "rrule": None,
             "requires_confirmation": False,
             "is_pre_remind": True,
         }
@@ -144,7 +183,7 @@ class Handlers:
         self.store.remove(pre_job_id(str(messenger_name), task_id))
 
     def fire_due(self) -> int:
-        """Claim and deliver due jobs; re-arm cron jobs for the next tick."""
+        """Claim and deliver due jobs; re-arm cron/rrule jobs for the next tick."""
         fired = 0
         for jid, payload in self.store.due():
             if not self.store.claim(jid):
@@ -165,12 +204,14 @@ class Handlers:
                 self.store.remove(jid)
                 continue
 
-            cron = payload.get("cron_expression")
+            cron = _optional_str(payload.get("cron_expression"))
+            rule = _optional_str(payload.get("rrule"))
             pre_secs = _as_positive_int(payload.get("pre_remind_before_seconds"))
             messenger = str(payload.get("messenger_name") or "telegram")
             task_id = payload.get("task_id")
-            if cron:
-                nxt = _next_cron(str(cron), datetime.now(timezone.utc))
+            dtstart = parse_datetime(payload.get("dtstart"))
+            nxt = _next_recurrence(cron, rule, datetime.now(timezone.utc), dtstart=dtstart)
+            if nxt is not None:
                 self.store.upsert(jid, nxt, payload)
                 self._sync_pre_remind(
                     pre_job_id(messenger, task_id),

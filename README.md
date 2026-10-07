@@ -111,12 +111,13 @@ The API publishes messages to RabbitMQ using a simple, Celery-style JSON contrac
     "<start_date>",
     "<cron_expression|null>",
     "<requires_confirmation>",
-    "<pre_remind_before_seconds|null>"
+    "<pre_remind_before_seconds|null>",
+    "<rrule|null>"
   ]
 }
 ```
 
-This payload is represented in code by the low-level `queue.TaskMessage` struct and is sent via the `queue.Publisher` interface. At the domain level, task messages are modeled as `queue.TaskEvent` with a `TaskEventType` (`schedule_task`, `delete_task`, etc.), which are mapped to the Celery-style JSON. The seventh argument still reflects the task row’s `cron_expression` only; executable child tasks usually have both `cron_expression` and `rrule` unset, with the parent holding `rrule` in the database. Workers that need the RRULE string should resolve it via `task_id` (for example from the API or DB). The ninth argument is optional preliminary-reminder offset in seconds (`null` when unset); sample worker schedules a separate `{messenger}_{task_id}_pre` job. For deployments that should not use RabbitMQ, set `producer.enabled: false` in the config – the application will then use a no-op publisher and work purely at the database level.
+This payload is represented in code by the low-level `queue.TaskMessage` struct and is sent via the `queue.Publisher` interface. At the domain level, task messages are modeled as `queue.TaskEvent` with a `TaskEventType` (`schedule_task`, `delete_task`, etc.), which are mapped to the Celery-style JSON. The seventh and tenth arguments mirror the executable row’s `cron_expression` and `rrule` (domain: never both set). Confirmation-series children usually have both `null`; the parent keeps the rule in the database and core creates the next child. For `requires_confirmation=false` recurring rows, the worker can re-arm from cron or RRULE. The ninth argument is optional preliminary-reminder offset in seconds (`null` when unset); sample worker schedules a separate `{messenger}_{task_id}_pre` job. Older workers that only unpack nine args remain compatible if they ignore a trailing tenth value or use defaults. For deployments that should not use RabbitMQ, set `producer.enabled: false` in the config – the application will then use a no-op publisher and work purely at the database level.
 
 `internal/models.ScheduledTask` uses explicit action values (`"schedule"`, `"delete"`) via `ScheduledTaskActionSchedule` and `ScheduledTaskActionDelete` constants, which are dispatched in `TaskService.QueueTask` and converted into `queue.TaskEvent` instances before publishing.
 
@@ -869,7 +870,7 @@ Optional **preliminary reminder** fired before the main `start_date`. Stored as 
 |-----------|----------|
 | **JSON** | Optional `pre_remind_before_seconds` on create/update. Responses include the field when set. Update with `0` clears it. |
 | **Children** | Recurrence children inherit the parent’s offset on create; parent updates propagate to active children. |
-| **Queue** | 9th argument of `worker.schedule_task` (integer seconds or `null`). Changing the offset (or `start_date` / recurrence) republishes schedule so the worker recalculates both jobs. |
+| **Queue** | 9th argument of `worker.schedule_task` (integer seconds or `null`); 10th is `rrule`. Changing the offset (or `start_date` / recurrence) republishes schedule so the worker recalculates both jobs. |
 | **Worker** | Main job id `{messenger}_{task_id}`; pre job `{messenger}_{task_id}_pre` at `start_date − offset`. Pre webhook text uses `⏳` and has **no** done/later buttons. `delete_task` removes both. If pre fire time is already past at schedule time, the pre job is skipped/removed. |
 | **Mute** | Same as main: while muted, no `schedule_task`; `delete_task` clears both jobs. |
 

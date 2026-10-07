@@ -13,19 +13,23 @@ const (
 // TaskEvent is a high-level, typed contract for task-related events.
 // It is mapped to the low-level TaskMessage used by workers (Celery-style).
 type TaskEvent struct {
-	Type                   TaskEventType `json:"type"`
-	TaskID                 int64         `json:"task_id"`
-	UserID                 int64         `json:"user_id,omitempty"`
-	MessengerName          string        `json:"messenger_name,omitempty"`
-	ChatID                 string        `json:"chat_id,omitempty"`
-	Title                  string        `json:"title,omitempty"`
-	Description            string        `json:"description,omitempty"`
-	StartDate              *time.Time    `json:"start_date,omitempty"`
-	CronExpression         *string       `json:"cron_expression,omitempty"`
-	RequiresConfirmation   bool          `json:"requires_confirmation,omitempty"`
+	Type                 TaskEventType `json:"type"`
+	TaskID               int64         `json:"task_id"`
+	UserID               int64         `json:"user_id,omitempty"`
+	MessengerName        string        `json:"messenger_name,omitempty"`
+	ChatID               string        `json:"chat_id,omitempty"`
+	Title                string        `json:"title,omitempty"`
+	Description          string        `json:"description,omitempty"`
+	StartDate            *time.Time    `json:"start_date,omitempty"`
+	CronExpression       *string       `json:"cron_expression,omitempty"`
+	RequiresConfirmation bool          `json:"requires_confirmation,omitempty"`
 	// PreRemindBeforeSeconds is optional; nil or <=0 means no preliminary reminder.
 	// Passed as the 9th schedule_task arg (null when unset) for worker dual-job scheduling.
 	PreRemindBeforeSeconds *int64 `json:"pre_remind_before_seconds,omitempty"`
+	// RRule is optional iCalendar RRULE on the executable row (mutually exclusive with
+	// CronExpression in the domain). Passed as the 10th schedule_task arg (null when unset).
+	// Confirmation children usually have both recurrence args null; the parent keeps the rule in DB.
+	RRule *string `json:"rrule,omitempty"`
 }
 
 // ToTaskMessage converts a high-level TaskEvent into the concrete TaskMessage
@@ -35,7 +39,8 @@ func (e TaskEvent) ToTaskMessage() TaskMessage {
 	switch e.Type {
 	case TaskEventSchedule:
 		// Celery worker expects:
-		// [messenger_name, chat_id, task_id, title, description, start_date, cron_expression, requires_confirmation, pre_remind_before_seconds]
+		// [messenger_name, chat_id, task_id, title, description, start_date,
+		//  cron_expression, requires_confirmation, pre_remind_before_seconds, rrule]
 		var preRemind interface{}
 		if e.PreRemindBeforeSeconds != nil && *e.PreRemindBeforeSeconds > 0 {
 			preRemind = *e.PreRemindBeforeSeconds
@@ -52,6 +57,7 @@ func (e TaskEvent) ToTaskMessage() TaskMessage {
 				e.CronExpression,
 				e.RequiresConfirmation,
 				preRemind,
+				e.RRule,
 			},
 		}
 	case TaskEventDelete:
@@ -77,8 +83,8 @@ func (e TaskEvent) ToTaskMessage() TaskMessage {
 				e.StartDate,
 				e.CronExpression,
 				e.RequiresConfirmation,
+				e.RRule,
 			},
 		}
 	}
 }
-

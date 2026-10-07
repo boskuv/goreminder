@@ -1233,8 +1233,9 @@ func TestTaskService_UpdateTask_PreRemindChangePublishesSchedule(t *testing.T) {
 	require.Len(t, pub.published, 1)
 	msg := pub.published[0].(queue.TaskMessage)
 	assert.Equal(t, "worker.schedule_task", msg.Task)
-	require.Len(t, msg.Args, 9)
+	require.Len(t, msg.Args, 10)
 	assert.Equal(t, int64(900), msg.Args[8])
+	assert.Nil(t, msg.Args[9])
 }
 
 func TestTaskService_UpdateTask_RecurringPastStartDate_PublishesScheduleOnTitleChange(t *testing.T) {

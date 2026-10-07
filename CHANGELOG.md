@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - **Tasks — skip digest (`skip_digest`)**: boolean column `tasks.skip_digest` (migration `20261006120000_add_column_skip_digest_to_tasks_table.sql`, default `false`). **API**: optional on create/update (`POST /api/v1/tasks`, `PUT /api/v1/tasks/{id}`). Task JSON responses always include the `skip_digest` key. **Digest**: `GET /api/v1/digests` omits rows with `skip_digest=true`. Lists, reminders, mute, and autoreschedule are unchanged. Recurrence children inherit the flag on create; parent updates propagate it to active children. The change is recorded in task history.
 
 ### Changed
+- **Queue — `worker.schedule_task`**: 10th arg is optional `rrule` (`null` when unset). Mirrors the executable task row alongside `cron_expression` (7th). Confirmation children still send both recurrence args as `null`. Sample worker re-arms from RRULE via `python-dateutil`. Older 9-arg consumers remain compatible if they ignore a trailing arg.
 - **Calendar bindings**: `calendar_summary` is refreshed from Google CalendarList on each import/both poll and on force sync (including export-only); display-only, does not change `google_calendar_id`.
 
 ### Fixed
