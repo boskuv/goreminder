@@ -17,7 +17,7 @@
 |---|---|
 | **Start here** | [Features](#business-features) · [Prerequisites](#prerequisites) · [Quick start](#setup-instructions) |
 | **Reference** | [Configuration](#configuration) · [API](#api-documentation) · [Filtering](#filtering-and-ordering) |
-| **Domain** | [Muting](#task-muting-muted) · [Skip digest](#skip-digest-skip_digest) · [Pre-remind](#pre-remind-pre_remind_before_seconds) · [Task types](#task-types) · [Schema](#database-schema) · [CHANGELOG](CHANGELOG.md) |
+| **Domain** | [Muting](#task-muting-muted) · [Skip digest](#skip-digest-skip_digest) · [Pre-remind](#pre-remind-pre_remind_before_seconds) · [Task types](#task-types) · [Shift on done](#mark-as-done-behavior) · [Schema](#database-schema) · [CHANGELOG](CHANGELOG.md) |
 | **Integrations** | [Google Calendar](docs/google-calendar.md) ([matrix](docs/google-calendar.md#behavior-matrix-direction--task-type), [bot](docs/google-calendar-bot.md), [test plan](docs/google-calendar-test-plan.md)) |
 | **Dev** | [Testing](#testing) · [Development](#development) · [Architecture](#architecture) |
 
@@ -29,10 +29,11 @@
 - [x] **Backlog Zone**: Tasks without fixed time and confirmation requirements
 - [x] **Targets/Goals Management**: Create and track targets (aims/goals) with completion tracking
 - [x] **Task Muting**: Per-task silence for the worker queue (see [Task muting (`muted`)](#task-muting-muted)).
-- [x] **Reminder Groups**: Group related tasks together for batch management / calendar sync scope
+- [x] **Reminder Groups**: Task groups for batch management and Google Calendar sync scope
 - [ ] **ICS Import**: Import tasks from iCalendar (.ics) files
-- [x] **Google Calendar**: Per-user OAuth, multi-calendar import/export of Events (see [docs/google-calendar.md](docs/google-calendar.md))
+- [x] **Google Calendar**: Per-user OAuth, multi-calendar import/export/both of Events, outbox + import retry (see [docs/google-calendar.md](docs/google-calendar.md))
 - [x] **Advanced Reminders**: Optional preliminary reminder before `start_date` (`pre_remind_before_seconds`; see [Pre-remind](#pre-remind-pre_remind_before_seconds)).
+- [x] **Shift from completion**: Confirmation series can rebase from done date (`shift_from_completion`; blocked when parent has a calendar sync link).
 
 ## Tech Features
 - **Task Management**: Create, fetch, update, and delete tasks with soft delete support
@@ -136,17 +137,27 @@ erDiagram
     users ||--o{ targets : "has"
     users ||--o{ digest_settings : "has"
     users ||--o{ task_history : "has"
-    
+    users ||--o{ task_groups : "has"
+    users ||--o{ google_accounts : "has"
+    users ||--o{ calendar_bindings : "has"
+
     messengers ||--o{ user_messengers : "has"
-    
+
     user_messengers ||--o{ tasks : "references"
     user_messengers ||--o{ backlogs : "references"
     user_messengers ||--o{ targets : "references"
     user_messengers ||--o{ digest_settings : "references"
-    
+    user_messengers ||--o{ calendar_bindings : "import mru"
+
+    task_groups ||--o{ tasks : "scopes"
+    task_groups ||--o{ calendar_bindings : "scopes"
+
+    google_accounts ||--o{ calendar_bindings : "has"
+    calendar_bindings ||--o{ task_sync_links : "links"
+    tasks ||--o{ task_sync_links : "external"
     tasks ||--o{ tasks : "parent-child"
     tasks ||--o{ task_history : "has"
-    
+
     users {
         bigserial id PK
         varchar name
@@ -155,11 +166,12 @@ erDiagram
         varchar timezone
         varchar language_code
         varchar role
+        timestamp last_activity_at
         timestamp created_at
         timestamp updated_at
         timestamp deleted_at
     }
-    
+
     tasks {
         bigserial id PK
         varchar title
@@ -167,12 +179,14 @@ erDiagram
         bigint user_id FK
         integer messenger_related_user_id FK
         bigint parent_id FK
+        bigint group_id FK
         timestamp start_date
         timestamp finish_date
         varchar cron_expression
         text rrule
         boolean requires_confirmation
         boolean muted
+        boolean shift_from_completion
         boolean skip_digest
         bigint pre_remind_before_seconds
         varchar status
@@ -180,13 +194,13 @@ erDiagram
         timestamp updated_at
         timestamp deleted_at
     }
-    
+
     messengers {
         serial id PK
         varchar name UK
         timestamp created_at
     }
-    
+
     user_messengers {
         serial id PK
         integer user_id FK
@@ -197,7 +211,80 @@ erDiagram
         timestamp updated_at
         timestamp deleted_at
     }
-    
+
+    task_groups {
+        bigserial id PK
+        bigint user_id FK
+        varchar name
+        timestamp created_at
+        timestamp updated_at
+        timestamp deleted_at
+    }
+
+    google_accounts {
+        bigserial id PK
+        bigint user_id FK
+        varchar google_sub UK
+        varchar email
+        bytea access_token_enc
+        bytea refresh_token_enc
+        timestamp token_expiry
+        text scopes
+        timestamp revoked_at
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    calendar_bindings {
+        bigserial id PK
+        bigint user_id FK
+        bigint google_account_id FK
+        varchar google_calendar_id
+        varchar calendar_summary
+        varchar direction
+        bigint group_id FK
+        integer messenger_related_user_id FK
+        text sync_token
+        timestamp last_synced_at
+        text last_error
+        varchar status
+        varchar delete_policy
+        integer sync_attempts
+        timestamp next_retry_at
+        timestamp created_at
+        timestamp updated_at
+        timestamp deleted_at
+    }
+
+    task_sync_links {
+        bigserial id PK
+        bigint task_id FK
+        varchar provider
+        varchar google_calendar_id
+        varchar google_event_id
+        varchar origin
+        boolean sync_enabled
+        boolean export_opt_in
+        bigint calendar_binding_id FK
+        integer duration_seconds
+        timestamp last_synced_at
+        text last_error
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    sync_outbox {
+        bigserial id PK
+        varchar kind
+        jsonb payload
+        integer attempts
+        timestamp next_retry_at
+        text last_error
+        varchar status
+        timestamp created_at
+        timestamp updated_at
+    }
+
     backlogs {
         bigserial id PK
         varchar title
@@ -209,7 +296,7 @@ erDiagram
         timestamp completed_at
         timestamp deleted_at
     }
-    
+
     targets {
         bigserial id PK
         varchar title
@@ -221,7 +308,7 @@ erDiagram
         timestamp completed_at
         timestamp deleted_at
     }
-    
+
     digest_settings {
         bigserial id PK
         bigint user_id FK
@@ -232,7 +319,7 @@ erDiagram
         timestamp created_at
         timestamp updated_at
     }
-    
+
     task_history {
         bigserial id PK
         bigint task_id FK
@@ -246,31 +333,31 @@ erDiagram
 
 ### Table Relationships
 
-- **users** ↔ **tasks**: One-to-many (CASCADE delete)
-- **users** ↔ **user_messengers**: One-to-many (CASCADE delete)
-- **users** ↔ **backlogs**: One-to-many (CASCADE delete)
-- **users** ↔ **targets**: One-to-many (CASCADE delete)
-- **users** ↔ **digest_settings**: One-to-many (CASCADE delete)
-- **users** ↔ **task_history**: One-to-many (CASCADE delete)
+- **users** ↔ **tasks** / **user_messengers** / **backlogs** / **targets** / **digest_settings** / **task_history** / **task_groups** / **google_accounts** / **calendar_bindings**: One-to-many (CASCADE delete where applicable)
 - **messengers** ↔ **user_messengers**: One-to-many (CASCADE delete)
-- **user_messengers** ↔ **tasks**: One-to-many (SET NULL on delete)
-- **user_messengers** ↔ **backlogs**: One-to-many (SET NULL on delete)
-- **user_messengers** ↔ **targets**: One-to-many (SET NULL on delete)
-- **user_messengers** ↔ **digest_settings**: One-to-many (SET NULL on delete)
-- **tasks** ↔ **tasks**: Self-referential (parent-child relationship for recurring tasks)
+- **user_messengers** ↔ **tasks** / **backlogs** / **targets** / **digest_settings** / **calendar_bindings**: optional FK (SET NULL on delete)
+- **task_groups** ↔ **tasks** / **calendar_bindings**: optional scope (`group_id`; SET NULL on delete). Soft-delete of a group is **blocked (409)** while a binding still references it
+- **google_accounts** ↔ **calendar_bindings**: One-to-many (CASCADE delete)
+- **calendar_bindings** ↔ **task_sync_links**: optional FK (SET NULL on delete)
+- **tasks** ↔ **task_sync_links**: One-to-many (CASCADE delete); `origin` = `imported` | `exported`
+- **tasks** ↔ **tasks**: Self-referential parent-child for confirmation series
 - **tasks** ↔ **task_history**: One-to-many (CASCADE delete)
+- **sync_outbox**: standalone work queue for calendar export/import side effects (not attachment outbox)
 
 ### Key Features
 
-- **Soft Deletes**: `users`, `tasks`, `user_messengers`, `backlogs`, and `targets` support soft deletes via `deleted_at` column
-- **Recurring Tasks**: Tasks can have a `parent_id` pointing to another task, enabling parent-child relationships for recurring tasks. Recurrence on the parent is defined by either `cron_expression` or `rrule` (iCalendar RRULE), never both.
-- **Task History**: All task changes are tracked in `task_history` table with JSONB fields for old/new values
-- **Messenger Integration**: Users can link multiple messenger accounts via `user_messengers` table
-- **Digest Settings**: Users can configure daily digest times per messenger account
+- **Soft Deletes**: `users`, `tasks`, `user_messengers`, `backlogs`, `targets`, `task_groups`, and `calendar_bindings` use `deleted_at`
+- **Recurring Tasks**: `parent_id` + parent `cron_expression` **or** `rrule` (never both). Optional `shift_from_completion` on confirmation parents (409 if a `task_sync_links` row exists)
+- **Task flags**: `muted` (queue), `skip_digest` (digest omit), `pre_remind_before_seconds` (preliminary reminder)
+- **Google Calendar**: `google_accounts` (encrypted tokens) → `calendar_bindings` (`import`/`export`/`both`, `delete_policy`, import retry via `sync_attempts`/`next_retry_at`) → `task_sync_links` (`export_opt_in` for per-task export) + `sync_outbox`
+- **Task History**: JSONB old/new values; calendar import may set `source: google_calendar_import`
+- **Messenger Integration**: multi-messenger via `user_messengers` (mru); import/both bindings can set default mru for reminders
+- **Digest Settings**: daily digest times per messenger account
+- **Activity**: `users.last_activity_at` for recently active users API
 
 ### Alternative Visualization
 
-For a more detailed interactive diagram, you can use the [dbdiagram.io](https://dbdiagram.io) file located at `docs/database_schema.dbml`. Simply copy the contents and paste them into dbdiagram.io for an interactive ER diagram.
+Interactive ER: paste [`docs/database_schema.dbml`](docs/database_schema.dbml) into [dbdiagram.io](https://dbdiagram.io). Keep that file aligned with `migrations/` and `internal/repository/schema_test.go`.
 
 </details>
 
@@ -743,7 +830,9 @@ Access Swagger UI at: `http://localhost:8080/docs/index.html`
 | `/api/v1/tasks/:id/unmute` | POST | Set `muted=false` and republish `schedule_task` where applicable | - |
 | `/api/v1/tasks/:id` | DELETE | Soft delete task | - |
 | `/api/v1/tasks/:id/history` | GET | Get task history | - |
-| `/api/v1/tasks/:id/done` | POST | Mark task as done | - |
+| `/api/v1/tasks/:id/done` | POST | Mark task as done (optional `shift_from_completion` body) | - |
+| `/api/v1/tasks/:id/calendar/export` | POST | Opt task into Google export (`export_opt_in`) | - |
+| `/api/v1/tasks/:id/calendar/external` | GET | Task ↔ Google link (`origin`, `sync_enabled`, …) | - |
 | `/api/v1/tasks/:id/attachments` | GET | List task attachments (`ready` / `pending`) | - |
 | `/api/v1/tasks/:id/attachments` | POST | Presigned init (JSON) **or** direct upload (`multipart/form-data`, field `file`) | - |
 | `/api/v1/tasks/:id/attachments/:attachment_id/complete` | POST | Complete upload after S3 PUT | - |
@@ -813,6 +902,35 @@ Activity is recorded on successful user-driven mutations (tasks, users, backlogs
 | `/api/v1/digests/settings/all` | GET | Get all digest settings | `page`, `page_size`, `order_by`, `user_id`, `messenger_user_id` |
 
 `GET /api/v1/digests` returns the user's tasks for the requested `start_date` window (inclusive), up to 1000 rows ordered by `start_date`. Rows with `skip_digest=true` are left out. `messenger_related_user_id` / `messenger_user_id` only fill `chat_id`; they do not filter the task list.
+
+### Task groups
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/task-groups` | GET | List task groups |
+| `/api/v1/task-groups` | POST | Create task group |
+| `/api/v1/task-groups/:id` | GET | Get task group |
+| `/api/v1/task-groups/:id` | PUT | Update task group |
+| `/api/v1/task-groups/:id` | DELETE | Soft-delete task group (**409** if a calendar binding still has this `group_id`) |
+
+### Google Calendar
+
+Enabled when `googleCalendar.enabled: true`. Full matrix, smoke test, and bot playbook: [docs/google-calendar.md](docs/google-calendar.md).
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/users/:user_id/calendar/oauth/start` | GET | OAuth consent URL |
+| `/api/v1/calendar/oauth/callback` | GET | OAuth redirect (stores encrypted tokens) |
+| `/api/v1/users/:user_id/calendar/calendars` | GET | List Google calendars |
+| `/api/v1/users/:user_id/calendar/bindings` | GET / POST | List / create bindings (`import`/`export`/`both`) |
+| `/api/v1/users/:user_id/calendar/bindings/:binding_id` | DELETE | Unbind (applies `delete_policy`) |
+| `/api/v1/users/:user_id/calendar/bindings/:binding_id/sync` | POST | Force sync |
+| `/api/v1/users/:user_id/calendar/sync-status` | GET | Bindings + outbox health |
+| `/api/v1/users/:user_id/calendar/disconnect` | DELETE | Revoke Google account + tear down bindings |
+| `/api/v1/tasks/:id/calendar/export` | POST | Per-task export opt-in |
+| `/api/v1/tasks/:id/calendar/external` | GET | Sync link metadata |
+
+Task list filter: `external_provider=google_calendar`. There is no per-task unbind API yet (see [bot gaps](docs/google-calendar-bot.md#7-api-gap-list-for-later-core-work)).
 
 ### System
 

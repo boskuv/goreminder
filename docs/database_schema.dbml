@@ -1,5 +1,6 @@
 // GoReminder Database Schema
-// This file can be imported into https://dbdiagram.io for visualization
+// Source of truth for columns: migrations/ + internal/repository/schema_test.go
+// Visualize at https://dbdiagram.io
 
 Table users {
   id bigserial [pk]
@@ -9,11 +10,12 @@ Table users {
   timezone varchar(64)
   language_code varchar(16)
   role varchar(32)
+  last_activity_at timestamp
   created_at timestamp [default: `CURRENT_TIMESTAMP`]
   updated_at timestamp
   deleted_at timestamp
 
-  Note: 'User accounts with timezone and language support'
+  Note: 'User accounts; last_activity_at updated on user-driven mutations'
 }
 
 Table tasks {
@@ -21,20 +23,24 @@ Table tasks {
   title varchar(255) [not null]
   description text
   user_id bigint [not null, ref: > users.id]
-  messenger_related_user_id integer [ref: - user_messengers.id]
-  parent_id bigint [ref: - tasks.id]
+  messenger_related_user_id integer [ref: > user_messengers.id]
+  parent_id bigint [ref: > tasks.id]
+  group_id bigint [ref: > task_groups.id]
   start_date timestamp
   finish_date timestamp
   cron_expression varchar(255)
   rrule varchar(255)
   requires_confirmation boolean [default: true]
   muted boolean [not null, default: false]
+  shift_from_completion boolean [not null, default: false]
+  skip_digest boolean [not null, default: false]
+  pre_remind_before_seconds bigint
   status varchar(50) [default: 'pending']
   created_at timestamp [default: `CURRENT_TIMESTAMP`]
   updated_at timestamp
   deleted_at timestamp
 
-  Note: 'Tasks with support for recurring tasks (parent-child relationship)'
+  Note: 'Tasks: recurrence via cron XOR rrule; group_id scopes calendar export; shift_from_completion on confirmation parents only'
 }
 
 Table messengers {
@@ -42,7 +48,7 @@ Table messengers {
   name varchar(50) [not null, unique]
   created_at timestamp [default: `CURRENT_TIMESTAMP`]
 
-  Note: 'Messenger types (e.g., telegram, whatsapp)'
+  Note: 'Messenger types (e.g., telegram)'
 }
 
 Table user_messengers {
@@ -55,10 +61,105 @@ Table user_messengers {
   updated_at timestamp [default: `CURRENT_TIMESTAMP`]
   deleted_at timestamp
 
-  Note: 'Links users to their messenger accounts'
+  Note: 'Links users to messenger accounts (mru)'
   indexes {
     (user_id, messenger_id, chat_id) [unique]
   }
+}
+
+Table task_groups {
+  id bigserial [pk]
+  user_id bigint [not null, ref: > users.id]
+  name varchar(255) [not null]
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  deleted_at timestamp
+
+  Note: 'Named task groups; used as calendar import/export scope. Soft-delete blocked (409) while a calendar_binding references group_id'
+}
+
+Table google_accounts {
+  id bigserial [pk]
+  user_id bigint [not null, ref: > users.id]
+  google_sub varchar(255) [not null, unique]
+  email varchar(255) [not null]
+  access_token_enc bytea [not null]
+  refresh_token_enc bytea [not null]
+  token_expiry timestamp [not null]
+  scopes text [not null, default: '']
+  revoked_at timestamp
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Per-user Google OAuth; tokens encrypted at rest'
+  indexes {
+    (user_id, google_sub) [unique]
+  }
+}
+
+Table calendar_bindings {
+  id bigserial [pk]
+  user_id bigint [not null, ref: > users.id]
+  google_account_id bigint [not null, ref: > google_accounts.id]
+  google_calendar_id varchar(255) [not null]
+  calendar_summary varchar(512)
+  direction varchar(16) [not null, default: 'import', note: 'import | export | both']
+  group_id bigint [ref: > task_groups.id]
+  messenger_related_user_id integer [ref: > user_messengers.id]
+  sync_token text
+  last_synced_at timestamp
+  last_error text
+  status varchar(32) [not null, default: 'active', note: 'active | error | disconnected']
+  delete_policy varchar(32) [not null, default: 'soft_delete_imported', note: 'soft_delete_imported | mute_imported | keep']
+  sync_attempts integer [not null, default: 0]
+  next_retry_at timestamp
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  deleted_at timestamp
+
+  Note: 'Per-calendar sync binding. mru on import/both publishes schedule_task. status=error pauses auto-import (backoff), not export'
+  indexes {
+    (google_account_id, google_calendar_id) [unique]
+  }
+}
+
+Table task_sync_links {
+  id bigserial [pk]
+  task_id bigint [not null, ref: > tasks.id]
+  provider varchar(64) [not null, default: 'google_calendar']
+  google_calendar_id varchar(255) [not null]
+  google_event_id varchar(255) [not null]
+  etag varchar(255)
+  google_updated_at timestamp
+  origin varchar(16) [not null, note: 'imported | exported']
+  sync_enabled boolean [not null, default: true]
+  export_opt_in boolean [not null, default: false]
+  calendar_binding_id bigint [ref: > calendar_bindings.id]
+  duration_seconds integer
+  last_synced_at timestamp
+  last_error text
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Task ↔ Google Event link. export_opt_in=true from POST /tasks/{id}/calendar/export (keeps event if task leaves group)'
+  indexes {
+    (task_id, provider, google_event_id) [unique]
+    (provider, google_calendar_id, google_event_id) [unique]
+  }
+}
+
+Table sync_outbox {
+  id bigserial [pk]
+  kind varchar(64) [not null]
+  payload jsonb [not null, default: `{}`]
+  attempts integer [not null, default: 0]
+  next_retry_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  last_error text
+  status varchar(16) [not null, default: 'pending', note: 'pending | processing | done | failed']
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Async calendar export/import side effects (not attachment_outbox)'
 }
 
 Table backlogs {
@@ -66,7 +167,7 @@ Table backlogs {
   title varchar(255) [not null]
   description text
   user_id bigint [not null, ref: > users.id]
-  messenger_related_user_id integer [ref: - user_messengers.id]
+  messenger_related_user_id integer [ref: > user_messengers.id]
   created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
   updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
   completed_at timestamp
@@ -80,19 +181,19 @@ Table targets {
   title varchar(255) [not null]
   description text
   user_id bigint [not null, ref: > users.id]
-  messenger_related_user_id integer [ref: - user_messengers.id]
+  messenger_related_user_id integer [ref: > user_messengers.id]
   created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
   updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
   completed_at timestamp
   deleted_at timestamp
 
-  Note: 'Target items (aims/goals) for goal tracking'
+  Note: 'Target items (aims/goals)'
 }
 
 Table digest_settings {
   id bigserial [pk]
   user_id bigint [not null, ref: > users.id]
-  messenger_related_user_id integer [ref: - user_messengers.id]
+  messenger_related_user_id integer [ref: > user_messengers.id]
   enabled boolean [not null, default: true]
   weekday_time varchar(5) [not null, default: '07:00']
   weekend_time varchar(5) [not null, default: '10:00']
@@ -114,6 +215,5 @@ Table task_history {
   new_value jsonb
   created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
 
-  Note: 'Audit log for task changes'
+  Note: 'Audit log; calendar import writes source google_calendar_import in old/new value'
 }
-
