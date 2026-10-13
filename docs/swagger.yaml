@@ -3374,7 +3374,8 @@ paths:
         in: query
         name: messenger_user_id
         type: string
-      - description: Filter by title substring (case-insensitive)
+      - description: 'Filter by title substring (case-insensitive, UTF-8: Cyrillic/emoji
+          allowed)'
         in: query
         name: title
         type: string

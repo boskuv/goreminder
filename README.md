@@ -1120,7 +1120,7 @@ GET /api/v1/tasks?page=1&page_size=20&status=pending&start_date_from=2024-01-01T
 
 `GET /api/v1/users/:user_id/tasks` supports the same task filters (including `status`, date ranges, and cron/recurrence flags) plus:
 
-- **`title`** (string, optional): Case-insensitive substring match on task title (`ILIKE '%…%'`). Special LIKE characters (`%`, `_`) in the query are escaped and matched literally.
+- **`title`** (string, optional): Case-insensitive substring match on task title (`ILIKE '%…%'`). Accepts UTF-8 (Cyrillic, emoji, etc.); control characters are rejected. Special LIKE characters (`%`, `_`) in the query are escaped and matched literally.
 - **`messenger_related_user_id`** (int, optional): Filter by the internal `user_messengers` link ID. Preferred when the client already knows it. If both this and `messenger_user_id` are set, `messenger_related_user_id` wins.
 - **`messenger_user_id`** (string, optional): Filter by the external messenger user identifier (resolved to `messenger_related_user_id` via `user_messengers`). Returns an empty list when no matching link exists for that user.
 

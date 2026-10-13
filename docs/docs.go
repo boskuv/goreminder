@@ -3238,7 +3238,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Filter by title substring (case-insensitive)",
+                        "description": "Filter by title substring (case-insensitive, UTF-8: Cyrillic/emoji allowed)",
                         "name": "title",
                         "in": "query"
                     }

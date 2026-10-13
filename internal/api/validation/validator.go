@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/gin-gonic/gin"
@@ -183,13 +185,37 @@ func HandleValidationError(c *gin.Context, err error) {
 	})
 }
 
-// ValidateOptionalStringQuery validates an optional query parameter as string
+// ValidateOptionalStringQuery validates an optional query parameter as printable ASCII string
 func ValidateOptionalStringQuery(c *gin.Context, paramName string) (string, error) {
 	paramValue := c.Query(paramName)
 	if paramValue != "" && !govalidator.IsPrintableASCII(paramValue) {
 		return "", fmt.Errorf("query parameter '%s' contains invalid characters", paramName)
 	}
 	return paramValue, nil
+}
+
+// ValidateOptionalUTF8StringQuery validates an optional query parameter as printable UTF-8
+// (Cyrillic, emoji, etc.). Rejects invalid UTF-8 and control characters.
+func ValidateOptionalUTF8StringQuery(c *gin.Context, paramName string) (string, error) {
+	paramValue := c.Query(paramName)
+	if paramValue != "" && !isPrintableUTF8(paramValue) {
+		return "", fmt.Errorf("query parameter '%s' contains invalid characters", paramName)
+	}
+	return paramValue, nil
+}
+
+// isPrintableUTF8 reports whether s is valid UTF-8 and contains only printable runes
+// (letters, marks, numbers, punctuation, symbols, and ASCII space).
+func isPrintableUTF8(s string) bool {
+	if !utf8.ValidString(s) {
+		return false
+	}
+	for _, r := range s {
+		if !unicode.IsPrint(r) {
+			return false
+		}
+	}
+	return true
 }
 
 // ValidateOptionalTimeQuery validates an optional query parameter as time.Time

@@ -199,7 +199,7 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 // @Param exclude_cron_with_confirmation query bool false "Exclude tasks where cron_expression IS NOT NULL AND requires_confirmation == True (implements: NOT (cron_expression IS NOT NULL AND requires_confirmation == True))"
 // @Param messenger_related_user_id query int false "Filter by messenger_related_user_id (internal link ID; preferred when known)"
 // @Param messenger_user_id query string false "Filter by messenger_user_id"
-// @Param title query string false "Filter by title substring (case-insensitive)"
+// @Param title query string false "Filter by title substring (case-insensitive, UTF-8: Cyrillic/emoji allowed)"
 // @Success 200 {object} dto.PaginatedTasksResponse "Paginated list of tasks"
 // @Failure 400 {object} dto.ErrorResponse "Bad request"
 // @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
@@ -362,7 +362,7 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		externalProviderPtr = &externalProvider
 	}
 
-	title, err := validation.ValidateOptionalStringQuery(c, "title")
+	title, err := validation.ValidateOptionalUTF8StringQuery(c, "title")
 	if err != nil {
 		log.Info().Err(err).Msg("invalid title query parameter")
 		validation.HandleValidationError(c, err)
