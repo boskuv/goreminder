@@ -57,7 +57,7 @@ func (s *stubTaskService) GetTask(ctx context.Context, taskID int64) (*models.Ta
 	}
 	return s.getTask(ctx, taskID)
 }
-func (s *stubTaskService) GetUserTasks(context.Context, int64, int, int, string, *time.Time, *time.Time, *time.Time, *time.Time, *bool, *string, *string, *string, *bool, *bool, *int, *string, *string) ([]*models.Task, int, error) {
+func (s *stubTaskService) GetUserTasks(context.Context, int64, int, int, string, *time.Time, *time.Time, *time.Time, *time.Time, *bool, *string, *string, *string, *bool, *bool, *int, *string, *string, *string) ([]*models.Task, int, error) {
 	panic("unexpected GetUserTasks")
 }
 func (s *stubTaskService) UpdateTask(ctx context.Context, taskID int64, req *models.TaskUpdateRequest) (*models.Task, error) {

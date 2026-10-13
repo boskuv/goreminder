@@ -180,7 +180,7 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 }
 
 // @Summary Get all user's tasks by userID
-// @Description Retrieves all tasks by userID with pagination, ordering, and filtering (by status, status_not, start_date_from, start_date_to, created_at_from, created_at_to, cron_expression, cron_expression_is_null, requires_confirmation, exclude_cron_with_confirmation, messenger_related_user_id, messenger_user_id)
+// @Description Retrieves all tasks by userID with pagination, ordering, and filtering (by status, status_not, start_date_from, start_date_to, created_at_from, created_at_to, cron_expression, cron_expression_is_null, requires_confirmation, exclude_cron_with_confirmation, messenger_related_user_id, messenger_user_id, title)
 // @Tags Tasks
 // @Produce json
 // @Param user_id path int true "User ID"
@@ -199,6 +199,7 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 // @Param exclude_cron_with_confirmation query bool false "Exclude tasks where cron_expression IS NOT NULL AND requires_confirmation == True (implements: NOT (cron_expression IS NOT NULL AND requires_confirmation == True))"
 // @Param messenger_related_user_id query int false "Filter by messenger_related_user_id (internal link ID; preferred when known)"
 // @Param messenger_user_id query string false "Filter by messenger_user_id"
+// @Param title query string false "Filter by title substring (case-insensitive)"
 // @Success 200 {object} dto.PaginatedTasksResponse "Paginated list of tasks"
 // @Failure 400 {object} dto.ErrorResponse "Bad request"
 // @Failure 422 {object} dto.ErrorResponse "Unprocessable entity"
@@ -361,6 +362,17 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		externalProviderPtr = &externalProvider
 	}
 
+	title, err := validation.ValidateOptionalStringQuery(c, "title")
+	if err != nil {
+		log.Info().Err(err).Msg("invalid title query parameter")
+		validation.HandleValidationError(c, err)
+		return
+	}
+	var titlePtr *string
+	if title != "" {
+		titlePtr = &title
+	}
+
 	log.Info().
 		Int64("user.id", userID).
 		Int64("page", page).
@@ -368,7 +380,7 @@ func (h *TaskHandler) GetUserTasks(c *gin.Context) {
 		Str("order_by", orderBy).
 		Msg("getting user tasks")
 
-	tasks, totalCount, err := h.taskService.GetUserTasks(ctx, userID, int(page), int(pageSize), orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, statusPtr, statusNotPtr, cronExpressionPtr, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserID, messengerUserIDPtr, externalProviderPtr)
+	tasks, totalCount, err := h.taskService.GetUserTasks(ctx, userID, int(page), int(pageSize), orderBy, startDateFrom, startDateTo, createdAtFrom, createdAtTo, requiresConfirmation, statusPtr, statusNotPtr, cronExpressionPtr, cronExpressionIsNull, excludeCronWithConfirmation, messengerRelatedUserID, messengerUserIDPtr, externalProviderPtr, titlePtr)
 	if err != nil {
 		errEvent(log, err).
 			Int64("user.id", userID).

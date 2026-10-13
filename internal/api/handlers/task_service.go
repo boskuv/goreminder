@@ -12,7 +12,7 @@ import (
 type TaskService interface {
 	CreateTask(ctx context.Context, task *models.Task) (int64, int64, error)
 	GetTask(ctx context.Context, taskID int64) (*models.Task, error)
-	GetUserTasks(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool, messengerRelatedUserID *int, messengerUserID *string, externalProvider *string) ([]*models.Task, int, error)
+	GetUserTasks(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool, messengerRelatedUserID *int, messengerUserID *string, externalProvider *string, title *string) ([]*models.Task, int, error)
 	UpdateTask(ctx context.Context, taskID int64, updateRequest *models.TaskUpdateRequest) (*models.Task, error)
 	DeleteTask(ctx context.Context, taskID int64) error
 	QueueTask(ctx context.Context, scheduledTask *models.ScheduledTask) error

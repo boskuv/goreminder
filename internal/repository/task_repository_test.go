@@ -243,7 +243,38 @@ func TestTaskRepository_GetTasksByUserIDWithPagination_ExcludesSkipDigest(t *tes
 	tasks, total, err := repo.GetTasksByUserIDWithPagination(
 		context.Background(),
 		userID, 1, 10, "start_date ASC",
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, &exclude,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, &exclude,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 0, total)
+	assert.Empty(t, tasks)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestTaskRepository_GetTasksByUserIDWithPagination_FilterByTitle(t *testing.T) {
+	repo, mock, cleanup := newTaskRepoWithMock(t)
+	defer cleanup()
+
+	userID := int64(5)
+	title := "meet_ing%"
+	expectedPattern := `%meet\_ing\%%`
+
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT COUNT(*) FROM tasks WHERE deleted_at IS NULL AND user_id = $1 AND title ILIKE $2`,
+	)).WithArgs(userID, expectedPattern).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, group_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted, shift_from_completion, skip_digest, pre_remind_before_seconds FROM tasks WHERE deleted_at IS NULL AND user_id = $1 AND title ILIKE $2 ORDER BY created_at DESC LIMIT 50 OFFSET 0`,
+	)).WithArgs(userID, expectedPattern).WillReturnRows(sqlmock.NewRows([]string{
+		"id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "group_id",
+		"start_date", "finish_date", "cron_expression", "rrule", "status", "created_at",
+		"requires_confirmation", "muted", "shift_from_completion", "skip_digest", "pre_remind_before_seconds",
+	}))
+
+	tasks, total, err := repo.GetTasksByUserIDWithPagination(
+		context.Background(),
+		userID, 1, 50, "created_at DESC",
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, &title, nil,
 	)
 	require.NoError(t, err)
 	assert.Equal(t, 0, total)

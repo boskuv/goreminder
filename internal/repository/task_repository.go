@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/squirrel"
@@ -24,7 +25,7 @@ type TaskRepository interface {
 	GetTaskByID(ctx context.Context, id int64) (*models.Task, error)
 	GetTaskByIDWithoutStatusFilter(ctx context.Context, id int64) (*models.Task, error)
 	GetTasksByUserID(ctx context.Context, userID int64) ([]*models.Task, error)
-	GetTasksByUserIDWithPagination(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool, messengerRelatedUserIDs *[]int, externalProvider *string, excludeSkipDigest *bool) ([]*models.Task, int, error)
+	GetTasksByUserIDWithPagination(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool, messengerRelatedUserIDs *[]int, externalProvider *string, title *string, excludeSkipDigest *bool) ([]*models.Task, int, error)
 	GetChildTasksByParentID(ctx context.Context, parentID int64) ([]*models.Task, error)
 	UpdateTask(ctx context.Context, task *models.Task) error
 	UpdateTaskWithTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) error
@@ -269,7 +270,7 @@ func (r *taskRepository) GetTasksByUserID(ctx context.Context, userID int64) ([]
 
 // GetTasksByUserIDWithPagination retrieves tasks by user ID with pagination and ordering
 // Returns task entities, total count, and an error if occurred
-func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool, messengerRelatedUserIDs *[]int, externalProvider *string, excludeSkipDigest *bool) ([]*models.Task, int, error) {
+func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, userID int64, page, pageSize int, orderBy string, startDateFrom, startDateTo, createdAtFrom, createdAtTo *time.Time, requiresConfirmation *bool, status *string, statusNot *string, cronExpression *string, cronExpressionIsNull *bool, excludeCronWithConfirmation *bool, messengerRelatedUserIDs *[]int, externalProvider *string, title *string, excludeSkipDigest *bool) ([]*models.Task, int, error) {
 	ctx, span := r.tracer.Start(ctx, "task_repository.GetTasksByUserIDWithPagination",
 		trace.WithAttributes(
 			attribute.Int64("user.id", userID),
@@ -364,6 +365,11 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 		))
 		span.SetAttributes(attribute.String("filter.external_provider", *externalProvider))
 	}
+	if title != nil && *title != "" {
+		titlePattern := "%" + escapeLikePattern(*title) + "%"
+		countBuilder = countBuilder.Where(squirrel.ILike{"title": titlePattern})
+		span.SetAttributes(attribute.String("filter.title", *title))
+	}
 	if excludeSkipDigest != nil && *excludeSkipDigest {
 		countBuilder = countBuilder.Where(squirrel.Eq{"skip_digest": false})
 		span.SetAttributes(attribute.Bool("filter.exclude_skip_digest", true))
@@ -435,6 +441,10 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 			"EXISTS (SELECT 1 FROM task_sync_links tsl WHERE tsl.task_id = tasks.id AND tsl.provider = ?)",
 			*externalProvider,
 		))
+	}
+	if title != nil && *title != "" {
+		titlePattern := "%" + escapeLikePattern(*title) + "%"
+		dataBuilder = dataBuilder.Where(squirrel.ILike{"title": titlePattern})
 	}
 	if excludeSkipDigest != nil && *excludeSkipDigest {
 		dataBuilder = dataBuilder.Where(squirrel.Eq{"skip_digest": false})
@@ -1115,4 +1125,12 @@ func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, or
 	)
 	span.SetStatus(codes.Ok, "tasks retrieved successfully")
 	return tasks, totalCount, nil
+}
+
+// escapeLikePattern escapes \, %, and _ so they are matched literally in LIKE/ILIKE.
+func escapeLikePattern(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
 }
