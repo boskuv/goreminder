@@ -3127,7 +3127,7 @@ const docTemplate = `{
         },
         "/api/v1/users/{user_id}/tasks": {
             "get": {
-                "description": "Retrieves all tasks by userID with pagination, ordering, and filtering (by status, status_not, start_date_from, start_date_to, created_at_from, created_at_to, cron_expression, cron_expression_is_null, requires_confirmation, exclude_cron_with_confirmation, messenger_related_user_id, messenger_user_id)",
+                "description": "Retrieves all tasks by userID with pagination, ordering, and filtering (by status, status_not, start_date_from, start_date_to, created_at_from, created_at_to, cron_expression, cron_expression_is_null, requires_confirmation, exclude_cron_with_confirmation, messenger_related_user_id, messenger_user_id, title)",
                 "produces": [
                     "application/json"
                 ],
@@ -3234,6 +3234,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Filter by messenger_user_id",
                         "name": "messenger_user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by title substring (case-insensitive)",
+                        "name": "title",
                         "in": "query"
                     }
                 ],
