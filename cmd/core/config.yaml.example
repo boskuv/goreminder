@@ -71,6 +71,9 @@ autoreschedule:
   enabled: false        # Enable automatic rescheduling of tasks with startDate in the past
   time: "00:00"         # UTC time (HH:MM format) when autoreschedule should run (default: "00:00" if enabled)
 
+users:
+  maxUsers: 100         # Max active (non-deleted) users; POST /users returns 409 when reached. 0 = unlimited
+
 # googleCalendar:
 #   enabled: false
 #   clientID: ""

@@ -98,6 +98,20 @@ func TestUserRepository_DeleteUser_SoftDeletes(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestUserRepository_CountActiveUsers(t *testing.T) {
+	repo, mock, cleanup := newUserRepoWithMock(t)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT COUNT(*) FROM users WHERE deleted_at IS NULL`,
+	)).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(42))
+
+	count, err := repo.CountActiveUsers(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 42, count)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestUserRepository_GetAllUsers_Pagination(t *testing.T) {
 	repo, mock, cleanup := newUserRepoWithMock(t)
 	defer cleanup()

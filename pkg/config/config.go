@@ -36,6 +36,14 @@ type Configuration struct {
 	Cors           CorsConfiguration           `mapstructure:"cors"`
 	Autoreschedule AutorescheduleConfiguration `mapstructure:"autoreschedule"`
 	GoogleCalendar GoogleCalendarConfiguration `mapstructure:"googleCalendar"`
+	Users          UsersConfiguration          `mapstructure:"users"`
+}
+
+// UsersConfiguration controls user registration limits.
+// MaxUsers is the maximum number of active (non-deleted) users.
+// 0 disables the limit (unlimited registration).
+type UsersConfiguration struct {
+	MaxUsers int `mapstructure:"maxUsers" default:"100" validate:"gte=0"`
 }
 
 type GoogleCalendarConfiguration struct {

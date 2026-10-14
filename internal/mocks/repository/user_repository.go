@@ -116,6 +116,21 @@ func (mr *MockUserRepositoryMockRecorder) UpdateUser(ctx, user any) *gomock.Call
         return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUser", reflect.TypeOf((*MockUserRepository)(nil).UpdateUser), ctx, user)
 }
 
+// CountActiveUsers mocks base method.
+func (m *MockUserRepository) CountActiveUsers(ctx context.Context) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountActiveUsers", ctx)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountActiveUsers indicates an expected call of CountActiveUsers.
+func (mr *MockUserRepositoryMockRecorder) CountActiveUsers(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountActiveUsers", reflect.TypeOf((*MockUserRepository)(nil).CountActiveUsers), ctx)
+}
+
 // ListRecentActivity mocks base method.
 func (m *MockUserRepository) ListRecentActivity(ctx context.Context, limit int) ([]models.UserActivity, error) {
         m.ctrl.T.Helper()

@@ -25,6 +25,7 @@ type UserRepository interface {
 	UpdateUser(ctx context.Context, user *models.User) error
 	DeleteUser(ctx context.Context, id int64) error
 	GetAllUsers(ctx context.Context, page, pageSize int, orderBy string) ([]*models.User, int, error)
+	CountActiveUsers(ctx context.Context) (int, error)
 	TouchLastActivity(ctx context.Context, userID int64, at time.Time) error
 	ListRecentActivity(ctx context.Context, limit int) ([]models.UserActivity, error)
 }
@@ -232,6 +233,38 @@ func (r *userRepository) DeleteUser(ctx context.Context, id int64) error {
 		Msg("user deleted successfully from database")
 	span.SetStatus(codes.Ok, "user deleted successfully")
 	return nil
+}
+
+// CountActiveUsers returns the number of users that are not soft-deleted.
+func (r *userRepository) CountActiveUsers(ctx context.Context) (int, error) {
+	ctx, span := r.tracer.Start(ctx, "user_repository.CountActiveUsers")
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().Msg("counting active users")
+
+	query, args, err := r.sb.Select("COUNT(*)").
+		From("users").
+		Where(squirrel.Eq{"deleted_at": nil}).
+		ToSql()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, errors.Wrap(err, "failed to build count active users query")
+	}
+
+	var count int
+	err = r.db.GetContext(ctx, &count, query, args...)
+	if err != nil {
+		log.Debug().Err(err).Msg("failed to count active users")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, errors.Wrap(err, "failed to count active users")
+	}
+
+	span.SetAttributes(attribute.Int("users.active_count", count))
+	span.SetStatus(codes.Ok, "active users counted successfully")
+	return count, nil
 }
 
 // GetAllUsers retrieves all users with pagination and ordering

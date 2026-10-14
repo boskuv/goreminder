@@ -485,6 +485,18 @@ cors:
 autoreschedule:
   enabled: false                # Enable automatic rescheduling of tasks whose startDate is already in the past
   time: "00:00"                 # Daily run time in UTC (HH:MM, 24-hour). Default 00:00 when enabled.
+
+users:
+  maxUsers: 100                 # Max active (non-deleted) users; POST /users → 409 when reached. 0 = unlimited
+```
+
+#### Users Configuration
+
+`users.maxUsers` caps how many non-soft-deleted users may exist. Soft-deleted users do not count. When the limit is reached, `POST /api/v1/users` returns **409 Conflict**. Set `0` to disable the limit.
+
+**Environment Variable:**
+```bash
+GOREMINDER_USERS_MAXUSERS=500
 ```
 
 #### Autoreschedule Configuration
@@ -848,7 +860,7 @@ Access Swagger UI at: `http://localhost:8080/docs/index.html`
 | Endpoint | Method | Description | Query Parameters |
 |----------|--------|-------------|------------------|
 | `/api/v1/users` | GET | Get all users with pagination | `page`, `page_size`, `order_by` |
-| `/api/v1/users` | POST | Create a new user | - |
+| `/api/v1/users` | POST | Create a new user (409 if `users.maxUsers` reached; default 100, `0` = unlimited) | - |
 | `/api/v1/users/activity` | GET | Recently active users (`last_activity_at` DESC) | `limit` (default/max 100) |
 | `/api/v1/users/:user_id` | GET | Get user by ID | - |
 | `/api/v1/users/:user_id` | PUT | Update user by ID | - |

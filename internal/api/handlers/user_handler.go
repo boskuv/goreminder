@@ -30,13 +30,14 @@ func NewUserHandler(userService UserService, logger zerolog.Logger) *UserHandler
 }
 
 // @Summary Create a new user
-// @Description Creates a new user in the system
+// @Description Creates a new user in the system. Rejected with 409 when active users already reached users.maxUsers (config; default 100; 0 = unlimited).
 // @Tags Users
 // @Accept json
 // @Produce json
 // @Param user body dto.CreateUserRequest true "User to create"
 // @Success 201 {object} dto.CreateResponse "Created user ID"
 // @Failure 400 {object} dto.ErrorResponse "Bad request"
+// @Failure 409 {object} dto.ErrorResponse "User registration limit reached"
 // @Failure 500 {object} dto.ErrorResponse "Internal server error"
 // @Router /api/v1/users [post]
 func (h *UserHandler) CreateUser(c *gin.Context) {
@@ -59,6 +60,11 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 	userID, err := h.userService.CreateUser(c.Request.Context(), userModel)
 	if err != nil {
 		errEvent(log, err).Msg("error while adding new user")
+
+		if errors.Is(err, errs.ErrConflict) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
 
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

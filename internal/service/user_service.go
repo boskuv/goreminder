@@ -27,12 +27,14 @@ type UserService struct {
 	producer      queue.Publisher
 	attachments   attachments.Client
 	activity      ActivityTracker
+	maxUsers      int // 0 = unlimited
 	tracer        trace.Tracer
 	logger        zerolog.Logger
 }
 
-// NewUserService creates a new instance of UserService
-func NewUserService(userRepo repository.UserRepository, taskRepo repository.TaskRepository, messengerRepo repository.MessengerRepository, producer queue.Publisher, attClient attachments.Client, activity ActivityTracker, logger zerolog.Logger) *UserService {
+// NewUserService creates a new instance of UserService.
+// maxUsers limits active (non-deleted) users; 0 means unlimited.
+func NewUserService(userRepo repository.UserRepository, taskRepo repository.TaskRepository, messengerRepo repository.MessengerRepository, producer queue.Publisher, attClient attachments.Client, activity ActivityTracker, maxUsers int, logger zerolog.Logger) *UserService {
 	if activity == nil {
 		activity = NoopActivityTracker{}
 	}
@@ -43,6 +45,7 @@ func NewUserService(userRepo repository.UserRepository, taskRepo repository.Task
 		producer:      producer,
 		attachments:   attClient,
 		activity:      activity,
+		maxUsers:      maxUsers,
 		tracer:        otel.Tracer("user-service"),
 		logger:        logger,
 	}
@@ -94,6 +97,27 @@ func (s *UserService) CreateUser(ctx context.Context, user *models.User) (int64,
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return 0, errors.WithStack(err)
+	}
+
+	if s.maxUsers > 0 {
+		activeCount, err := s.userRepo.CountActiveUsers(ctx)
+		if err != nil {
+			log.Debug().Err(err).Msg("failed to count active users before creation")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return 0, errors.WithStack(err)
+		}
+		if activeCount >= s.maxUsers {
+			err := errors.Wrapf(errs.ErrConflict, "user limit reached (%d/%d)", activeCount, s.maxUsers)
+			log.Info().
+				Err(err).
+				Int("users.active_count", activeCount).
+				Int("users.max_users", s.maxUsers).
+				Msg("user registration rejected: limit reached")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return 0, err
+		}
 	}
 
 	log.Debug().

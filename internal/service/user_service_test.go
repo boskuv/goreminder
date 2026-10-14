@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	errs "github.com/boskuv/goreminder/internal/errors"
 	mock_repository "github.com/boskuv/goreminder/internal/mocks/repository"
 	"github.com/boskuv/goreminder/internal/models"
 	"github.com/boskuv/goreminder/pkg/attachments"
@@ -26,7 +27,7 @@ func TestUserService_CreateUser(t *testing.T) {
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, testLogger)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, 0, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -53,6 +54,46 @@ func TestUserService_CreateUser(t *testing.T) {
 	})
 }
 
+func TestUserService_CreateUser_MaxUsersLimit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	userRepo := mock_repository.NewMockUserRepository(ctrl)
+	taskRepo := mock_repository.NewMockTaskRepository(ctrl)
+	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
+	producer := &queue.Producer{}
+	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
+	ctx := context.Background()
+
+	t.Run("rejects when limit reached", func(t *testing.T) {
+		svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, 100, testLogger)
+		user := &models.User{Name: "John", Email: "john@example.com", PasswordHash: "hash"}
+		userRepo.EXPECT().CountActiveUsers(gomock.Any()).Return(100, nil)
+		id, err := svc.CreateUser(ctx, user)
+		assert.ErrorIs(t, err, errs.ErrConflict)
+		assert.Equal(t, int64(0), id)
+	})
+
+	t.Run("allows when under limit", func(t *testing.T) {
+		svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, 100, testLogger)
+		user := &models.User{Name: "John", Email: "john@example.com", PasswordHash: "hash"}
+		userRepo.EXPECT().CountActiveUsers(gomock.Any()).Return(99, nil)
+		userRepo.EXPECT().CreateUser(gomock.Any(), user).Return(int64(42), nil)
+		id, err := svc.CreateUser(ctx, user)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(42), id)
+	})
+
+	t.Run("count error", func(t *testing.T) {
+		svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, 10, testLogger)
+		user := &models.User{Name: "John", Email: "john@example.com", PasswordHash: "hash"}
+		userRepo.EXPECT().CountActiveUsers(gomock.Any()).Return(0, errors.New("db error"))
+		id, err := svc.CreateUser(ctx, user)
+		assert.Error(t, err)
+		assert.Equal(t, int64(0), id)
+	})
+}
+
 func TestUserService_GetUser(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -62,7 +103,7 @@ func TestUserService_GetUser(t *testing.T) {
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, testLogger)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, 0, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -90,7 +131,7 @@ func TestUserService_UpdateUser(t *testing.T) {
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, testLogger)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, 0, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -143,7 +184,7 @@ func TestUserService_DeleteUser(t *testing.T) {
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, testLogger)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, 0, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -182,7 +223,7 @@ func TestUserService_GetAllUsers(t *testing.T) {
 	messengerRepo := mock_repository.NewMockMessengerRepository(ctrl)
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, testLogger)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), NoopActivityTracker{}, 0, testLogger)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -213,7 +254,7 @@ func TestUserService_GetRecentUserActivity(t *testing.T) {
 	producer := &queue.Producer{}
 	testLogger := logger.New(io.Discard, zerolog.DebugLevel, false)
 	tracker := NewPostgresActivityTracker(userRepo, testLogger)
-	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), tracker, testLogger)
+	svc := NewUserService(userRepo, taskRepo, messengerRepo, producer, attachments.NewNoopClient(), tracker, 0, testLogger)
 	ctx := context.Background()
 
 	at := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)

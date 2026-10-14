@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -128,6 +129,22 @@ func TestUserHandler_CreateUser_Success(t *testing.T) {
 	var body map[string]interface{}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	assert.Equal(t, float64(12), body["id"])
+}
+
+func TestUserHandler_CreateUser_LimitReached(t *testing.T) {
+	svc := &stubUserService{
+		createUser: func(context.Context, *models.User) (int64, error) {
+			return 0, errors.Wrap(errs.ErrConflict, "user limit reached (100/100)")
+		},
+	}
+	r := newUserRouter(svc)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", bytes.NewBufferString(
+		`{"name":"Bob","email":"b@example.com","password_hash":"hash"}`,
+	))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusConflict, w.Code)
 }
 
 func TestUserHandler_DeleteUser_Success(t *testing.T) {

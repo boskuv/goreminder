@@ -55,6 +55,9 @@ database:
 	assert.Equal(t, 30, config.Config.Database.LegacyMaxLifetimeSeconds)
 	assert.Equal(t, 10, config.Config.Database.MaxOpenConns)
 	assert.Equal(t, 5, config.Config.Database.MaxIdleConns)
+
+	// Users defaults when omitted from YAML
+	assert.Equal(t, 100, config.Config.Users.MaxUsers)
 }
 
 func TestSetup_InvalidPath(t *testing.T) {

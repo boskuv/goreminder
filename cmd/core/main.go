@@ -213,7 +213,7 @@ func main() {
 	activityTracker := service.NewPostgresActivityTracker(userRepo, log)
 	purgeAttachmentsOnDone := cfg.Attachments.Enabled && cfg.Attachments.PurgeOnTaskDone
 	taskService := service.NewTaskService(taskRepo, userRepo, messengerRepo, taskHistoryRepo, publisher, attClient, activityTracker, purgeAttachmentsOnDone, log)
-	userService := service.NewUserService(userRepo, taskRepo, messengerRepo, publisher, attClient, activityTracker, log)
+	userService := service.NewUserService(userRepo, taskRepo, messengerRepo, publisher, attClient, activityTracker, cfg.Users.MaxUsers, log)
 	messengerService := service.NewMessengerService(messengerRepo, userRepo, activityTracker, log)
 	backlogService := service.NewBacklogService(backlogRepo, userRepo, messengerRepo, activityTracker, log)
 	targetService := service.NewTargetService(targetRepo, userRepo, messengerRepo, activityTracker, log)
