@@ -1115,3 +1115,28 @@ func (h *TaskHandler) GetAllTasks(c *gin.Context) {
 
 	c.JSON(http.StatusOK, response)
 }
+
+// GetSchedulableInventory returns tasks that should have worker APScheduler jobs.
+// @Summary Schedulable inventory for schedule reconcile
+// @Description Compact list of active schedulable tasks expected in the worker job store
+// @Tags Tasks
+// @Produce json
+// @Success 200 {object} map[string]interface{} "items + count"
+// @Failure 500 {object} dto.ErrorResponse "Internal server error"
+// @Router /api/v1/internal/schedulable-inventory [get]
+func (h *TaskHandler) GetSchedulableInventory(c *gin.Context) {
+	ctx := c.Request.Context()
+	log := logger.WithTraceContext(ctx, h.logger)
+
+	items, err := h.taskService.GetSchedulableInventory(ctx)
+	if err != nil {
+		errEvent(log, err).Msg("failed to get schedulable inventory")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get schedulable inventory"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"items": items,
+		"count": len(items),
+	})
+}

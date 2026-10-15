@@ -3565,6 +3565,57 @@ func (s *TaskService) GetAllTasks(ctx context.Context, page, pageSize int, order
 	return tasks, totalCount, nil
 }
 
+// GetSchedulableInventory returns compact inventory of tasks that should have worker jobs.
+func (s *TaskService) GetSchedulableInventory(ctx context.Context) ([]*models.SchedulableInventoryItem, error) {
+	ctx, span := s.tracer.Start(ctx, "task_service.GetSchedulableInventory")
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, s.logger)
+	rows, err := s.taskRepo.GetSchedulableInventory(ctx)
+	if err != nil {
+		log.Error().Stack().Err(err).Msg("failed to get schedulable inventory")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.WithStack(err)
+	}
+
+	now := time.Now().UTC()
+	items := make([]*models.SchedulableInventoryItem, 0, len(rows))
+	for _, row := range rows {
+		if row == nil {
+			continue
+		}
+		kind := "one_shot"
+		if row.ParentID != nil {
+			kind = "recurring_instance"
+		} else if (row.CronExpression != nil && *row.CronExpression != "") || (row.RRule != nil && *row.RRule != "") {
+			kind = "recurring"
+		}
+
+		hasPre := false
+		if row.PreRemindBeforeSeconds != nil && *row.PreRemindBeforeSeconds > 0 {
+			preAt := row.StartDate.Add(-time.Duration(*row.PreRemindBeforeSeconds) * time.Second)
+			if !preAt.Before(now) {
+				hasPre = true
+			}
+		}
+
+		items = append(items, &models.SchedulableInventoryItem{
+			TaskID:    row.TaskID,
+			Messenger: row.Messenger,
+			StartDate: row.StartDate,
+			Kind:      kind,
+			HasPre:    hasPre,
+			Title:     row.Title,
+		})
+	}
+
+	span.SetAttributes(attribute.Int("items.count", len(items)))
+	span.SetStatus(codes.Ok, "schedulable inventory built")
+	return items, nil
+}
+
+
 func (s *TaskService) purgeAttachmentsBestEffort(ctx context.Context, log zerolog.Logger, taskID int64, childTaskIDs []int64) {
 	if s.attachments == nil {
 		return

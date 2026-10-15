@@ -22,4 +22,5 @@ type TaskService interface {
 	GetTaskHistory(ctx context.Context, taskID int64) ([]*models.TaskHistory, error)
 	GetUserTaskHistory(ctx context.Context, userID int64, limit, offset int) ([]*models.TaskHistory, error)
 	GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, statusNot *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64, cronExpression *string, cronExpressionIsNull *bool, requiresConfirmation *bool, excludeCronWithConfirmation *bool, externalProvider *string) ([]*models.Task, int, error)
+	GetSchedulableInventory(ctx context.Context) ([]*models.SchedulableInventoryItem, error)
 }

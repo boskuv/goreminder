@@ -106,6 +106,10 @@ func (s *stubTaskService) GetAllTasks(ctx context.Context, page, pageSize int, o
 	return s.getAllTasks(ctx, page, pageSize, orderBy, status, statusNot, startDateFrom, startDateTo, userID, cronExpression, cronExpressionIsNull, requiresConfirmation, excludeCronWithConfirmation, externalProvider)
 }
 
+func (s *stubTaskService) GetSchedulableInventory(ctx context.Context) ([]*models.SchedulableInventoryItem, error) {
+	return nil, nil
+}
+
 func sampleTask(id int64, title string) *models.Task {
 	now := time.Now().UTC().Truncate(time.Second)
 	return &models.Task{

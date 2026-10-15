@@ -12,6 +12,7 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 	{
 		// Task routes
 		api.GET("/tasks", taskHandler.GetAllTasks)
+		api.GET("/internal/schedulable-inventory", taskHandler.GetSchedulableInventory)
 		api.POST("/tasks", taskHandler.CreateTask)
 		api.POST("/tasks/queue", taskHandler.QueueTask)
 		api.GET("/tasks/:id", taskHandler.GetTask)

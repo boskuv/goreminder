@@ -271,3 +271,19 @@ func (mr *MockTaskRepositoryMockRecorder) UpdateTaskWithTx(ctx, tx, task interfa
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskWithTx", reflect.TypeOf((*MockTaskRepository)(nil).UpdateTaskWithTx), ctx, tx, task)
 }
+
+// GetSchedulableInventory mocks base method.
+func (m *MockTaskRepository) GetSchedulableInventory(ctx context.Context) ([]*models.SchedulableInventoryRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSchedulableInventory", ctx)
+	ret0, _ := ret[0].([]*models.SchedulableInventoryRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSchedulableInventory indicates an expected call of GetSchedulableInventory.
+func (mr *MockTaskRepositoryMockRecorder) GetSchedulableInventory(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSchedulableInventory", reflect.TypeOf((*MockTaskRepository)(nil).GetSchedulableInventory), ctx)
+}
+

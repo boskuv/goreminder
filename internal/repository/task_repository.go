@@ -37,6 +37,7 @@ type TaskRepository interface {
 	GetTasksWithCronNeedingRescheduling(ctx context.Context) ([]*models.Task, error)
 	GetDB() *sqlx.DB
 	GetAllTasks(ctx context.Context, page, pageSize int, orderBy string, status *string, statusNot *string, startDateFrom *time.Time, startDateTo *time.Time, userID *int64, cronExpression *string, cronExpressionIsNull *bool, requiresConfirmation *bool, excludeCronWithConfirmation *bool, externalProvider *string) ([]*models.Task, int, error)
+	GetSchedulableInventory(ctx context.Context) ([]*models.SchedulableInventoryRow, error)
 }
 
 type taskRepository struct {
@@ -1134,3 +1135,66 @@ func escapeLikePattern(s string) string {
 	s = strings.ReplaceAll(s, `_`, `\_`)
 	return s
 }
+
+// GetSchedulableInventory returns tasks that should currently have an APScheduler job
+// in the worker (same publish eligibility rules as worker.schedule_task).
+// Excludes muted / soft-deleted / confirmation recurrence parents and past confirmation
+// one-shots/children (job already fired while awaiting confirm).
+func (r *taskRepository) GetSchedulableInventory(ctx context.Context) ([]*models.SchedulableInventoryRow, error) {
+	ctx, span := r.tracer.Start(ctx, "task_repository.GetSchedulableInventory")
+	defer span.End()
+
+	log := logger.WithTraceContext(ctx, r.logger)
+	log.Debug().Msg("getting schedulable inventory from database")
+
+	now := time.Now().UTC()
+	query := `
+SELECT
+	t.id AS task_id,
+	m.name AS messenger,
+	t.start_date,
+	t.title,
+	t.cron_expression,
+	t.rrule,
+	t.parent_id,
+	t.pre_remind_before_seconds,
+	t.requires_confirmation
+FROM tasks t
+INNER JOIN user_messengers um ON um.id = t.messenger_related_user_id
+INNER JOIN messengers m ON m.id = um.messenger_id
+WHERE t.deleted_at IS NULL
+  AND t.muted = false
+  AND t.status IN ('scheduled', 'rescheduled', 'postponed')
+  AND t.messenger_related_user_id IS NOT NULL
+  AND NOT (
+    t.requires_confirmation = true
+    AND t.parent_id IS NULL
+    AND (t.cron_expression IS NOT NULL OR t.rrule IS NOT NULL)
+  )
+  AND (
+    t.cron_expression IS NOT NULL
+    OR t.rrule IS NOT NULL
+    OR t.start_date >= $1
+    OR (
+      t.requires_confirmation = false
+      AND t.cron_expression IS NULL
+      AND t.rrule IS NULL
+    )
+  )
+ORDER BY t.id`
+
+	var rows []*models.SchedulableInventoryRow
+	err := r.db.SelectContext(ctx, &rows, query, now)
+	if err != nil {
+		log.Debug().Err(err).Msg("failed to get schedulable inventory")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, errors.Wrap(err, "failed to get schedulable inventory")
+	}
+
+	log.Debug().Int("rows.count", len(rows)).Msg("schedulable inventory retrieved")
+	span.SetAttributes(attribute.Int("rows.count", len(rows)))
+	span.SetStatus(codes.Ok, "schedulable inventory retrieved")
+	return rows, nil
+}
+
