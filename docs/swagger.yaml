@@ -734,6 +734,15 @@ definitions:
     - queue_name
     - task_id
     type: object
+  dto.ReadyCheckResponse:
+    properties:
+      reason:
+        example: rabbitmq unreachable
+        type: string
+      status:
+        example: ready
+        type: string
+    type: object
   dto.TargetResponse:
     properties:
       completed_at:
@@ -1706,6 +1715,25 @@ paths:
       summary: Get all digest settings
       tags:
       - Digests
+  /api/v1/internal/schedulable-inventory:
+    get:
+      description: Compact list of active schedulable tasks expected in the worker
+        job store
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: items + count
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Schedulable inventory for schedule reconcile
+      tags:
+      - Tasks
   /api/v1/messengerRelatedUsers:
     get:
       description: Retrieves a messenger-related user by chatID, messengerUserID,
@@ -3002,7 +3030,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Creates a new user in the system
+      description: Creates a new user in the system. Rejected with 409 when active
+        users already reached users.maxUsers (config; default 100; 0 = unlimited).
       parameters:
       - description: User to create
         in: body
@@ -3019,6 +3048,10 @@ paths:
             $ref: '#/definitions/dto.CreateResponse'
         "400":
           description: Bad request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "409":
+          description: User registration limit reached
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
         "500":
@@ -3486,7 +3519,8 @@ paths:
       - System
   /healthcheck:
     get:
-      description: Checks if the application is running and healthy
+      description: Checks if the application is running and healthy (liveness; no
+        dependency checks)
       produces:
       - application/json
       responses:
@@ -3495,6 +3529,25 @@ paths:
           schema:
             $ref: '#/definitions/dto.HealthCheckResponse'
       summary: Check application health
+      tags:
+      - System
+  /ready:
+    get:
+      description: Checks whether dependencies required to serve traffic are available
+        (database ping; RabbitMQ when producer.enabled). Use for Kubernetes/Docker
+        readiness probes during rolling updates.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Ready to accept traffic
+          schema:
+            $ref: '#/definitions/dto.ReadyCheckResponse'
+        "503":
+          description: Not ready
+          schema:
+            $ref: '#/definitions/dto.ReadyCheckResponse'
+      summary: Check application readiness
       tags:
       - System
   /version:

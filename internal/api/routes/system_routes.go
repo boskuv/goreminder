@@ -7,13 +7,14 @@ import (
 )
 
 // RegisterSystemRoutes registers all API system routes
-func RegisterSystemRoutes(router *gin.Engine, version string) {
+func RegisterSystemRoutes(router *gin.Engine, version string, readyCheck handlers.ReadinessCheck) {
 	// Initialize handlers
 	versionHandler := handlers.NewVersionHandler(version)
-	healthCheckHandler := handlers.NewHealthCheckHandler()
+	healthCheckHandler := handlers.NewHealthCheckHandler(readyCheck)
 
 	// Register routes
 	router.GET("/version", versionHandler.Version)
 	router.GET("/healthcheck", healthCheckHandler.HealthCheck)
+	router.GET("/ready", healthCheckHandler.Ready)
 	handlers.RegisterDocsRoute(router)
 }

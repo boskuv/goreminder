@@ -143,6 +143,26 @@ func NewProducer(cfg *ProducerConfig, logger zerolog.Logger) (*Producer, error) 
 	return producer, nil
 }
 
+// Ping verifies RabbitMQ is reachable by opening a short-lived channel and
+// passively declaring the configured queue. Honors ctx cancellation/timeout.
+func (p *Producer) Ping(ctx context.Context) error {
+	if p == nil || p.connection == nil {
+		return errors.New("rabbitmq producer not initialized")
+	}
+
+	ch, err := p.connection.Channel(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to open rabbitmq channel")
+	}
+	defer func() { _ = ch.Close() }()
+
+	_, err = ch.QueueDeclarePassive(p.queue, true, false, false, false, nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to inspect rabbitmq queue")
+	}
+	return nil
+}
+
 // Close closes the RabbitMQ channel and cancels background routines
 func (p *Producer) Close() error {
 	// cancel background goroutines

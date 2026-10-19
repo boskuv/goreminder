@@ -152,6 +152,7 @@ func main() {
 
 	// producer init (can be disabled via configuration for DB-only mode)
 	var publisher queue.Publisher
+	var queueHealth queue.HealthChecker
 	if cfg.Producer.Enabled {
 		producerConfig := queue.NewProducerConfig(
 			cfg.Producer.Host,
@@ -177,9 +178,11 @@ func main() {
 		}()
 
 		publisher = producer
+		queueHealth = producer
 	} else {
 		log.Warn().Msg("queue producer disabled via config, running in DB-only mode")
 		publisher = queue.NoopPublisher{}
+		queueHealth = queue.NoopPublisher{}
 	}
 
 	attClient := attachments.NewNoopClient()
@@ -369,7 +372,15 @@ func main() {
 
 	// register application routes
 	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler, backlogHandler, targetHandler, digestHandler, attachmentHandler, taskGroupHandler, calendarHandler)
-	routes.RegisterSystemRoutes(router, appVersion)
+	routes.RegisterSystemRoutes(router, appVersion, func(ctx context.Context) error {
+		if err := dbManager.GetDB().PingContext(ctx); err != nil {
+			return fmt.Errorf("database unreachable")
+		}
+		if err := queueHealth.Ping(ctx); err != nil {
+			return fmt.Errorf("rabbitmq unreachable")
+		}
+		return nil
+	})
 
 	log.Info().Msg("graceful startup")
 

@@ -81,7 +81,7 @@ Canonical reference: **Swagger UI** on the running server, not this README.
 Full CRUD helpers matching `/backlogs`, `/targets`, `/digests` and `/digests/settings`.
 
 ### System
-`healthcheck`, `version` (root paths, not under `/api/v1`)
+`healthcheck`, `ready`, `version` (root paths, not under `/api/v1`)
 
 ## Recurrence
 

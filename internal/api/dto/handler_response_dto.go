@@ -40,7 +40,13 @@ type VersionResponse struct {
 	GitTag    string `json:"gitTag" example:"unknown"`
 }
 
-// HealthCheckResponse represents the health check response
+// HealthCheckResponse represents the health check (liveness) response
 type HealthCheckResponse struct {
 	Status string `json:"status" example:"alive"`
+}
+
+// ReadyCheckResponse represents the readiness probe response
+type ReadyCheckResponse struct {
+	Status string `json:"status" example:"ready"`
+	Reason string `json:"reason,omitempty" example:"rabbitmq unreachable"`
 }

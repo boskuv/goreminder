@@ -948,7 +948,8 @@ Task list filter: `external_provider=google_calendar`. There is no per-task unbi
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/healthcheck` | GET | Liveness/health |
+| `/healthcheck` | GET | Liveness (process up; no dependency checks) |
+| `/ready` | GET | Readiness (DB + RabbitMQ when `producer.enabled`; **503** + `reason` when not ready) |
 | `/version` | GET | Build version info |
 | `/docs/*` | GET | Swagger UI |
 

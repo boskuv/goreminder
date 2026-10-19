@@ -723,6 +723,33 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/internal/schedulable-inventory": {
+            "get": {
+                "description": "Compact list of active schedulable tasks expected in the worker job store",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tasks"
+                ],
+                "summary": "Schedulable inventory for schedule reconcile",
+                "responses": {
+                    "200": {
+                        "description": "items + count",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/messengerRelatedUsers": {
             "get": {
                 "description": "Retrieves a messenger-related user by chatID, messengerUserID, userID and messengerID",
@@ -2633,7 +2660,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Creates a new user in the system",
+                "description": "Creates a new user in the system. Rejected with 409 when active users already reached users.maxUsers (config; default 100; 0 = unlimited).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2664,6 +2691,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "User registration limit reached",
                         "schema": {
                             "$ref": "#/definitions/dto.ErrorResponse"
                         }
@@ -3350,7 +3383,7 @@ const docTemplate = `{
         },
         "/healthcheck": {
             "get": {
-                "description": "Checks if the application is running and healthy",
+                "description": "Checks if the application is running and healthy (liveness; no dependency checks)",
                 "produces": [
                     "application/json"
                 ],
@@ -3363,6 +3396,32 @@ const docTemplate = `{
                         "description": "Health status",
                         "schema": {
                             "$ref": "#/definitions/dto.HealthCheckResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ready": {
+            "get": {
+                "description": "Checks whether dependencies required to serve traffic are available (database ping; RabbitMQ when producer.enabled). Use for Kubernetes/Docker readiness probes during rolling updates.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System"
+                ],
+                "summary": "Check application readiness",
+                "responses": {
+                    "200": {
+                        "description": "Ready to accept traffic",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ReadyCheckResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Not ready",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ReadyCheckResponse"
                         }
                     }
                 }
@@ -4410,6 +4469,19 @@ const docTemplate = `{
                 "task_id": {
                     "type": "integer",
                     "example": 1
+                }
+            }
+        },
+        "dto.ReadyCheckResponse": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "example": "rabbitmq unreachable"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "ready"
                 }
             }
         },
