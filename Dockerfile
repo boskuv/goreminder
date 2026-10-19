@@ -39,6 +39,7 @@ FROM alpine:latest
 # Install ca-certificates for HTTPS and tzdata for timezone support
 RUN apk add --no-cache \
     ca-certificates \
+    curl \
     tzdata \
     && update-ca-certificates
 
