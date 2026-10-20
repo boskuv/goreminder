@@ -285,6 +285,8 @@ func main() {
 		taskService, attClient, cfg.Attachments.Enabled, directMax,
 		cfg.Attachments.ProxyDownloadEnabled, proxyMax, log,
 	)
+	icsImportService := service.NewICSImportService(taskService, userRepo, taskGroupRepo, messengerRepo, log)
+	icsHandler := handlers.NewICSHandler(icsImportService, log)
 
 	// setup swagger info
 	appVersion := version.GetVersion()
@@ -371,7 +373,7 @@ func main() {
 	}
 
 	// register application routes
-	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler, backlogHandler, targetHandler, digestHandler, attachmentHandler, taskGroupHandler, calendarHandler)
+	routes.RegisterRoutes(router, taskHandler, userHandler, messengerHandler, backlogHandler, targetHandler, digestHandler, attachmentHandler, taskGroupHandler, calendarHandler, icsHandler)
 	routes.RegisterSystemRoutes(router, appVersion, func(ctx context.Context) error {
 		if err := dbManager.GetDB().PingContext(ctx); err != nil {
 			return fmt.Errorf("database unreachable")

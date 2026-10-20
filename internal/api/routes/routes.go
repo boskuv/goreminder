@@ -7,7 +7,7 @@ import (
 )
 
 // RegisterRoutes registers all API routes
-func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userHandler *handlers.UserHandler, messengerHandler *handlers.MessengerHandler, backlogHandler *handlers.BacklogHandler, targetHandler *handlers.TargetHandler, digestHandler *handlers.DigestHandler, attachmentHandler *handlers.AttachmentHandler, taskGroupHandler *handlers.TaskGroupHandler, calendarHandler *handlers.CalendarHandler) {
+func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userHandler *handlers.UserHandler, messengerHandler *handlers.MessengerHandler, backlogHandler *handlers.BacklogHandler, targetHandler *handlers.TargetHandler, digestHandler *handlers.DigestHandler, attachmentHandler *handlers.AttachmentHandler, taskGroupHandler *handlers.TaskGroupHandler, calendarHandler *handlers.CalendarHandler, icsHandler *handlers.ICSHandler) {
 	api := router.Group("/api/v1")
 	{
 		// Task routes
@@ -80,6 +80,11 @@ func RegisterRoutes(router *gin.Engine, taskHandler *handlers.TaskHandler, userH
 		api.PUT("/digests/settings", digestHandler.UpdateDigestSettings)
 		api.DELETE("/digests/settings", digestHandler.DeleteDigestSettings)
 		api.GET("/digests/settings/all", digestHandler.GetAllDigestSettings)
+
+		// ICS one-shot import
+		if icsHandler != nil {
+			api.POST("/users/:user_id/ics/import", icsHandler.Import)
+		}
 
 		// Google Calendar routes (handler may be nil when disabled)
 		if calendarHandler != nil {
