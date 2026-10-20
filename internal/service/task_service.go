@@ -3112,6 +3112,9 @@ func (s *TaskService) taskToMap(task *models.Task) map[string]interface{} {
 	if task.PreRemindBeforeSeconds != nil {
 		result["pre_remind_before_seconds"] = *task.PreRemindBeforeSeconds
 	}
+	if task.HistorySource != "" {
+		result[models.TaskHistorySourceKey] = task.HistorySource
+	}
 
 	return result
 }

@@ -85,6 +85,8 @@ type Task struct {
 	Status                 string    `db:"status" json:"status"`
 	CreatedAt              time.Time `db:"created_at" json:"created_at"`
 	DeletedAt              time.Time `db:"deleted_at" json:"-"`
+	// HistorySource is not persisted; when set, CreateTask includes it in task_history new_value.
+	HistorySource string `db:"-" json:"-"`
 }
 
 // ScheduledTask represents the domain model for a task to enqueue
