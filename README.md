@@ -18,7 +18,7 @@
 | **Start here** | [Features](#business-features) · [Prerequisites](#prerequisites) · [Quick start](#setup-instructions) |
 | **Reference** | [Configuration](#configuration) · [API](#api-documentation) · [Filtering](#filtering-and-ordering) |
 | **Domain** | [Muting](#task-muting-muted) · [Skip digest](#skip-digest-skip_digest) · [Pre-remind](#pre-remind-pre_remind_before_seconds) · [Task types](#task-types) · [Shift on done](#mark-as-done-behavior) · [Schema](#database-schema) · [CHANGELOG](CHANGELOG.md) |
-| **Integrations** | [Google Calendar](docs/google-calendar.md) ([matrix](docs/google-calendar.md#behavior-matrix-direction--task-type), [bot](docs/google-calendar-bot.md), [test plan](docs/google-calendar-test-plan.md)) |
+| **Integrations** | [Google Calendar](docs/google-calendar.md) ([matrix](docs/google-calendar.md#behavior-matrix-direction--task-type), [bot](docs/google-calendar-bot.md), [test plan](docs/google-calendar-test-plan.md)); [ICS import](docs/ics-import.md) |
 | **Dev** | [Testing](#testing) · [Development](#development) · [Architecture](#architecture) |
 
 > Long sections (schema, full config, middleware, curl examples, …) are folded behind **Expand** / summary toggles.
@@ -30,7 +30,7 @@
 - [x] **Targets/Goals Management**: Create and track targets (aims/goals) with completion tracking
 - [x] **Task Muting**: Per-task silence for the worker queue (see [Task muting (`muted`)](#task-muting-muted)).
 - [x] **Reminder Groups**: Task groups for batch management and Google Calendar sync scope
-- [ ] **ICS Import**: Import tasks from iCalendar (.ics) files
+- [x] **ICS Import**: One-shot VEVENT import from `.ics` (field parity with Google Calendar import; see [docs/ics-import.md](docs/ics-import.md))
 - [x] **Google Calendar**: Per-user OAuth, multi-calendar import/export/both of Events, outbox + import retry (see [docs/google-calendar.md](docs/google-calendar.md))
 - [x] **Advanced Reminders**: Optional preliminary reminder before `start_date` (`pre_remind_before_seconds`; see [Pre-remind](#pre-remind-pre_remind_before_seconds)).
 - [x] **Shift from completion**: Confirmation series can rebase from done date (`shift_from_completion`; blocked when parent has a calendar sync link).
@@ -924,6 +924,12 @@ Activity is recorded on successful user-driven mutations (tasks, users, backlogs
 | `/api/v1/task-groups/:id` | GET | Get task group |
 | `/api/v1/task-groups/:id` | PUT | Update task group |
 | `/api/v1/task-groups/:id` | DELETE | Soft-delete task group (**409** if a calendar binding still has this `group_id`) |
+
+### ICS import
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/users/:user_id/ics/import` | POST | One-shot `.ics` VEVENT import (multipart `file`; optional `group_id`, `messenger_related_user_id`) — see [docs/ics-import.md](docs/ics-import.md) |
 
 ### Google Calendar
 
