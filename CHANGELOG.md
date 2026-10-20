@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **ICS import**: `POST /api/v1/users/{user_id}/ics/import` (multipart `file`, optional `group_id` / `messenger_related_user_id`). One-shot VEVENT→tasks with Google Calendar import field parity (`requires_confirmation` stays false; VTODO skipped; partial per-event errors). Docs: [docs/ics-import.md](docs/ics-import.md). History `source: ics_import`.
 - **GET /ready**: readiness probe for rolling updates — pings the database (current pool via connection manager) and RabbitMQ when `producer.enabled` (channel + passive queue declare; skipped/noop when producer disabled); **200** `{"status":"ready"}` / **503** `{"status":"not_ready","reason":"database unreachable"|"rabbitmq unreachable"}`. `/healthcheck` remains liveness-only. System probe paths (`/healthcheck`, `/ready`, `/version`) bypass optional `X-API-Key` middleware.
 - **Users — registration limit (`users.maxUsers`)**: config default **100** active (non-deleted) users; `0` = unlimited. Env: `GOREMINDER_USERS_MAXUSERS`. `POST /api/v1/users` returns **409** when the limit is reached.
 - **GET /api/v1/users/{user_id}/tasks**: optional `title` query — case-insensitive substring match (`ILIKE`) on task title (UTF-8: Cyrillic, emoji, etc.); combines with existing filters/pagination; same `PaginatedTasksResponse`.

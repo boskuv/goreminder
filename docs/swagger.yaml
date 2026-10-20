@@ -512,6 +512,35 @@ definitions:
         example: alive
         type: string
     type: object
+  dto.ICSImportItemError:
+    properties:
+      index:
+        example: 0
+        type: integer
+      message:
+        example: 'DTSTART: event has no start'
+        type: string
+      uid:
+        example: event-1@example.com
+        type: string
+    type: object
+  dto.ICSImportResponse:
+    properties:
+      count:
+        example: 3
+        type: integer
+      created_task_ids:
+        items:
+          type: integer
+        type: array
+      errors:
+        items:
+          $ref: '#/definitions/dto.ICSImportItemError'
+        type: array
+      skipped_todo:
+        example: 0
+        type: integer
+    type: object
   dto.IDResponse:
     properties:
       id:
@@ -3327,6 +3356,55 @@ paths:
       summary: Calendar sync status for a user
       tags:
       - Calendar
+  /api/v1/users/{user_id}/ics/import:
+    post:
+      consumes:
+      - multipart/form-data
+      description: One-shot VEVENT import (Google Calendar field parity). Product
+        flags (requires_confirmation, muted, pre_remind, etc.) stay local defaults.
+        VTODO is skipped. Partial per-event errors do not fail the whole file.
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      - description: iCalendar (.ics) file
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Optional task group id applied to all created tasks
+        in: formData
+        name: group_id
+        type: integer
+      - description: Optional messenger related user id (schedules reminders when
+          set)
+        in: formData
+        name: messenger_related_user_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ICSImportResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Import tasks from an ICS file
+      tags:
+      - ICS
   /api/v1/users/{user_id}/tasks:
     get:
       description: Retrieves all tasks by userID with pagination, ordering, and filtering

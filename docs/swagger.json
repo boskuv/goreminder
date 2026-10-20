@@ -3147,6 +3147,75 @@
                 }
             }
         },
+        "/api/v1/users/{user_id}/ics/import": {
+            "post": {
+                "description": "One-shot VEVENT import (Google Calendar field parity). Product flags (requires_confirmation, muted, pre_remind, etc.) stay local defaults. VTODO is skipped. Partial per-event errors do not fail the whole file.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ICS"
+                ],
+                "summary": "Import tasks from an ICS file",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "iCalendar (.ics) file",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Optional task group id applied to all created tasks",
+                        "name": "group_id",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Optional messenger related user id (schedules reminders when set)",
+                        "name": "messenger_related_user_id",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ICSImportResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users/{user_id}/tasks": {
             "get": {
                 "description": "Retrieves all tasks by userID with pagination, ordering, and filtering (by status, status_not, start_date_from, start_date_to, created_at_from, created_at_to, cron_expression, cron_expression_is_null, requires_confirmation, exclude_cron_with_confirmation, messenger_related_user_id, messenger_user_id, title)",
@@ -4137,6 +4206,48 @@
                 "status": {
                     "type": "string",
                     "example": "alive"
+                }
+            }
+        },
+        "dto.ICSImportItemError": {
+            "type": "object",
+            "properties": {
+                "index": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "message": {
+                    "type": "string",
+                    "example": "DTSTART: event has no start"
+                },
+                "uid": {
+                    "type": "string",
+                    "example": "event-1@example.com"
+                }
+            }
+        },
+        "dto.ICSImportResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "created_task_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.ICSImportItemError"
+                    }
+                },
+                "skipped_todo": {
+                    "type": "integer",
+                    "example": 0
                 }
             }
         },
