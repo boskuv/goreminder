@@ -452,7 +452,7 @@ func (r *taskRepository) GetTasksByUserIDWithPagination(ctx context.Context, use
 	}
 
 	query, args, err := dataBuilder.
-		OrderBy(orderBy).
+		OrderBy(stableOrderBy(orderBy)).
 		Limit(uint64(pageSize)).
 		Offset(uint64(offset)).
 		ToSql()
@@ -1097,7 +1097,7 @@ func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, or
 	}
 
 	query, args, err := dataBuilder.
-		OrderBy(orderBy).
+		OrderBy(stableOrderBy(orderBy)).
 		Limit(uint64(pageSize)).
 		Offset(uint64(offset)).
 		ToSql()
@@ -1126,6 +1126,39 @@ func (r *taskRepository) GetAllTasks(ctx context.Context, page, pageSize int, or
 	)
 	span.SetStatus(codes.Ok, "tasks retrieved successfully")
 	return tasks, totalCount, nil
+}
+
+// stableOrderBy appends a unique id tiebreaker so OFFSET/LIMIT pages stay
+// consistent when the requested sort key has ties (for example equal start_date).
+func stableOrderBy(orderBy string) string {
+	orderBy = strings.TrimSpace(orderBy)
+	if orderBy == "" {
+		orderBy = "created_at DESC"
+	}
+	if orderByIncludesColumn(orderBy, "id") {
+		return orderBy
+	}
+	return orderBy + ", id ASC"
+}
+
+// orderByIncludesColumn reports whether orderBy already sorts by column itself,
+// not by a longer name that merely ends with it (user_id, parent_id).
+func orderByIncludesColumn(orderBy, column string) bool {
+	for _, part := range strings.Split(orderBy, ",") {
+		field := strings.TrimSpace(part)
+		if field == "" {
+			continue
+		}
+		name := strings.Fields(field)[0]
+		name = strings.Trim(name, `"`)
+		if dot := strings.LastIndex(name, "."); dot >= 0 {
+			name = strings.Trim(name[dot+1:], `"`)
+		}
+		if strings.EqualFold(name, column) {
+			return true
+		}
+	}
+	return false
 }
 
 // escapeLikePattern escapes \, %, and _ so they are matched literally in LIKE/ILIKE.

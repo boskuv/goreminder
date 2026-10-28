@@ -87,7 +87,7 @@ func TestTaskRepository_GetAllTasks_AppliesStatusFilterAndPagination(t *testing.
 
 	// Data query with ORDER BY / LIMIT / OFFSET (page=2, pageSize=10 → offset 10).
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, group_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted, shift_from_completion, skip_digest, pre_remind_before_seconds FROM tasks WHERE deleted_at IS NULL AND status = $1 ORDER BY created_at DESC LIMIT 10 OFFSET 10`,
+		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, group_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted, shift_from_completion, skip_digest, pre_remind_before_seconds FROM tasks WHERE deleted_at IS NULL AND status = $1 ORDER BY created_at DESC, id ASC LIMIT 10 OFFSET 10`,
 	)).WithArgs(status).WillReturnRows(sqlmock.NewRows([]string{
 		"id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "group_id",
 		"start_date", "finish_date", "cron_expression", "rrule", "status", "created_at",
@@ -203,7 +203,7 @@ func TestTaskRepository_GetAllTasks_UserAndDateFilters(t *testing.T) {
 	)).WithArgs(from, to, userID).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, group_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted, shift_from_completion, skip_digest, pre_remind_before_seconds FROM tasks WHERE deleted_at IS NULL AND start_date >= $1 AND start_date <= $2 AND user_id = $3 ORDER BY created_at DESC LIMIT 50 OFFSET 0`,
+		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, group_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted, shift_from_completion, skip_digest, pre_remind_before_seconds FROM tasks WHERE deleted_at IS NULL AND start_date >= $1 AND start_date <= $2 AND user_id = $3 ORDER BY created_at DESC, id ASC LIMIT 50 OFFSET 0`,
 	)).WithArgs(from, to, userID).WillReturnRows(sqlmock.NewRows([]string{
 		"id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "group_id",
 		"start_date", "finish_date", "cron_expression", "rrule", "status", "created_at",
@@ -233,7 +233,7 @@ func TestTaskRepository_GetTasksByUserIDWithPagination_ExcludesSkipDigest(t *tes
 	)).WithArgs(userID, false).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, group_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted, shift_from_completion, skip_digest, pre_remind_before_seconds FROM tasks WHERE deleted_at IS NULL AND user_id = $1 AND skip_digest = $2 ORDER BY start_date ASC LIMIT 10 OFFSET 0`,
+		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, group_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted, shift_from_completion, skip_digest, pre_remind_before_seconds FROM tasks WHERE deleted_at IS NULL AND user_id = $1 AND skip_digest = $2 ORDER BY start_date ASC, id ASC LIMIT 10 OFFSET 0`,
 	)).WithArgs(userID, false).WillReturnRows(sqlmock.NewRows([]string{
 		"id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "group_id",
 		"start_date", "finish_date", "cron_expression", "rrule", "status", "created_at",
@@ -251,6 +251,16 @@ func TestTaskRepository_GetTasksByUserIDWithPagination_ExcludesSkipDigest(t *tes
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestStableOrderBy(t *testing.T) {
+	assert.Equal(t, "start_date ASC, id ASC", stableOrderBy("start_date ASC"))
+	assert.Equal(t, "created_at DESC, id ASC", stableOrderBy(""))
+	assert.Equal(t, "created_at DESC, id ASC", stableOrderBy("  created_at DESC  "))
+	assert.Equal(t, "id DESC", stableOrderBy("id DESC"))
+	assert.Equal(t, "start_date ASC, tasks.id DESC", stableOrderBy("start_date ASC, tasks.id DESC"))
+	assert.Equal(t, "user_id ASC, id ASC", stableOrderBy("user_id ASC"))
+	assert.Equal(t, "parent_id DESC, id ASC", stableOrderBy("parent_id DESC"))
+}
+
 func TestTaskRepository_GetTasksByUserIDWithPagination_FilterByTitle(t *testing.T) {
 	repo, mock, cleanup := newTaskRepoWithMock(t)
 	defer cleanup()
@@ -264,7 +274,7 @@ func TestTaskRepository_GetTasksByUserIDWithPagination_FilterByTitle(t *testing.
 	)).WithArgs(userID, expectedPattern).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, group_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted, shift_from_completion, skip_digest, pre_remind_before_seconds FROM tasks WHERE deleted_at IS NULL AND user_id = $1 AND title ILIKE $2 ORDER BY created_at DESC LIMIT 50 OFFSET 0`,
+		`SELECT id, title, description, user_id, messenger_related_user_id, parent_id, group_id, start_date, finish_date, cron_expression, rrule, status, created_at, requires_confirmation, muted, shift_from_completion, skip_digest, pre_remind_before_seconds FROM tasks WHERE deleted_at IS NULL AND user_id = $1 AND title ILIKE $2 ORDER BY created_at DESC, id ASC LIMIT 50 OFFSET 0`,
 	)).WithArgs(userID, expectedPattern).WillReturnRows(sqlmock.NewRows([]string{
 		"id", "title", "description", "user_id", "messenger_related_user_id", "parent_id", "group_id",
 		"start_date", "finish_date", "cron_expression", "rrule", "status", "created_at",
