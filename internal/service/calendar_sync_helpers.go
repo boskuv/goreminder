@@ -360,6 +360,18 @@ func MapEventToTaskFields(ev googlecalendar.Event, userID int64, groupID *int64,
 	return task, nil
 }
 
+// applyImportedDeliveryChat copies the binding chat onto a task only when the
+// task has no delivery chat yet. Binding MRU is the default for events born
+// from import (usually the private chat where the calendar was connected).
+// A task that already reminds somewhere — a group chat, for example — must
+// keep that chat when a Google edit comes back on a both-binding.
+func applyImportedDeliveryChat(task *models.Task, bindingMRU *int) {
+	if task == nil || task.MessengerRelatedUserID != nil || bindingMRU == nil {
+		return
+	}
+	task.MessengerRelatedUserID = bindingMRU
+}
+
 // ApplyDeletePolicy applies binding delete_policy to an imported task.
 func ApplyDeletePolicy(policy models.CalendarDeletePolicy, _ *models.Task) (softDelete bool, mute bool) {
 	switch policy {

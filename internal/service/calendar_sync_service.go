@@ -677,9 +677,7 @@ func (s *CalendarSyncService) upsertImportedEvent(ctx context.Context, binding *
 		task.StartDate = fields.StartDate
 		task.RRule = fields.RRule
 		task.GroupID = fields.GroupID
-		if fields.MessengerRelatedUserID != nil {
-			task.MessengerRelatedUserID = fields.MessengerRelatedUserID
-		}
+		applyImportedDeliveryChat(task, fields.MessengerRelatedUserID)
 		task.Status = fields.Status
 		if fields.Status == string(models.TaskStatusDone) {
 			task.FinishDate = fields.FinishDate

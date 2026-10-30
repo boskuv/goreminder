@@ -52,6 +52,25 @@ func TestMapEventToTaskFields(t *testing.T) {
 	assert.Equal(t, string(models.TaskStatusScheduled), task.Status)
 }
 
+func TestApplyImportedDeliveryChat_KeepsExistingChat(t *testing.T) {
+	groupMRU := 11
+	privateMRU := 3
+	task := &models.Task{MessengerRelatedUserID: &groupMRU}
+
+	applyImportedDeliveryChat(task, &privateMRU)
+
+	assert.Equal(t, &groupMRU, task.MessengerRelatedUserID)
+}
+
+func TestApplyImportedDeliveryChat_FillsEmptyChat(t *testing.T) {
+	privateMRU := 3
+	task := &models.Task{}
+
+	applyImportedDeliveryChat(task, &privateMRU)
+
+	assert.Equal(t, &privateMRU, task.MessengerRelatedUserID)
+}
+
 func TestMapEventToTaskFields_AllDay(t *testing.T) {
 	ev := googlecalendar.Event{
 		Summary: "",
