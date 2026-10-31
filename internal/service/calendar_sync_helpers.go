@@ -315,6 +315,7 @@ func cronDowTokenToNumber(tok string) (int, bool) {
 // Recurring series with a past DTSTART advance start_date to the next occurrence so the task
 // stays useful without autoreschedule (imported tasks are excluded from that job).
 // One-shot events whose start is already past become status=done (Google does not "complete" them).
+// Callers must not apply that done status to a reminder this app exported; see keepExportedReminderOpen.
 func MapEventToTaskFields(ev googlecalendar.Event, userID int64, groupID *int64, messengerRelatedUserID *int) (*models.Task, error) {
 	start, err := EventStartTime(ev)
 	if err != nil {
@@ -358,6 +359,15 @@ func MapEventToTaskFields(ev googlecalendar.Event, userID int64, groupID *int64,
 		task.FinishDate = &finish
 	}
 	return task, nil
+}
+
+// keepExportedReminderOpen reports that a past one-shot Google echo must not close
+// or rewind a reminder this app exported. Google has no completed state, so
+// "start already passed" only means the reminder fired. Completion and the
+// nightly autoreschedule stay local. Events born in Google (origin=imported)
+// still use the done mapping.
+func keepExportedReminderOpen(origin models.TaskSyncLinkOrigin, mappedStatus string) bool {
+	return origin == models.TaskSyncLinkOriginExported && mappedStatus == string(models.TaskStatusDone)
 }
 
 // applyImportedDeliveryChat copies the binding chat onto a task only when the

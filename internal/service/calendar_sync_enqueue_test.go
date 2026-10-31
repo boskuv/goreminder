@@ -14,6 +14,7 @@ import (
 	errs "github.com/boskuv/goreminder/internal/errors"
 	mock_repository "github.com/boskuv/goreminder/internal/mocks/repository"
 	"github.com/boskuv/goreminder/internal/models"
+	"github.com/boskuv/goreminder/pkg/googlecalendar"
 )
 
 type stubSyncLinkRepo struct {
@@ -31,6 +32,12 @@ func (s *stubSyncLinkRepo) GetByTaskID(context.Context, int64) (*models.TaskSync
 	return s.link, nil
 }
 func (s *stubSyncLinkRepo) GetByEvent(context.Context, string, string, string) (*models.TaskSyncLink, error) {
+	if s.link != nil {
+		return s.link, nil
+	}
+	if s.err != nil {
+		return nil, s.err
+	}
 	return nil, errs.ErrNotFound
 }
 func (s *stubSyncLinkRepo) ListByBindingID(context.Context, int64) ([]*models.TaskSyncLink, error) {
@@ -251,4 +258,123 @@ func TestEnqueueExport_LeaveGroupWithOptIn_StillUpserts(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, outbox.kinds, 1)
 	assert.Equal(t, OutboxKindExportUpsert, outbox.kinds[0])
+}
+
+type recordingImportedScheduler struct {
+	deleted []int64
+}
+
+func (s *recordingImportedScheduler) PublishImportedTaskSchedule(context.Context, *models.Task) error {
+	return nil
+}
+
+func (s *recordingImportedScheduler) PublishImportedTaskDelete(_ context.Context, task *models.Task) error {
+	if task != nil {
+		s.deleted = append(s.deleted, task.ID)
+	}
+	return nil
+}
+
+func TestUpsertImportedEvent_ExportedPastOneShotStaysOpen(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	tasks := mock_repository.NewMockTaskRepository(ctrl)
+	start := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
+	mru := 4
+	localStart := start.Add(24 * time.Hour)
+	tasks.EXPECT().
+		GetTaskByIDWithoutStatusFilter(gomock.Any(), int64(4023)).
+		Return(&models.Task{
+			ID:                     4023,
+			Title:                  "Тест",
+			UserID:                 1,
+			StartDate:              localStart,
+			Status:                 string(models.TaskStatusRescheduled),
+			MessengerRelatedUserID: &mru,
+		}, nil)
+
+	scheduler := &recordingImportedScheduler{}
+	svc := &CalendarSyncService{
+		tasks: tasks,
+		syncLinks: &stubSyncLinkRepo{link: &models.TaskSyncLink{
+			ID:               9,
+			TaskID:           4023,
+			Origin:           models.TaskSyncLinkOriginExported,
+			GoogleCalendarID: "cal",
+			GoogleEventID:    "evt",
+		}},
+		importedScheduler: scheduler,
+		logger:            zerolog.Nop(),
+	}
+
+	err := svc.upsertImportedEvent(context.Background(), &models.CalendarBinding{
+		ID:               1,
+		UserID:           1,
+		GoogleCalendarID: "cal",
+		Direction:        models.CalendarBindingDirectionBoth,
+	}, googlecalendar.Event{
+		ID:      "evt",
+		Summary: "Тест",
+		Status:  "confirmed",
+		Start:   googlecalendar.EventDateTime{DateTime: &start},
+		ETag:    "etag",
+		Updated: time.Now().UTC(),
+	})
+	require.NoError(t, err)
+	assert.Empty(t, scheduler.deleted)
+}
+
+func TestUpsertImportedEvent_ImportedPastOneShotStillDone(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	tasks := mock_repository.NewMockTaskRepository(ctrl)
+	start := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
+	end := start.Add(30 * time.Minute)
+	mru := 4
+	tasks.EXPECT().
+		GetTaskByIDWithoutStatusFilter(gomock.Any(), int64(4023)).
+		Return(&models.Task{
+			ID:                     4023,
+			Title:                  "Past meeting",
+			UserID:                 1,
+			StartDate:              start,
+			Status:                 string(models.TaskStatusScheduled),
+			MessengerRelatedUserID: &mru,
+		}, nil)
+	tasks.EXPECT().
+		UpdateTask(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, updated *models.Task) error {
+			assert.Equal(t, string(models.TaskStatusDone), updated.Status)
+			require.NotNil(t, updated.FinishDate)
+			return nil
+		})
+
+	scheduler := &recordingImportedScheduler{}
+	svc := &CalendarSyncService{
+		tasks: tasks,
+		syncLinks: &stubSyncLinkRepo{link: &models.TaskSyncLink{
+			ID:               9,
+			TaskID:           4023,
+			Origin:           models.TaskSyncLinkOriginImported,
+			GoogleCalendarID: "cal",
+			GoogleEventID:    "evt",
+		}},
+		importedScheduler: scheduler,
+		logger:            zerolog.Nop(),
+	}
+
+	err := svc.upsertImportedEvent(context.Background(), &models.CalendarBinding{
+		ID:               1,
+		UserID:           1,
+		GoogleCalendarID: "cal",
+		Direction:        models.CalendarBindingDirectionBoth,
+	}, googlecalendar.Event{
+		ID:      "evt",
+		Summary: "Past meeting",
+		Status:  "confirmed",
+		Start:   googlecalendar.EventDateTime{DateTime: &start},
+		End:     googlecalendar.EventDateTime{DateTime: &end},
+		ETag:    "etag",
+		Updated: time.Now().UTC(),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []int64{4023}, scheduler.deleted)
 }

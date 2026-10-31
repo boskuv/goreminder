@@ -671,18 +671,25 @@ func (s *CalendarSyncService) upsertImportedEvent(ctx context.Context, binding *
 		wasScheduled := task.Status == string(models.TaskStatusScheduled) ||
 			task.Status == string(models.TaskStatusRescheduled) ||
 			task.Status == string(models.TaskStatusPostponed)
+		// Past one-shot echo of an exported reminder: keep local status and start.
+		// Applying done here closes the task minutes after it fires, and applying
+		// the Google start rolls back the nightly +24h move. Title and description
+		// still follow Google. A move to a future start maps to scheduled and is applied.
+		keepOpen := keepExportedReminderOpen(link.Origin, fields.Status)
 
 		task.Title = fields.Title
 		task.Description = fields.Description
-		task.StartDate = fields.StartDate
-		task.RRule = fields.RRule
 		task.GroupID = fields.GroupID
 		applyImportedDeliveryChat(task, fields.MessengerRelatedUserID)
-		task.Status = fields.Status
-		if fields.Status == string(models.TaskStatusDone) {
-			task.FinishDate = fields.FinishDate
-		} else if fields.Status == string(models.TaskStatusScheduled) {
-			task.FinishDate = nil
+		if !keepOpen {
+			task.StartDate = fields.StartDate
+			task.RRule = fields.RRule
+			task.Status = fields.Status
+			if fields.Status == string(models.TaskStatusDone) {
+				task.FinishDate = fields.FinishDate
+			} else if fields.Status == string(models.TaskStatusScheduled) {
+				task.FinishDate = nil
+			}
 		}
 
 		if calendarImportedFieldsChanged(&oldSnapshot, task) {
@@ -714,7 +721,7 @@ func (s *CalendarSyncService) upsertImportedEvent(ctx context.Context, binding *
 			}
 		}
 
-		if task.MessengerRelatedUserID != nil {
+		if !keepOpen && task.MessengerRelatedUserID != nil {
 			if fields.Status == string(models.TaskStatusScheduled) && (scheduleChanged || !wasScheduled) {
 				if err := s.importedScheduler.PublishImportedTaskSchedule(ctx, task); err != nil {
 					log := logger.WithTraceContext(ctx, s.logger)

@@ -116,6 +116,12 @@ func TestMapEventToTaskFields_PastOneShotDone(t *testing.T) {
 	assert.Equal(t, end.UTC(), task.FinishDate.UTC())
 }
 
+func TestKeepExportedReminderOpen(t *testing.T) {
+	assert.True(t, keepExportedReminderOpen(models.TaskSyncLinkOriginExported, string(models.TaskStatusDone)))
+	assert.False(t, keepExportedReminderOpen(models.TaskSyncLinkOriginImported, string(models.TaskStatusDone)))
+	assert.False(t, keepExportedReminderOpen(models.TaskSyncLinkOriginExported, string(models.TaskStatusScheduled)))
+}
+
 func TestApplyDeletePolicy(t *testing.T) {
 	task := &models.Task{ID: 1}
 	soft, mute := ApplyDeletePolicy(models.CalendarDeletePolicySoftDeleteImported, task)
